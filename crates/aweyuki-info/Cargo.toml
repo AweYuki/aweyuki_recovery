@@ -1,0 +1,17 @@
+[package]
+name = "aweyuki-info"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+libc = { workspace = true }
+rsproperties = { version = "0.6.0", features = ["builder"] }
+aweyuki-block = { path = "../aweyuki-block" }
+aweyuki-config = { path = "../aweyuki-config" }
+aweyuki-sys = { path = "../aweyuki-sys" }
+aweyuki-vab = { path = "../aweyuki-vab" }
+
+[dev-dependencies]
+tempfile = "3.27.0"

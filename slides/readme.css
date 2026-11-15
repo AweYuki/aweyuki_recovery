@@ -1,4 +1,4 @@
-/* Skyward 的 README 配图：在 launch-dark 之上的版式和界面片段，颜色只使用风格的变量 */
+/* Aweyuki 的 README 配图：在 launch-dark 之上的版式和界面片段，颜色只使用风格的变量 */
 
 /* ---------- 功能页：左侧文字，右侧画面 ---------- */
 
@@ -28,6 +28,13 @@
 html[lang="en"] .feature .headline {
   font-size: 72px;
   letter-spacing: -0.02em;
+}
+
+/* Vietnamese words run longer than their English, and its diacritics need
+   the room the close line height would take from them. */
+html[lang="vi"] .feature .headline {
+  font-size: 64px;
+  line-height: 1.16;
 }
 
 .feature .body {
@@ -972,7 +979,7 @@ html[lang="en"] .chip-rows.compact ul {
   color: var(--text-3);
 }
 
-/* ---------- 系统的请求：左侧为请求，右侧为 Skyward 的处理 ---------- */
+/* ---------- 系统的请求：左侧为请求，右侧为 Aweyuki 的处理 ---------- */
 
 .asks .cols,
 .asks li {

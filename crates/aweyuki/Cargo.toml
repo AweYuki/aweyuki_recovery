@@ -1,0 +1,44 @@
+[package]
+name = "aweyuki"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "aweyuki"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { version = "4.5.51", features = ["derive"] }
+aweyuki-config = { path = "../aweyuki-config" }
+aweyuki-block = { path = "../aweyuki-block" }
+aweyuki-vab = { path = "../aweyuki-vab" }
+aweyuki-modules = { path = "../aweyuki-modules" }
+aweyuki-info = { path = "../aweyuki-info" }
+aweyuki-install = { path = "../aweyuki-install" }
+aweyuki-sys = { path = "../aweyuki-sys" }
+aweyuki-lp = { path = "../aweyuki-lp" }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zstd = { version = "0.14.3", default-features = false }
+
+[target.'cfg(target_os = "android")'.dependencies]
+evdev = "0.13.2"
+hex = { workspace = true }
+aweyuki-backup = { path = "../aweyuki-backup" }
+aweyuki-binder = { path = "../aweyuki-binder" }
+aweyuki-crypto = { path = "../aweyuki-crypto" }
+aweyuki-files = { path = "../aweyuki-files" }
+zip = { version = "8.6.0", default-features = false }
+libc = { workspace = true }
+procfs = { version = "0.18.0", default-features = false }
+aweyuki-ui = { path = "../aweyuki-ui" }
+aweyuki-mtp = { path = "../aweyuki-mtp" }
+aweyuki-omapi = { path = "../aweyuki-omapi" }
+aweyuki-programs = { path = "../aweyuki-programs" }
+aweyuki-systems = { path = "../aweyuki-systems" }
+aweyuki-net = { path = "../aweyuki-net" }
+ureq = { version = "=3.5.0", default-features = false }

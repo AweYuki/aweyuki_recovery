@@ -1,0 +1,23 @@
+[package]
+name = "aweyuki-preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "aweyuki-preview"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+png = "0.17.16"
+serde = { workspace = true }
+toml = { workspace = true }
+aweyuki-config = { path = "../aweyuki-config" }
+aweyuki-info = { path = "../aweyuki-info" }
+aweyuki-install = { path = "../aweyuki-install" }
+aweyuki-net = { path = "../aweyuki-net" }
+aweyuki-systems = { path = "../aweyuki-systems" }
+aweyuki-ui = { path = "../aweyuki-ui" }
+aweyuki-vab = { path = "../aweyuki-vab" }

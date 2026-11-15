@@ -1,0 +1,20 @@
+[package]
+name = "aweyuki-programs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+# The descriptions of the services a phone's own programs register are XML.
+roxmltree = "0.21.2"
+aweyuki-config = { path = "../aweyuki-config" }
+# The name of the secure element service a phone's weaver may go through,
+# which the recovery serves.
+aweyuki-omapi = { path = "../aweyuki-omapi" }
+
+[dev-dependencies]
+# Looks the accounts the programs run as up as the recovery does on the
+# phone, in the phone's own lists of them.
+aweyuki-sys = { path = "../aweyuki-sys" }
+tempfile = "3.27.0"

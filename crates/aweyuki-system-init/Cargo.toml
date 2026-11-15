@@ -1,0 +1,23 @@
+[package]
+name = "aweyuki-system-init"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Built for the phone and linked statically: it runs before any system's
+# libraries are there to load.
+[[bin]]
+name = "system-init"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+libc = { workspace = true }
+aweyuki-block = { path = "../aweyuki-block" }
+aweyuki-bootimg = { path = "../aweyuki-bootimg" }
+aweyuki-modules = { path = "../aweyuki-modules" }
+aweyuki-sys = { path = "../aweyuki-sys" }
+aweyuki-systems = { path = "../aweyuki-systems" }

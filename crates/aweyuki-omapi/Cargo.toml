@@ -1,0 +1,12 @@
+[package]
+name = "aweyuki-omapi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+aweyuki-binder = { path = "../aweyuki-binder" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+aweyuki-sys = { path = "../aweyuki-sys" }

@@ -65,19 +65,19 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Build the recovery service for the phone
-        run: cargo ndk -t arm64-v8a --platform 30 build --locked --release -p skyward
+        run: cargo ndk -t arm64-v8a --platform 30 build --locked --release -p aweyuki
       # It runs as a second system's first program, before any library is
       # there to load.
       - name: Build the second system's first program, static
         env:
           RUSTFLAGS: -C target-feature=+crt-static
-        run: cargo ndk -t arm64-v8a --platform 30 build --locked --release -p skyward-system-init --target-dir target/system-init
+        run: cargo ndk -t arm64-v8a --platform 30 build --locked --release -p aweyuki-system-init --target-dir target/system-init
       - name: Build the packer
-        run: cargo build --locked --release -p skyward-pack
+        run: cargo build --locked --release -p aweyuki-pack
       - name: Gather them
         run: |
           mkdir tools
-          cp target/aarch64-linux-android/release/skyward target/release/skyward-pack tools/
+          cp target/aarch64-linux-android/release/aweyuki target/release/aweyuki-pack tools/
           cp target/system-init/aarch64-linux-android/release/system-init tools/
       - uses: actions/upload-artifact@v7
         with:
@@ -119,10 +119,10 @@ jobs:
           name: tools
           path: tools
       - name: Make the tools runnable
-        run: chmod +x tools/skyward tools/skyward-pack
+        run: chmod +x tools/aweyuki tools/aweyuki-pack
       - name: Read the stock build the recovery is made on
         id: stock
-        run: tools/skyward-pack stock --config "devices/${{ matrix.device }}.toml" >> "$GITHUB_OUTPUT"
+        run: tools/aweyuki-pack stock --config "devices/${{ matrix.device }}.toml" >> "$GITHUB_OUTPUT"
       - name: Restore the stock recovery
         id: cache
         uses: actions/cache@v6
@@ -133,7 +133,7 @@ jobs:
       # which is several gigabytes in all.
       - name: Take the recovery partition out of the stock package
         if: steps.cache.outputs.cache-hit != 'true'
-        run: tools/skyward-pack stock --config "devices/${{ matrix.device }}.toml" --out stock/recovery.img
+        run: tools/aweyuki-pack stock --config "devices/${{ matrix.device }}.toml" --out stock/recovery.img
       - name: Check the stock recovery
         env:
           RECOVERY: ${{ steps.stock.outputs.recovery }}
@@ -145,9 +145,9 @@ jobs:
           STOCK: ${{ steps.stock.outputs.version }}
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then version="$GITHUB_REF_NAME"; else version="${GITHUB_SHA::7}"; fi
-          name="skyward-$version-$DEVICE-$STOCK"
+          name="aweyuki-$version-$DEVICE-$STOCK"
           mkdir out
-          tools/skyward-pack recovery --stock stock/recovery.img --binary tools/skyward --system-init tools/system-init \
+          tools/aweyuki-pack recovery --stock stock/recovery.img --binary tools/aweyuki --system-init tools/system-init \
             --config "devices/$DEVICE.toml" --font resources/fonts/MiSansVF.ttf --mono resources/fonts/KirkMono-Regular.ttf \
             --mono-license resources/fonts/KirkMono-OFL.txt --out "out/$name.img"
           echo "name=$name" >> "$GITHUB_OUTPUT"
@@ -180,7 +180,7 @@ jobs:
       # name, as it is handed out.
       - uses: actions/download-artifact@v8
         with:
-          pattern: skyward-*
+          pattern: aweyuki-*
           path: images
           merge-multiple: true
           skip-decompress: true
@@ -199,7 +199,7 @@ jobs:
           for config in devices/*.toml; do
             device=$(basename "$config" .toml)
             model=$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["device"]["model"])' "$config")
-            zip=$(ls images/skyward-"$GITHUB_REF_NAME"-"$device"-*.zip)
+            zip=$(ls images/aweyuki-"$GITHUB_REF_NAME"-"$device"-*.zip)
             zips+=("$zip#$model ($device)")
           done
           gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes "${zips[@]}" images/SHA256SUMS

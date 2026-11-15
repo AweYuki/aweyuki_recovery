@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../../readme.css">
+</head>
+<body>
+<main class="slide feature">
+  <header class="head">
+    <p class="eyebrow">Thay thế recovery gốc</p>
+    <h1 class="headline"><span translate="no">Aweyuki</span> làm đúng<br>điều hệ thống hỏi.</h1>
+    <p class="body">Hệ thống ghi yêu cầu vào phân vùng misc rồi khởi động lại vào recovery. <span translate="no">Aweyuki</span> đọc yêu cầu, thực hiện, rồi khởi động lại hoặc tắt nguồn theo yêu cầu.</p>
+  </header>
+  <div class="visual">
+    <div class="asks">
+      <div class="cols"><p>Hệ thống yêu cầu</p><i></i><p translate="no">Aweyuki</p></div>
+      <ul>
+        <li>
+          <div class="from"><b>Khôi phục cài đặt gốc trong Cài đặt</b><code translate="no">--wipe_data</code></div>
+          <span class="arrow"><svg viewBox="0 0 24 24"><path class="icon-line" d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+          <div class="to">Xóa toàn bộ dữ liệu rồi khởi động lại<br>hoặc tự tắt nguồn</div>
+        </li>
+        <li>
+          <div class="from"><b>Hệ thống không khởi động được</b><code translate="no">--prompt_and_wipe_data</code></div>
+          <span class="arrow"><svg viewBox="0 0 24 24"><path class="icon-line" d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+          <div class="to">Đề nghị thử lại<br>hoặc khôi phục cài đặt gốc</div>
+        </li>
+        <li>
+          <div class="from"><b translate="no">adb reboot sideload</b><code translate="no">--sideload</code></div>
+          <span class="arrow"><svg viewBox="0 0 24 24"><path class="icon-line" d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+          <div class="to">Chờ máy tính<br>gửi gói cài đặt</div>
+        </li>
+        <li>
+          <div class="from"><b translate="no">adb reboot fastboot</b><code translate="no">--fastboot</code></div>
+          <span class="arrow"><svg viewBox="0 0 24 24"><path class="icon-line" d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+          <div class="to">Khởi động fastbootd</div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</main>
+</body>
+</html>

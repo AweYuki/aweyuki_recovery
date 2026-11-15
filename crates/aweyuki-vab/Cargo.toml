@@ -1,0 +1,15 @@
+[package]
+name = "aweyuki-vab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+libc = { workspace = true }
+prost = "0.14.4"
+aweyuki-block = { path = "../aweyuki-block" }
+aweyuki-lp = { path = "../aweyuki-lp" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+aweyuki-binder = { path = "../aweyuki-binder" }

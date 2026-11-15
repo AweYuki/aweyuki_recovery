@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../../readme.css">
+</head>
+<body>
+<main class="slide feature">
+  <header class="head">
+    <p class="eyebrow">Xóa dữ liệu</p>
+    <h1 class="headline">Mỗi lựa chọn nói rõ<br>nó xóa gì.</h1>
+    <p class="body">Chỉ xóa bộ nhớ đệm ứng dụng, bộ nhớ đệm ART, nhật ký hay bản cập nhật đã tải, hoặc đặt lại điện thoại. Khôi phục cài đặt gốc giữ nguyên hệ thống và các bản cập nhật đã cài.</p>
+  </header>
+  <div class="visual">
+    <p class="ui-section">phân vùng data</p>
+    <ul class="ui-list tight">
+      <li>
+        <div><b>Bộ nhớ trong</b><small><span class="path">/data/media</span>: ảnh, video và tệp trong <span class="path">/sdcard</span></small></div>
+        <span class="check"></span>
+      </li>
+      <li>
+        <div><b>Bộ nhớ đệm ứng dụng</b><small>cache và <span class="path">code_cache</span> trong dữ liệu từng ứng dụng, và cache trong <span class="path">Android/data</span>. Ứng dụng tự tạo lại khi cần</small></div>
+        <span class="check on"><svg viewBox="0 0 24 24"><path class="icon-line" d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+      </li>
+      <li>
+        <div><b>Bộ nhớ đệm hệ thống</b><small><span class="path">/data/system/package_cache</span>, <span class="path">/data/resource-cache</span> và <span class="path">/data/cache</span>, tạo lại ở lần khởi động sau</small></div>
+        <span class="check on"><svg viewBox="0 0 24 24"><path class="icon-line" d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+      </li>
+      <li>
+        <div><b>Bản cập nhật đã tải</b><small>Gói cập nhật hệ thống trong <span class="path">/data/ota_package</span></small></div>
+        <span class="check on"><svg viewBox="0 0 24 24"><path class="icon-line" d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+      </li>
+    </ul>
+    <p class="ui-note">Xóa dữ liệu ứng dụng hay bộ nhớ đệm ứng dụng cần giải mã phân vùng data trước. Những gì đã xóa không thể lấy lại.</p>
+    <div class="ui-slider danger">
+      <span class="knob"><svg viewBox="0 0 24 24"><path class="icon-line" d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+      <span class="label">Trượt để xóa</span>
+    </div>
+  </div>
+</main>
+</body>
+</html>
