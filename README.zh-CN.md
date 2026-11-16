@@ -7,7 +7,6 @@
 Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 
 <p align="center">
-  <img src="assets/home.png" width="30%" alt="首页">
   <img src="assets/settings-dark.png" width="30%" alt="深色模式下的设置">
   <img src="assets/time-zone.png" width="30%" alt="时区">
 </p>
