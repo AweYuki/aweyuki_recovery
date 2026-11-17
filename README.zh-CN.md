@@ -118,8 +118,8 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 Aweyuki 需要已解锁的 bootloader。从 [Releases](https://github.com/AweYuki/aweyuki_recovery/releases) 下载对应机型的 zip，每个文件都标有机型和代号，例如 Xiaomi 17 Ultra (nezha)。使用 `SHA256SUMS` 核对并解压之后，在手机处于 fastboot 模式的时候，把其中的镜像刷入当前运行槽位的 recovery 分区：
 
 ```sh
-unzip aweyuki-v0.3.1-nezha-OS4.0.4.0.XPACNXM.zip
-fastboot flash recovery aweyuki-v0.3.1-nezha-OS4.0.4.0.XPACNXM.img
+unzip aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.zip
+fastboot flash recovery aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.img
 fastboot reboot recovery
 ```
 

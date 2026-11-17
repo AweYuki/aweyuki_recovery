@@ -132,8 +132,8 @@ nén, rồi flash ảnh bên trong vào phân vùng recovery của khe máy đan
 chế độ fastboot:
 
 ```sh
-unzip aweyuki-v0.3.1-nezha-OS4.0.4.0.XPACNXM.zip
-fastboot flash recovery aweyuki-v0.3.1-nezha-OS4.0.4.0.XPACNXM.img
+unzip aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.zip
+fastboot flash recovery aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.img
 fastboot reboot recovery
 ```
 
