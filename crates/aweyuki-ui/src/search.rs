@@ -33,18 +33,18 @@ pub const ENTRIES: &[Entry] = &[
         ["双系统", "雙系統", "Dual boot"],
         HOME,
         Screen::Systems,
-        &["shuangxitong", "sxt", "qiehuanxitong", "qhxt", "duoxitong", "dxt", "dualboot", "multiboot", "linux"],
+        &["shuangxitong", "sxt", "qiehuanxitong", "qhxt", "duoxitong", "dxt", "dualboot", "multiboot", "linux", "khoi dong kep", "kdk", "chuyen he thong"],
     ),
-    entry(INSTALL, HOME, Screen::Install, &["anzhuang", "az", "install", "shuaji", "sj"]),
+    entry(INSTALL, HOME, Screen::Install, &["anzhuang", "az", "install", "shuaji", "sj", "cai dat", "cd"]),
     entry(["从内部存储安装", "從內部儲存空間安裝", "Install from internal storage"], INSTALL, Screen::Install, &["congneibucunchuanzhuang", "cnbccaz", "neicun", "sdcard", "zip"]),
     entry(["从 U 盘安装", "從 USB 隨身碟安裝", "Install from a USB drive"], INSTALL, Screen::Install, &["congupananzhuang", "cupaz", "upan", "usb", "otg"]),
     entry(["通过电脑安装", "透過電腦安裝", "Install from a computer"], INSTALL, Screen::Install, &["tongguodiannaoanzhuang", "tgdnaz", "sideload", "adb"]),
-    entry(["备份", "備份", "Backup"], HOME, Screen::Backup, &["beifen", "bf", "backup"]),
-    entry(["恢复", "還原", "Restore"], HOME, Screen::Restore, &["huifu", "hf", "restore"]),
-    entry(MOUNT, HOME, Screen::Mount, &["guazai", "gz", "mount", "umount"]),
-    entry(["清除数据", "清除資料", "Wipe data"], HOME, Screen::Wipe, &["qingchushuju", "qcsj", "wipe", "format", "geshihua", "gsh"]),
-    entry(ADVANCED, HOME, Screen::Advanced, &["gaoji", "gj", "advanced"]),
-    entry(["文件管理", "檔案管理", "File manager"], ADVANCED, Screen::Files, &["wenjianguanli", "wjgl", "files", "file"]),
+    entry(["备份", "備份", "Backup"], HOME, Screen::Backup, &["beifen", "bf", "backup", "sao luu", "sl"]),
+    entry(["恢复", "還原", "Restore"], HOME, Screen::Restore, &["huifu", "hf", "restore", "khoi phuc", "kp"]),
+    entry(MOUNT, HOME, Screen::Mount, &["guazai", "gz", "mount", "umount", "gan ket", "gk"]),
+    entry(["清除数据", "清除資料", "Wipe data"], HOME, Screen::Wipe, &["qingchushuju", "qcsj", "wipe", "format", "geshihua", "gsh", "xoa du lieu", "xdl"]),
+    entry(ADVANCED, HOME, Screen::Advanced, &["gaoji", "gj", "advanced", "nang cao", "nc"]),
+    entry(["文件管理", "檔案管理", "File manager"], ADVANCED, Screen::Files, &["wenjianguanli", "wjgl", "files", "file", "quan ly tep", "qlt"]),
     entry(["终端", "終端機", "Terminal"], ADVANCED, Screen::Terminal, &["zhongduan", "zd", "terminal", "shell"]),
     entry(
         ["修复 SELinux 上下文", "修復 SELinux 上下文", "Fix SELinux contexts"],
@@ -65,23 +65,23 @@ pub const ENTRIES: &[Entry] = &[
         Screen::Update,
         &["xitonggengxin", "xtgx", "hebing", "hb", "xiazai", "xz", "wanzhenggengxinbao", "wzgxb", "update", "ota", "merge", "snapshot", "download"],
     ),
-    entry(SETTINGS, HOME, Screen::Settings, &["shezhi", "sz", "settings"]),
+    entry(SETTINGS, HOME, Screen::Settings, &["shezhi", "sz", "settings", "thiet lap", "tl"]),
     entry(["深色模式", "深色模式", "Dark mode"], SETTINGS, Screen::Settings, &["shensemoshi", "ssms", "dark", "theme"]),
     entry(["屏幕亮度", "螢幕亮度", "Screen brightness"], SETTINGS, Screen::Settings, &["pingmuliangdu", "pmld", "liangdu", "ld", "brightness"]),
     entry(["息屏时间", "螢幕自動關閉", "Screen timeout"], SETTINGS, Screen::ScreenOff, &["xipingshijian", "xpsj", "timeout"]),
     entry(["振动强度", "震動強度", "Vibration intensity"], SETTINGS, Screen::Settings, &["zhendongqiangdu", "zdqd", "qiangdu", "qd", "intensity", "strength"]),
     entry(["触摸振动", "觸控震動", "Touch vibration"], SETTINGS, Screen::Settings, &["chumozhendong", "cmzd", "zhendong", "vibrate", "haptic"]),
     entry(["文件传输", "檔案傳輸", "File transfer"], SETTINGS, Screen::Settings, &["wenjianchuanshu", "wjcs", "chuanshu", "mtp", "usb"]),
-    entry(["语言", "語言", "Language"], SETTINGS, Screen::Language, &["yuyan", "yy", "language", "fanti", "jianti", "english"]),
-    entry(["时区", "時區", "Time zone"], SETTINGS, Screen::TimeZone, &["shiqu", "sq", "timezone"]),
-    entry(["重启", "重新啟動", "Reboot"], HOME, Screen::Reboot, &["chongqi", "cq", "reboot", "fastboot", "bootloader", "edl", "guanji"]),
+    entry(["语言", "語言", "Language"], SETTINGS, Screen::Language, &["yuyan", "yy", "language", "fanti", "jianti", "english", "ngon ngu", "nn"]),
+    entry(["时区", "時區", "Time zone"], SETTINGS, Screen::TimeZone, &["shiqu", "sq", "timezone", "mui gio", "mg"]),
+    entry(["重启", "重新啟動", "Reboot"], HOME, Screen::Reboot, &["chongqi", "cq", "reboot", "fastboot", "bootloader", "edl", "guanji", "khoi dong lai", "kdl"]),
     entry(["启动槽位", "啟動槽位", "Boot slot"], ["重启", "重新啟動", "Reboot"], Screen::Slot, &["qidongcaowei", "qdcw", "caowei", "cw", "slot"]),
-    entry(["关于本机", "關於手機", "About phone"], SETTINGS, Screen::About, &["guanyubenji", "gybj", "about", "banben", "version"]),
+    entry(["关于本机", "關於手機", "About phone"], SETTINGS, Screen::About, &["guanyubenji", "gybj", "about", "banben", "version", "ve dien thoai", "vdt"]),
     entry(
         ["Aweyuki 更新", "Aweyuki 更新", "Aweyuki update"],
         SETTINGS,
         Screen::AweyukiUpdate,
-        &["aweyukigengxin", "aweyukigx", "shengji", "xiazai", "update", "upgrade", "release", "github"],
+        &["aweyukigengxin", "aweyukigx", "shengji", "xiazai", "update", "upgrade", "release", "github", "cap nhat aweyuki"],
     ),
     entry(
         ["全部参数与信息", "全部規格與資訊", "All specs"],
@@ -214,6 +214,18 @@ mod tests {
         let traditional = find("設定", Lang::Hant);
         assert_eq!(traditional.first().map(|e| e.title[1]), Some("設定"));
         assert!(find("设置", Lang::Hant).is_empty(), "the simplified title belongs to the other script");
+    }
+
+    #[test]
+    fn a_vietnamese_reader_finds_a_feature_by_its_title_or_by_the_words_behind_it() {
+        let vietnamese = |query| find(query, Lang::Vi).iter().map(|e| Lang::Vi.pick(e.title)).collect::<Vec<_>>();
+        assert_eq!(vietnamese("khởi động kép"), ["Khởi động kép"], "the title, typed with its diacritics");
+        assert_eq!(vietnamese("khoi dong kep"), ["Khởi động kép"], "the same words without them");
+        assert_eq!(vietnamese("kdk"), ["Khởi động kép"], "the initials");
+        assert_eq!(vietnamese("sao lưu"), ["Sao lưu"]);
+        assert_eq!(vietnamese("xoa du lieu"), ["Xóa dữ liệu"]);
+        let settings = vietnamese("thiet lap");
+        assert!(settings.contains(&"Thiết lập"), "{settings:?}");
     }
 
     #[test]

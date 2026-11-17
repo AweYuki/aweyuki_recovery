@@ -25,16 +25,16 @@ Cách đóng gói và khởi động hệ thống thứ hai có ở
 
 ### Giải mã
 
-![Giải mã data bằng khóa màn hình](slides/vi/out/03-decrypt.png)
+![Giải mã phân vùng dữ liệu bằng khóa màn hình](slides/vi/out/03-decrypt.png)
 
 ### Cài đặt
 
 ![Bốn loại gói từ ba nơi](slides/vi/out/04-install.png)
 
-Script cài đặt có `7za` và `zstd`, mà các ROM có ảnh super nén bằng zstd dùng để
-flash nó, cùng một `unzip` với `-p` đọc ảnh thành luồng ngay khi đọc. Chúng cũng có
-`avbctl` và `resetprop`, để tắt các kiểm tra của verified boot và để đọc, đặt thuộc
-tính.
+Script cài đặt có `7za` và `zstd` — các ROM có ảnh super nén bằng zstd dùng chúng
+để flash — cùng một `unzip` mà `-p` của nó đọc ảnh thành luồng ngay trong lúc đọc.
+Chúng cũng có `avbctl` và `resetprop` để tắt các kiểm tra của verified boot, và để
+đọc, đặt thuộc tính.
 
 ### Cập nhật trực tuyến
 
@@ -46,7 +46,7 @@ tính.
 
 ### Trình quản lý tệp
 
-![Quản lý tệp trong điện thoại bằng Aweyuki](slides/vi/out/07-files.png)
+![Quản lý tệp của điện thoại trong Aweyuki](slides/vi/out/07-files.png)
 
 ### Terminal
 
@@ -74,11 +74,11 @@ tính.
 
 ### Về điện thoại
 
-![Kiểm tra sức khỏe pin và chu kỳ sạc](slides/vi/out/14-specs.png)
+![Kiểm tra tình trạng pin và số chu kỳ sạc](slides/vi/out/14-specs.png)
 
 ### Tính năng khác
 
-- Khởi động lại vào system, recovery, fastboot, bootloader hoặc EDL, và chuyển khe
+- Khởi động lại vào hệ thống, recovery, fastboot, bootloader hoặc EDL, và chuyển khe
 - Giao diện sáng và tối; tiếng Trung giản thể, tiếng Trung phồn thể, tiếng Anh và
   tiếng Việt
 
@@ -95,9 +95,9 @@ tính.
 
 ### 🚧 Đang hoàn thiện
 
-Các ảnh này được dựng từ firmware gốc của từng máy và chưa được thử trên máy. Chúng
+Các ảnh này được dựng từ firmware gốc của từng máy và chưa được thử trên điện thoại. Chúng
 cấu hình màn hình, cảm ứng, Wi-Fi và rung. Các chương trình cần cho việc giải mã phân
-vùng data được đọc ngay trên máy từ script init và mô tả dịch vụ của hệ thống đã cài;
+vùng dữ liệu được đọc ngay trên máy từ script init và mô tả dịch vụ của hệ thống đã cài;
 những gì đọc được đã đối chiếu với firmware gốc của từng mẫu, còn cách các chương
 trình đó chạy trên những mẫu này thì chưa được kiểm chứng.
 
@@ -149,7 +149,7 @@ truy cập được bộ nhớ của máy khi nó đang ở recovery.
 
 Aweyuki cài một hệ thống thứ hai bên cạnh hệ thống trong các phân vùng của máy, dù đó
 là HyperOS hay một ROM tùy chỉnh, và chuyển đổi giữa hai hệ thống từ **Khởi động kép**
-ở trang chủ. Gốc của hệ thống thứ hai là một tệp trong phân vùng data mà hệ thống tệp
+ở trang chủ. Gốc của hệ thống thứ hai là một tệp trong phân vùng dữ liệu mà hệ thống tệp
 không được phép di chuyển hay xóa, đọc và ghi xuyên qua chính phân vùng đó; ảnh khởi
 động của cả hai hệ thống nằm trong một tệp như vậy khác. Mỗi lần chuyển chỉ ghi vào
 các phân vùng boot và init_boot của khe khởi động kế tiếp, và ghi từng bước vào
@@ -160,24 +160,24 @@ và hệ thống thứ hai khởi động bằng vendor_boot và dtbo của hệ
 Trước khi bất cứ thứ gì khác ghi vào các phân vùng boot, Aweyuki ghi lại ảnh khởi động
 của hệ thống đã cài: một lần cài đặt, một lần chuyển khe, fastboot, khôi phục cài đặt
 gốc, và sao lưu hay khôi phục các phân vùng boot. Hệ thống thứ hai chờ trong khi một
-bản cập nhật hệ thống còn chờ hợp nhất, và bản sao lưu phân vùng data bỏ nó ra ngoài.
+bản cập nhật hệ thống còn chờ hợp nhất, và bản sao lưu phân vùng dữ liệu bỏ nó ra ngoài.
 
 Hệ thống thứ hai cài từ một zip ở trang Cài đặt, như mọi gói khác:
 
 | Tệp | Nội dung |
 | --- | --- |
-| `system.toml` | `id`, `name`, `version` và `filesystem`; `init`, chương trình mà gốc khởi động bằng, `/sbin/init` nếu không ghi; `minimum`, chỗ tối thiểu gốc cần, tính bằng byte |
-| `boot.img` | Nhân mà bootloader khởi động |
+| `system.toml` | `id`, `name`, `version` và `filesystem`; `init`, chương trình mà gốc khởi động bằng, `/sbin/init` nếu không ghi; `minimum`, dung lượng tối thiểu gốc cần, tính bằng byte |
+| `boot.img` | Kernel mà bootloader khởi động |
 | `rootfs.img` | Ảnh của hệ thống tệp gốc, theo `filesystem` đã ghi |
 | `init_boot.img` | Chỉ cho hệ thống có ramdisk đầu tiên của riêng nó |
 
 Một hệ thống không có init_boot riêng khởi động từ ảnh Aweyuki tạo. Chương trình trong
-đó nạp các module nhân của giai đoạn đầu hệ thống đã cài theo đúng cách giai đoạn đầu
-của hệ thống đó nạp, cùng phụ thuộc mềm và các tham số dòng lệnh nhân dành cho chúng,
-tìm gốc trong phân vùng data, gắn kết và chạy `init` ở đó. Nếu có gì chặn nó, nó đưa
+đó nạp các module kernel giai đoạn đầu của hệ thống đã cài, đúng như giai đoạn đầu
+của hệ thống đó nạp, kèm phụ thuộc mềm và tham số dòng lệnh kernel dành cho chúng,
+tìm gốc trong phân vùng dữ liệu, gắn kết và chạy `init` ở đó. Nếu có gì chặn nó, nó đưa
 Aweyuki lên, như một lần khởi động hỏng của hệ thống đã cài kết thúc trong recovery:
 nó để lý do trong misc, giải nén ramdisk của phân vùng recovery thuộc khe đè lên
-ramdisk của chính nó, đúng như nhân giải nén khi bootloader khởi động recovery, rồi
+ramdisk của chính nó, đúng như kernel giải nén khi bootloader khởi động recovery, rồi
 chuyển cho chương trình đầu tiên của Aweyuki, nên Aweyuki vẫn lên dù bootloader xử lý
 việc khởi động lại thế nào. Aweyuki hiện lý do, và hệ thống thứ hai vẫn khởi động ở
 lần tới cho đến khi người dùng chuyển trong Khởi động kép. Một lần khởi động không
@@ -248,7 +248,7 @@ cargo ndk -t arm64-v8a --platform 30 clippy --workspace --all-targets -- -D warn
 
 Các test có tên bắt đầu bằng `on_the_phone` tạo hệ thống tệp, gắn kết và đặt khóa mã
 hóa, những việc chỉ điện thoại làm được. Với một máy đang ở Aweyuki nối qua adb và
-phân vùng data đã mở, `cargo ndk` đẩy từng chương trình test sang máy và chạy ở đó,
+phân vùng dữ liệu đã mở, `cargo ndk` đẩy từng chương trình test sang máy và chạy ở đó,
 mỗi lần một test:
 
 ```sh
