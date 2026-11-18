@@ -86,6 +86,7 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 | --- | --- | --- |
 | 小米 17 Ultra | `nezha` | OS4.0.4.0.XPACNXM（Android 17） |
 | 小米 13 Ultra | `ishtar` | OS3.0.308.0.WMACNXM（Android 16） |
+| 小米 13 Pro | `nuwa` | OS3.0.312.0.WMBCNXM（Android 16） |
 
 ### 🚧 施工中
 
@@ -94,7 +95,6 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 | 机型 | 代号 | 构建所用的系统版本 |
 | --- | --- | --- |
 | 🚧 小米 13 | `fuxi` | OS3.0.309.0.WMCCNXM（Android 16） |
-| 🚧 小米 13 Pro | `nuwa` | OS3.0.312.0.WMBCNXM（Android 16） |
 | 🚧 小米 14 | `houji` | OS3.0.307.0.WNCCNXM（Android 16） |
 | 🚧 小米 14 Pro | `shennong` | OS3.0.309.0.WNBCNXM（Android 16） |
 | 🚧 小米 14 Ultra | `aurora` | OS3.0.308.0.WNACNXM（Android 16） |
