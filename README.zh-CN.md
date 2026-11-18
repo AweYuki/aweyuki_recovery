@@ -113,6 +113,17 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 | 🚧 REDMI K100 Pro | `athens` | OS4.0.4.0.XPICNXM（Android 17） |
 | 🚧 REDMI K100 Pro Max | `songyuan` | OS4.0.4.0.XGNCNXM（Android 17） |
 
+### 添加新机型
+
+GitHub Actions 会自动发现并构建 `devices/*.toml` 中的所有机型配置。要为以上列表之外的机型添加支持：
+
+- 新建 `devices/<codename>.toml`（填写屏幕、触摸、内核模块、分区、WLAN、振动、备份与日志路径，以及 `[stock]` 官方完整更新包信息）。
+- 使用 `aweyuki-pack described` 将官方包中的 init/VINTF 描述提取到 `crates/aweyuki-programs/tests/described/<codename>`。
+- 在 `crates/aweyuki-config/src/lib.rs` 中登记 `[stock].version` 测试项并运行 `cargo test --workspace`。
+- 在 README 支持列表中先加入 `🚧 施工中` 表格，在真机上验证完整后再移入主支持列表。
+
+详细步骤请查看[添加新机型指南（英文）](docs/adding-devices.md)或[越南语版本](docs/adding-devices.vi.md)。
+
 ## 安装 Aweyuki Recovery
 
 Aweyuki 需要已解锁的 bootloader。从 [Releases](https://github.com/AweYuki/aweyuki_recovery/releases) 下载对应机型的 zip，每个文件都标有机型和代号，例如 Xiaomi 17 Ultra (nezha)。使用 `SHA256SUMS` 核对并解压之后，在手机处于 fastboot 模式的时候，把其中的镜像刷入当前运行槽位的 recovery 分区：

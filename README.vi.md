@@ -123,6 +123,17 @@ trình đó chạy trên những mẫu này thì chưa được kiểm chứng.
 | 🚧 REDMI K100 Pro | `athens` | OS4.0.4.0.XPICNXM (Android 17) |
 | 🚧 REDMI K100 Pro Max | `songyuan` | OS4.0.4.0.XGNCNXM (Android 17) |
 
+### Thêm thiết bị mới
+
+GitHub Actions tự động phát hiện và đóng gói mọi tệp cấu hình nằm trong `devices/*.toml` khi phát hành bản mới. Để thêm một mẫu máy ngoài danh sách trên:
+
+- Tạo tệp `devices/<codename>.toml` (khai báo màn hình, cảm ứng, module kernel, phân vùng, Wi-Fi, rung, sao lưu và đường dẫn log) cùng `[stock]` trỏ tới gói Full OTA gốc.
+- Trích xuất mô tả init/VINTF từ gói OTA bằng `aweyuki-pack described` vào `crates/aweyuki-programs/tests/described/<codename>`.
+- Đăng ký phiên bản gốc vào test trong `crates/aweyuki-config/src/lib.rs` và chạy `cargo test --workspace`.
+- Đưa máy vào bảng `🚧 Đang hoàn thiện` (hoặc bảng chính sau khi đã xác minh đầy đủ trên máy thật).
+
+Xem chi tiết tại [Hướng dẫn thêm thiết bị mới](docs/adding-devices.vi.md) ([English](docs/adding-devices.md)).
+
 ## Cài Aweyuki Recovery
 
 Aweyuki cần bootloader đã mở khóa. Tải zip cho máy của bạn từ

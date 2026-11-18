@@ -122,6 +122,17 @@ not been verified.
 | 🚧 REDMI K100 Pro | `athens` | OS4.0.4.0.XPICNXM (Android 17) |
 | 🚧 REDMI K100 Pro Max | `songyuan` | OS4.0.4.0.XGNCNXM (Android 17) |
 
+### Adding a new device
+
+GitHub Actions automatically builds and packages every `devices/*.toml` on each run and release. To add a phone not listed above:
+
+- Create `devices/<codename>.toml` (display, touch, kernel modules, partitions, Wi-Fi, haptics, backup, logs, and the stock full OTA `[stock]` metadata).
+- Extract stock init/VINTF descriptors with `aweyuki-pack described` into `crates/aweyuki-programs/tests/described/<codename>`.
+- Register the expected `[stock].version` in `crates/aweyuki-config/src/lib.rs` and run `cargo test --workspace`.
+- Add the device to the `🚧 Under construction` table (or the main table once verified on real hardware).
+
+See the full walkthrough in [Adding a new device](docs/adding-devices.md) ([Tiếng Việt](docs/adding-devices.vi.md)).
+
 ## Installing Aweyuki Recovery
 
 Aweyuki needs an unlocked bootloader. Download the zip for your phone from
