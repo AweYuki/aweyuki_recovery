@@ -100,6 +100,18 @@ enum Cmd {
     /// and verify every written byte.
     #[cfg(target_os = "android")]
     Efisp { file: PathBuf },
+    /// Inspect kernel KMI, installed root frameworks, and /data/adb/modules.
+    Root,
+    /// Enable, disable, or mark a root module for removal on next boot.
+    RootModule {
+        id: String,
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+        #[arg(long)]
+        disable: bool,
+        #[arg(long)]
+        remove: bool,
+    },
     /// Discard all a block device holds and write zeros over its start, as
     /// a factory reset erases the data partition.
     #[cfg(target_os = "android")]
@@ -282,6 +294,32 @@ fn main() -> Result<()> {
         Cmd::Efisp { file } => {
             let bytes = aweyuki_install::efisp::flash(&file)?;
             println!("flashed {bytes} bytes to efisp and verified");
+            Ok(())
+        }
+        Cmd::Root => {
+            let release = aweyuki_info::kernel_release().unwrap_or_default();
+            let kmi = aweyuki_install::root::resolve_kmi(&release, aweyuki_install::root::SUPPORTED_KMIS);
+            println!("kernel  = {release}");
+            println!("kmi     = {}", kmi.as_deref().unwrap_or("unknown"));
+            let adb = Path::new(aweyuki_install::root::DEFAULT_ADB_ROOT);
+            let providers = aweyuki_install::root::detect_providers(adb);
+            println!("root    = {:?}", providers);
+            for m in aweyuki_install::root::list_modules(adb)? {
+                let state = if m.remove_pending { "remove" } else if m.enabled { "enabled" } else { "disabled" };
+                println!("module  = {} ({}) [{}]", m.id, m.version, state);
+            }
+            Ok(())
+        }
+        Cmd::RootModule { id, enable, disable, remove } => {
+            let adb = Path::new(aweyuki_install::root::DEFAULT_ADB_ROOT);
+            if enable {
+                aweyuki_install::root::set_module_enabled(adb, &id, true)?;
+            } else if disable {
+                aweyuki_install::root::set_module_enabled(adb, &id, false)?;
+            }
+            if remove {
+                aweyuki_install::root::set_module_remove(adb, &id, true)?;
+            }
             Ok(())
         }
         Cmd::Mount => {
