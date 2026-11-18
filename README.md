@@ -274,6 +274,11 @@ such as `en` or `zh-TW`:
 cargo run --release -p aweyuki-preview -- target/preview --lang en
 ```
 
+## Credits
+
+- [Skyward](https://github.com/kirklin/skyward) by Kirk Lin — original Rust recovery architecture and UI foundation.
+- [AERA Recovery](https://github.com/AERA-Recovery) — inspiration and design reference for EFISP, Root Manager, network file sharing, and runtime plugins.
+
 ## License
 
 [GPL-3.0-or-later](LICENSE)

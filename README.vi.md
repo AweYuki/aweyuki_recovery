@@ -275,6 +275,11 @@ thời điểm chạm và chuyển động. `--lang` chọn ngôn ngữ theo loc
 cargo run --release -p aweyuki-preview -- target/preview --lang vi
 ```
 
+## Ghi công
+
+- [Skyward](https://github.com/kirklin/skyward) (Kirk Lin) — kiến trúc recovery Rust và nền tảng giao diện ban đầu.
+- [AERA Recovery](https://github.com/AERA-Recovery) — tham khảo thiết kế cho các tính năng EFISP, Root Manager, chia sẻ tệp qua mạng và runtime plugins.
+
 ## Giấy phép
 
 [GPL-3.0-or-later](LICENSE)

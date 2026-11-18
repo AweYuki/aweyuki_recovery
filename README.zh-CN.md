@@ -212,6 +212,11 @@ cargo ndk -t arm64-v8a --platform 30 test -p aweyuki -p aweyuki-block -p aweyuki
 cargo run --release -p aweyuki-preview -- target/preview --lang en
 ```
 
+## 致谢
+
+- [Skyward](https://github.com/kirklin/skyward)（Kirk Lin）— 原始 Rust Recovery 架构与界面基础。
+- [AERA Recovery](https://github.com/AERA-Recovery) — EFISP、Root Manager、网络文件共享与运行时插件的设计参考。
+
 ## 许可证
 
 [GPL-3.0-or-later](LICENSE)
