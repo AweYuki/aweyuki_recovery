@@ -192,9 +192,11 @@ fn installable(e: &FileRow) -> bool {
 }
 
 /// Whether the installer takes a file by its name: an update package, a
-/// zip that installs itself, or a partition image.
+/// zip that installs itself, a partition image, or an ARM64 EFI application.
 pub(crate) fn installs(e: &FileRow) -> bool {
-    let named = std::path::Path::new(&e.name).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("zip") || ext.eq_ignore_ascii_case("img"));
+    let named = std::path::Path::new(&e.name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip") || ext.eq_ignore_ascii_case("img") || ext.eq_ignore_ascii_case("efi"));
     named && matches!(e.kind, FileKind::File | FileKind::Link { folder: false, .. })
 }
 

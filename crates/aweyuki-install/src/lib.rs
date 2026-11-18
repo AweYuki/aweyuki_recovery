@@ -7,6 +7,7 @@ pub mod adb;
 pub mod asked;
 pub mod blockmap;
 pub mod commands;
+pub mod efisp;
 pub mod fuse;
 pub mod image;
 pub mod keep;

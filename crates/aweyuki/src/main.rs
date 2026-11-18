@@ -96,6 +96,10 @@ enum Cmd {
     },
     /// Tell what a package or image is, the way the installer reads it.
     Identify { file: PathBuf },
+    /// Flash an ARM64 PE32+ EFI application directly to the efisp partition
+    /// and verify every written byte.
+    #[cfg(target_os = "android")]
+    Efisp { file: PathBuf },
     /// Discard all a block device holds and write zeros over its start, as
     /// a factory reset erases the data partition.
     #[cfg(target_os = "android")]
@@ -274,6 +278,12 @@ fn main() -> Result<()> {
             Ok(())
         }
         Cmd::Identify { file } => identify(&file),
+        #[cfg(target_os = "android")]
+        Cmd::Efisp { file } => {
+            let bytes = aweyuki_install::efisp::flash(&file)?;
+            println!("flashed {bytes} bytes to efisp and verified");
+            Ok(())
+        }
         Cmd::Mount => {
             let mounts = aweyuki_vab::mount_partitions(booted_slot()?)?;
             for d in &mounts.damaged {
