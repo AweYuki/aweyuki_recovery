@@ -112,6 +112,13 @@ enum Cmd {
         #[arg(long)]
         remove: bool,
     },
+    /// Serve a directory over HTTP/1.1 for browser or curl file transfer.
+    Share {
+        #[arg(long, default_value = "/sdcard")]
+        root: PathBuf,
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+    },
     /// Discard all a block device holds and write zeros over its start, as
     /// a factory reset erases the data partition.
     #[cfg(target_os = "android")]
@@ -321,6 +328,10 @@ fn main() -> Result<()> {
                 aweyuki_install::root::set_module_remove(adb, &id, true)?;
             }
             Ok(())
+        }
+        Cmd::Share { root, port } => {
+            let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+            aweyuki_net::share::serve(&root, addr)
         }
         Cmd::Mount => {
             let mounts = aweyuki_vab::mount_partitions(booted_slot()?)?;
