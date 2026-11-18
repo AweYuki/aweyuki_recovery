@@ -3,7 +3,6 @@
 //! `/sdcard/Aweyuki/plugins`.
 
 use anyhow::{bail, Context, Result};
-use serde::Deserialize;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
@@ -13,17 +12,64 @@ pub const DEFAULT_PLUGIN_DIRS: &[&str] = &[
     "/sdcard/Aweyuki/plugins",
 ];
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PluginManifest {
     pub id: String,
     pub name: String,
-    #[serde(default)]
     pub version: String,
-    #[serde(default)]
     pub description: String,
     pub entry: String,
-    #[serde(default)]
     pub args: Vec<String>,
+}
+
+fn unquote(s: &str) -> Result<String> {
+    let s = s.trim();
+    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+        Ok(s[1..s.len() - 1].to_string())
+    } else {
+        bail!("expected quoted string, got {s:?}")
+    }
+}
+
+fn parse_manifest(text: &str) -> Result<PluginManifest> {
+    let mut id = String::new();
+    let mut name = String::new();
+    let mut version = String::new();
+    let mut description = String::new();
+    let mut entry = String::new();
+    let mut args = Vec::new();
+
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
+        let v = v.trim();
+        match k.trim() {
+            "id" => id = unquote(v)?,
+            "name" => name = unquote(v)?,
+            "version" => version = unquote(v)?,
+            "description" => description = unquote(v)?,
+            "entry" => entry = unquote(v)?,
+            "args" => {
+                let inner = v.strip_prefix('[').and_then(|s| s.strip_suffix(']')).context("invalid args array")?;
+                for item in inner.split(',') {
+                    let item = item.trim();
+                    if !item.is_empty() {
+                        args.push(unquote(item)?);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if id.is_empty() || name.is_empty() || entry.is_empty() {
+        bail!("plugin.toml must specify id, name, and entry");
+    }
+    Ok(PluginManifest { id, name, version, description, entry, args })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,7 +84,7 @@ impl Plugin {
         let manifest_path = dir.join("plugin.toml");
         let text = fs::read_to_string(&manifest_path)
             .with_context(|| format!("read {}", manifest_path.display()))?;
-        let manifest: PluginManifest = toml::from_str(&text)
+        let manifest = parse_manifest(&text)
             .with_context(|| format!("parse {}", manifest_path.display()))?;
         if manifest.id.is_empty() || manifest.id.contains('/') || manifest.id.contains("..") {
             bail!("invalid plugin id {:?}", manifest.id);
