@@ -327,7 +327,7 @@ fn mem_total(meminfo: &str) -> Result<u64> {
     parse(kib.trim(), "MemTotal")
 }
 
-fn kernel_release() -> Result<String> {
+pub fn kernel_release() -> Result<String> {
     let mut u: libc::utsname = unsafe { std::mem::zeroed() };
     if unsafe { libc::uname(&mut u) } != 0 {
         return Err(std::io::Error::last_os_error()).context("uname");
