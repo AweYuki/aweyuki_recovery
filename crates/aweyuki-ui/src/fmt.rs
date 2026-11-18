@@ -1959,7 +1959,7 @@ mod tests {
         assert_eq!(slots(Lang::Vi, &[Slot::B]), "khe B");
         assert_eq!(slots(Lang::Vi, &[Slot::A, Slot::B]), "khe A và B");
         assert_eq!(parts(Lang::Vi, &[true, true, true, true]), "Phân vùng khởi động, phân vùng hệ thống, phân vùng dữ liệu, modem và EFS");
-        assert_eq!(data(Lang::Vi, &Data::Locked { user: 0, lock: 0 }), "Chưa giải mã");
+        assert_eq!(data(Lang::Vi, &Data::Locked { user: 0, keys: crate::app::Keys::Digits, checking: false }), "Chưa giải mã");
         assert_eq!(security(Lang::Vi, Security::Open), "Không");
         assert_eq!(update_value(Lang::Vi, &Standing::None), "Không có");
         assert_eq!(erase_stop(Lang::Vi, &EraseStop::Failed(Part::Data, "x".into())).0, "Không xóa được phân vùng dữ liệu.");

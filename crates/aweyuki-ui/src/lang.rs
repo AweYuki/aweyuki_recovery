@@ -188,12 +188,12 @@ mod tests {
         }
 
         fn visit_expr_array(&mut self, node: &'ast syn::ExprArray) {
-            if let [a, b, c] = node.elems.iter().collect::<Vec<_>>().as_slice()
+            if node.elems.len() == 3
                 && let (
                     syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(hans), .. }),
                     syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(hant), .. }),
                     syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(en), .. }),
-                ) = (a, b, c)
+                ) = (&node.elems[0], &node.elems[1], &node.elems[2])
             {
                 let (hans, hant, en) = (hans.value(), hant.value(), en.value());
                 if has_cjk(&hans) || has_cjk(&hant) || (hans == "WLAN" && en == "Wi-Fi") || (hans == "UTC" && en == "UTC") {
