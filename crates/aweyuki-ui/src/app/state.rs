@@ -9,7 +9,8 @@ pub struct State {
     /// The language the pages speak.
     pub lang: Lang,
     /// The language was chosen on the language page, now or at an earlier
-    /// start, where otherwise it is the one the system names.
+    /// start, where otherwise it is the one the system asked for, the one
+    /// last spoken, or English.
     pub language_chosen: bool,
     pub dark: bool,
     pub brightness: f32,
@@ -186,7 +187,7 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         State {
-            lang: Lang::Hans,
+            lang: Lang::En,
             language_chosen: false,
             dark: false,
             brightness: SLIDER_START,

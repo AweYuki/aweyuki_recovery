@@ -24,7 +24,8 @@ These are not style choices. Each one has a reason outside the source tree.
 | `b"SKYWARD AREA\0\0\0\x01"` in `crates/aweyuki-block/src/area.rs` | The magic written at the head of every area. A phone with a second system already installed has areas carrying it; renaming it makes that system's root and boot store unreadable. |
 | `SKYWARD.project`, `SKYWARD.project-inherit`, `SKYWARD.key-root` in `crates/aweyuki-backup/src/archive.rs` | Extended-header names in backup tars. A backup made before the rename must still restore its project quota and fscrypt key roots. |
 | `Skyward test package` in `crates/aweyuki-install/src/signature.rs` | Text inside `crates/aweyuki-install/tests/signature/signed-*.zip`, which was signed upstream. Rewriting the literal makes the signature test fail for a reason that has nothing to do with the test. |
-| `Lang::Vi`, `[Lang; 4]`, `pub fn pick(self, [&str; 3]) -> &'static str` | Vietnamese is looked up by its English text in `lang/vi.rs`, so `pick` returns `&'static str` and cannot be the generic `pick<T>` upstream has. Every `pick` call site here already relies on that. |
+| `Lang::Vi`, `[Lang; 4]`, `pub fn pick(self, [&str; 3]) -> &'static str` | Vietnamese is looked up by its Chinese and English texts in `lang/vi.rs`, so `pick` returns `&'static str` and cannot be the generic `pick<T>` upstream has. Every `pick` call site here already relies on that. |
+| `lang: Lang::En` in `crates/aweyuki-ui/src/app/state.rs` and `request.locale.as_deref()` alone in `crates/aweyuki/src/ui.rs` | Recovery defaults to English unless a language was chosen on the Language page, requested via `--locale` in BCB, or spoken last; `ro.product.locale` is ignored because China ROMs pin it to `zh-CN`. |
 | `tr!(l, hans, hant, en, vi)` | The macro takes four texts here, not three. |
 | `AweYuki/aweyuki_recovery` and the `aweyuki-` release prefix in `crates/aweyuki-net/src/github.rs` | That is where this fork's releases are. Upstream's address would offer upstream's images to phones running this build. |
 
@@ -159,7 +160,7 @@ the four `SKYWARD` spellings listed above and the signed fixture's text.
 
 | Upstream change | What to do here |
 | --- | --- |
-| A new `l.pick([hans, hant, en])` call | Compiles as is. Add the English text to `crates/aweyuki-ui/src/lang/vi.rs` so it is not silently English: the fallback is silent by design. |
+| A new `l.pick([hans, hant, en])` call | Compiles as is, and `every_text_picked_has_a_vietnamese_translation` in `lang.rs` flags it in `cargo test`. Add the entry to `crates/aweyuki-ui/src/lang/vi.rs` (under `(hans, en)` when `en` collides with another meaning, otherwise under `en`). |
 | A new `tr!(l, hans, hant, en)` call | Add a fourth argument. `tr!` rejects three here. Run `cargo check` to find every one. |
 | `pick` used with a non-`&str` value, as upstream's generic `pick<T>` allows | Keep the narrowed signature and adapt the call site — map the value to a `&'static str` before `pick`, as `soc()` in `pages.rs` does. Do not re-generalise `pick`: `T` cannot return the table's `&'static str` fallback. |
 | A new `Lang` variant or a new `Text` type | Adds a match arm everywhere `Lang` is matched. Keep `Lang::ALL` at four entries unless the user is adding a language, and extend `Lang::for_locale`, `name` and `tag` together. |

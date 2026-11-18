@@ -1278,10 +1278,11 @@ impl<'a> Pages<'a> {
         // The settings kept from the starts before are back before the first
         // frame, and before file transfer starts with its switch and the time
         // zone. The pages speak the language chosen then, or else the one the
-        // system named with the work it asks for, or the one the installed
-        // system is built to start in, or else the one they last spoke.
+        // system named with the work it asks for, or else the one they last
+        // spoke, and English until any of those says otherwise; the installed
+        // ROM's ro.product.locale is ignored because China ROMs pin it to zh-CN.
         let kept = settings::read()?;
-        let locale = request.locale.as_deref().or(info.locale.as_deref());
+        let locale = request.locale.as_deref();
         let named = locale.map(Lang::for_locale).transpose()?;
         app.take_settings(kept.settings(), named);
         let keeper = Keeper::new(&kept);

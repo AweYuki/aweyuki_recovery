@@ -215,7 +215,7 @@ mod tests {
         app.part_at(0);
         assert!(!app.frame(&f, &i).back, "no going back while it works");
         app.key(Key::Back, 0);
-        assert_eq!((app.screen(), toast(&app)), (Screen::PartWork, Some("请等待完成后再返回")));
+        assert_eq!((app.screen(), toast(&app)), (Screen::PartWork, Some("Wait for it to finish before going back")));
         app.part_ended(0, ItemEnd::Made, "");
         app.part_work_ended(Ok(()), 0);
         assert!(app.frame(&f, &i).back);
@@ -235,7 +235,7 @@ mod tests {
         app.state.data = Data::Opening;
         app.refresh();
         assert!(swipe(&mut app, &f, &i, Confirm::Filesystem).is_empty());
-        assert_eq!(toast(&app), Some("正在打开 data 分区，请稍后再试"));
+        assert_eq!(toast(&app), Some("Opening the data partition. Try again shortly"));
         app.state.data = Data::Open;
         app.refresh();
         let repair = Effect::Filesystem { name: "data".into(), action: FsAction::Repair };

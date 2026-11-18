@@ -89,7 +89,7 @@ pub fn cpu(l: Lang, c: &Cpu) -> String {
     match c.max_khz {
         Some(khz) => {
             let ghz = format!("{:.2}", khz as f64 / 1e6);
-            tr!(l, "{cores} 最高 {ghz}GHz", "{cores} 最高 {ghz}GHz", "{cores}, up to {ghz}GHz", "{cores}, lên tới {ghz}GHz")
+            tr!(l, "{cores} 最高 {ghz}GHz", "{cores} 最高 {ghz}GHz", "{cores}, up to {ghz}GHz", "{cores}, tối đa {ghz}GHz")
         }
         None => cores,
     }
@@ -167,7 +167,7 @@ pub fn wear(l: Lang, b: &Battery) -> Option<String> {
     let left = match (b.full, b.design) {
         (Some(full), Some(design)) if design > 0 => {
             let share = (full * 100 + design / 2) / design;
-            Some(tr!(l, "剩余容量 {share}%", "剩餘容量 {share}%", "Maximum capacity {share}%", "Công suất tối đa {share}%"))
+            Some(tr!(l, "剩余容量 {share}%", "剩餘容量 {share}%", "Maximum capacity {share}%", "Dung lượng tối đa {share}%"))
         }
         _ => None,
     };
@@ -234,8 +234,8 @@ pub fn snapshot_note(l: Lang, s: &SnapshotState) -> Option<&'static str> {
 pub fn battery_low(l: Lang, level: u8, charging: bool) -> (String, String) {
     let least = aweyuki_install::least_charge(charging);
     (
-        tr!(l, "电量仅剩 {level}%", "電量僅剩 {level}%", "Battery at {level}%", "Pin ở mức {level}%"),
-        tr!(l, "充电至 {least}% 以上才能安装", "充電至 {least}% 以上才能安裝", "Charge it past {least}% to install", "Sạc quá {least}% để cài đặt"),
+        tr!(l, "电量仅剩 {level}%", "電量僅剩 {level}%", "Battery at {level}%", "Pin còn {level}%"),
+        tr!(l, "充电至 {least}% 以上才能安装", "充電至 {least}% 以上才能安裝", "Charge it past {least}% to install", "Sạc trên {least}% để cài đặt"),
     )
 }
 
@@ -244,8 +244,8 @@ pub fn battery_low(l: Lang, level: u8, charging: bool) -> (String, String) {
 pub fn next_boot(l: Lang, next: Slot, now: Slot) -> (String, String) {
     let (next, now) = (next.letter(), now.letter());
     (
-        tr!(l, "重启后从 {next} 槽位启动", "重新啟動後從 {next} 槽位啟動", "Restarts from slot {next}", "Khởi động lại từ khe {next}"),
-        tr!(l, "当前运行的是 {now} 槽位", "目前執行的是 {now} 槽位", "Running from slot {now} now", "Đang chạy từ vị trí {now} ngay bây giờ"),
+        tr!(l, "重启后从 {next} 槽位启动", "重新啟動後從 {next} 槽位啟動", "Restarts from slot {next}", "Khởi động lại sẽ vào khe {next}"),
+        tr!(l, "当前运行的是 {now} 槽位", "目前執行的是 {now} 槽位", "Running from slot {now} now", "Hiện đang chạy ở khe {now}"),
     )
 }
 
@@ -274,7 +274,7 @@ pub fn switch_resumed(l: Lang) -> &'static str {
 }
 
 pub fn switch_unfinished(l: Lang, why: &str) -> String {
-    tr!(l, "上次中断的系统切换未能完成：{why}", "上次中斷的系統切換未能完成：{why}", "The switch of systems cut off last time couldn't be finished: {why}", "Việc chuyển đổi hệ thống bị cắt lần trước không thể hoàn thành: {why}")
+    tr!(l, "上次中断的系统切换未能完成：{why}", "上次中斷的系統切換未能完成：{why}", "The switch of systems cut off last time couldn't be finished: {why}", "Lần chuyển hệ bị cắt trước đó không hoàn tất được: {why}")
 }
 
 /// Why the second system does not start yet while an update is in flight,
@@ -348,8 +348,9 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
                 l,
                 "存储空间不足。备份需要 {needed}，可用空间为 {free}。",
                 "儲存空間不足。備份需要 {needed}，可用空間為 {free}。",
-                "Not enough storage. The backup needs {needed}, and {free} is free."
-            , "Không đủ dung lượng lưu trữ. Bản sao lưu cần {needed} và {free} miễn phí.")
+                "Not enough storage. The backup needs {needed}, and {free} is free.",
+                "Không đủ dung lượng lưu trữ. Bản sao lưu cần {needed}, hiện còn trống {free}.",
+            )
         }
         BackupRefusal::Update(state) => {
             let what = l.pick(match restore {
@@ -362,20 +363,23 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
                     l,
                     "更新合并完成前，暂不{what}。你可以在「高级 > 系统更新」中查看。",
                     "更新合併完成前，暫不{what}。你可以在「進階 > 系統更新」中查看。",
-                    "{parts} aren't {what} until the update merges. You can see it in Advanced > System update."
-                , "{parts} không phải là {what} cho đến khi bản cập nhật hợp nhất. Bạn có thể thấy nó trong Nâng cao > Cập nhật hệ thống."),
+                    "{parts} aren't {what} until the update merges. You can see it in Advanced > System update.",
+                    "Chưa {what} cho đến khi bản cập nhật hợp nhất xong. Có thể xem trong Nâng cao > Cập nhật hệ thống.",
+                ),
                 SnapshotState::MergeFailed => tr!(
                     l,
                     "更新合并失败。在系统中处理完成前，暂不{what}。",
                     "更新合併失敗。在系統中處理完成前，暫不{what}。",
-                    "The update failed to merge. {parts} aren't {what} until the system deals with it."
-                , "Bản cập nhật không hợp nhất được. {parts} không phải là {what} cho đến khi hệ thống xử lý nó."),
+                    "The update failed to merge. {parts} aren't {what} until the system deals with it.",
+                    "Hợp nhất bản cập nhật thất bại. Chưa {what} cho đến khi hệ thống xử lý xong.",
+                ),
                 SnapshotState::Unknown => tr!(
                     l,
                     "无法读取更新状态，暂不{what}。",
                     "無法讀取更新狀態，暫不{what}。",
-                    "{parts} aren't {what} while the update's status can't be read."
-                , "{parts} không phải là {what} trong khi không thể đọc được trạng thái của bản cập nhật."),
+                    "{parts} aren't {what} while the update's status can't be read.",
+                    "Chưa {what} khi chưa đọc được trạng thái cập nhật.",
+                ),
                 SnapshotState::None => unreachable!("no update in flight holds anything back"),
             }
         }
@@ -383,14 +387,16 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
             l,
             "该备份来自其他设备（{device}），无法恢复到本机。",
             "這份備份來自其他裝置（{device}），無法還原到本機。",
-            "This backup is from another device ({device}) and can't be restored to this phone."
-        , "Bản sao lưu này đến từ một thiết bị khác ({device}) và không thể khôi phục vào điện thoại này."),
+            "This backup is from another device ({device}) and can't be restored to this phone.",
+            "Bản sao lưu này thuộc máy khác ({device}), không khôi phục vào máy này được.",
+        ),
         BackupRefusal::Resized(name) => tr!(
             l,
             "{name} 的大小与备份时不同，系统可能已更新。该备份中的系统分区无法恢复到当前系统。",
             "{name} 的大小與備份時不同，系統可能已更新。這份備份中的系統分割區無法還原到目前的系統。",
-            "{name} isn't the size it was at the backup, so the system may have been updated. The backup's system partitions can't be restored to the current system."
-        , "{name} không có kích thước như lúc sao lưu nên hệ thống có thể đã được cập nhật. Không thể khôi phục các phân vùng hệ thống của bản sao lưu về hệ thống hiện tại."),
+            "{name} isn't the size it was at the backup, so the system may have been updated. The backup's system partitions can't be restored to the current system.",
+            "Kích thước của {name} khác lúc sao lưu nên có thể hệ thống đã cập nhật. Không khôi phục được các phân vùng hệ thống của bản sao lưu về hệ thống hiện tại.",
+        ),
         BackupRefusal::DataReset => l
             .pick([
                 "备份后 data 分区已重新创建，例如恢复过出厂设置，该备份中的 data 分区无法恢复。",
@@ -423,20 +429,23 @@ pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Optio
                     l,
                     "重启后将从槽位 {slot} 启动新系统，启动后自动合并",
                     "重新啟動後將從槽位 {slot} 啟動新系統，啟動後自動合併",
-                    "After a reboot the new system starts from slot {slot}, and merges once it has started"
-                , "Sau khi khởi động lại, hệ thống mới sẽ khởi động từ khe {slot} và hợp nhất sau khi khởi động"),
+                    "After a reboot the new system starts from slot {slot}, and merges once it has started",
+                    "Sau khi khởi động lại, hệ thống mới sẽ vào từ khe {slot} rồi tự hợp nhất",
+                ),
                 Some(_) => tr!(
                     l,
                     "需在系统的「系统更新」中重启，才会从槽位 {slot} 启动新系统",
                     "需在系統的「系統更新」中重新啟動，才會從槽位 {slot} 啟動新系統",
-                    "Reboot from the system's System update to start slot {slot}'s new system"
-                , "Khởi động lại từ bản cập nhật hệ thống của hệ thống để bắt đầu hệ thống mới của slot {slot}"),
+                    "Reboot from the system's System update to start slot {slot}'s new system",
+                    "Hãy khởi động lại từ mục Cập nhật hệ thống trong hệ thống để vào hệ thống mới ở khe {slot}",
+                ),
                 None => tr!(
                     l,
                     "从槽位 {slot} 启动新系统后将自动合并",
                     "從槽位 {slot} 啟動新系統後將自動合併",
-                    "Merges once slot {slot}'s new system starts"
-                , "Hợp nhất khi hệ thống mới của vị trí {slot} bắt đầu"),
+                    "Merges once slot {slot}'s new system starts",
+                    "Sẽ tự hợp nhất khi hệ thống mới ở khe {slot} khởi động",
+                ),
             };
             (l.pick(["更新已安装", "更新已安裝", "Update installed"]), Some(detail))
         }
@@ -451,7 +460,7 @@ pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Optio
         Standing::Merging(_) => (l.pick(["正在合并更新", "正在合併更新", "Merging the update"]), None),
         Standing::Failed(code) => (
             l.pick(["更新合并失败", "更新合併失敗", "The update failed to merge"]),
-            Some(tr!(l, "重启后将继续合并（{code:?}）", "重新啟動後將繼續合併（{code:?}）", "Merging goes on after a reboot ({code:?})", "Việc hợp nhất sẽ tiếp tục sau khi khởi động lại ({code:?})")),
+            Some(tr!(l, "重启后将继续合并（{code:?}）", "重新啟動後將繼續合併（{code:?}）", "Merging goes on after a reboot ({code:?})", "Quá trình hợp nhất sẽ tiếp tục sau khi khởi động lại ({code:?})")),
         ),
         Standing::Merged => (
             l.pick(["更新已合并", "更新已合併", "Update merged"]),
@@ -537,10 +546,10 @@ fn in_sentence(name: &str) -> String {
     }
 }
 
-/// Things named in a row: in Chinese with 、 between them, in English with
-/// commas, each after the first as a sentence names it.
+/// Things named in a row: in Chinese with 、 between them, in English and
+/// Vietnamese with commas, each after the first as a sentence names it.
 pub fn list<'a>(l: Lang, names: impl IntoIterator<Item = &'a str>) -> String {
-    let names: Vec<String> = names.into_iter().enumerate().map(|(k, n)| if l == Lang::En && k > 0 { in_sentence(n) } else { n.to_string() }).collect();
+    let names: Vec<String> = names.into_iter().enumerate().map(|(k, n)| if matches!(l, Lang::En | Lang::Vi) && k > 0 { in_sentence(n) } else { n.to_string() }).collect();
     names.join(l.pick(["、", "、", ", "]))
 }
 
@@ -628,7 +637,7 @@ pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
                 Lang::Hans => spaced("清除", part(l, *p), "失败。"),
                 Lang::Hant => spaced("清除", part(l, *p), "失敗。"),
                 Lang::En => format!("Couldn't wipe {}.", part_in_sentence(*p)),
-                Lang::Vi => format!("Không thể xóa {}.", part(l, *p)),
+                Lang::Vi => format!("Không xóa được {}.", in_sentence(part(l, *p))),
             };
             (what, Some(why.clone()))
         }
@@ -637,7 +646,7 @@ pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
 
 /// How work on whole partitions of a kind is told of: the Chinese verb its
 /// sentences are built on, in simplified and in traditional characters,
-/// and English's own words for it.
+/// English's own words for it, and Vietnamese's verb in both cases.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Verb {
     hans: &'static str,
@@ -650,53 +659,57 @@ pub struct Verb {
     noun: &'static str,
     /// The verb itself: repair, as in Couldn't repair vendor.
     base: &'static str,
+    /// Vietnamese verb: sửa, as in Đang sửa / Không sửa được vendor.
+    vi: &'static str,
+    /// Capitalized Vietnamese verb: Sửa, as in Sửa xong / Sửa thất bại.
+    vi_head: &'static str,
 }
 
 impl Verb {
     pub fn of(kind: &PartKind) -> Verb {
-        let (hans, hant, going, done, noun, base) = match kind {
-            PartKind::Disable => ("清除", "清除", "Wiping", "wiped", "Wipe", "wipe"),
-            PartKind::Unshare => ("处理", "處理", "Unsharing", "unshared", "Unsharing", "unshare"),
-            PartKind::Repair => ("修复", "修復", "Repairing", "repaired", "Repair", "repair"),
-            PartKind::Remake(_) => ("格式化", "格式化", "Formatting", "formatted", "Format", "format"),
+        let (hans, hant, going, done, noun, base, vi, vi_head) = match kind {
+            PartKind::Disable => ("清除", "清除", "Wiping", "wiped", "Wipe", "wipe", "xóa", "Xóa"),
+            PartKind::Unshare => ("处理", "處理", "Unsharing", "unshared", "Unsharing", "unshare", "xử lý", "Xử lý"),
+            PartKind::Repair => ("修复", "修復", "Repairing", "repaired", "Repair", "repair", "sửa", "Sửa"),
+            PartKind::Remake(_) => ("格式化", "格式化", "Formatting", "formatted", "Format", "format", "định dạng", "Định dạng"),
         };
-        Verb { hans, hant, going, done, noun, base }
+        Verb { hans, hant, going, done, noun, base, vi, vi_head }
     }
 
     /// Under way: 正在修复, Repairing.
     pub fn going(self, l: Lang) -> String {
-        let (hans, hant, going) = (self.hans, self.hant, self.going);
-        tr!(l, "正在{hans}", "正在{hant}", "{going}", "{going}")
+        let (hans, hant, going, vi) = (self.hans, self.hant, self.going, self.vi);
+        tr!(l, "正在{hans}", "正在{hant}", "{going}", "Đang {vi}")
     }
 
     /// Ended, with every partition done: 修复完成, Repair complete.
     pub fn complete(self, l: Lang) -> String {
-        let (hans, hant, noun) = (self.hans, self.hant, self.noun);
-        tr!(l, "{hans}完成", "{hant}完成", "{noun} complete", "{noun} hoàn thành")
+        let (hans, hant, noun, vi) = (self.hans, self.hant, self.noun, self.vi_head);
+        tr!(l, "{hans}完成", "{hant}完成", "{noun} complete", "{vi} xong")
     }
 
     /// Ended partway through the partitions: 清除未完成, Wipe incomplete.
     pub fn incomplete(self, l: Lang) -> String {
-        let (hans, hant, noun) = (self.hans, self.hant, self.noun);
-        tr!(l, "{hans}未完成", "{hant}未完成", "{noun} incomplete", "{noun} chưa hoàn thành")
+        let (hans, hant, noun, vi) = (self.hans, self.hant, self.noun, self.vi_head);
+        tr!(l, "{hans}未完成", "{hant}未完成", "{noun} incomplete", "{vi} chưa xong")
     }
 
     /// Gone wrong: 修复失败, Repair failed.
     pub fn failed(self, l: Lang) -> String {
-        let (hans, hant, noun) = (self.hans, self.hant, self.noun);
-        tr!(l, "{hans}失败", "{hant}失敗", "{noun} failed", "{noun} không thành công")
+        let (hans, hant, noun, vi) = (self.hans, self.hant, self.noun, self.vi_head);
+        tr!(l, "{hans}失败", "{hant}失敗", "{noun} failed", "{vi} thất bại")
     }
 
     /// A partition the work ended before: 未修复, Not repaired.
     pub fn not_done(self, l: Lang) -> String {
-        let (hans, hant, done) = (self.hans, self.hant, self.done);
-        tr!(l, "未{hans}", "未{hant}", "Not {done}", "Không phải {done}")
+        let (hans, hant, done, vi) = (self.hans, self.hant, self.done, self.vi);
+        tr!(l, "未{hans}", "未{hant}", "Not {done}", "Chưa {vi}")
     }
 
     /// What the page asks while the work goes on: 修复完成前，请不要关机。
     pub fn hold_on(self, l: Lang) -> String {
-        let (hans, hant) = (self.hans, self.hant);
-        tr!(l, "{hans}完成前，请不要关机。", "{hant}完成前，請不要關機。", "Don't power off until it's done.", "Đừng tắt nguồn cho đến khi hoàn tất.")
+        let (hans, hant, vi) = (self.hans, self.hant, self.vi);
+        tr!(l, "{hans}完成前，请不要关机。", "{hant}完成前，請不要關機。", "Don't power off until it's done.", "Đừng tắt nguồn cho đến khi {vi} xong.")
     }
 
     /// What could not be done to the partition `name`: 修复 vendor 失败,
@@ -706,13 +719,7 @@ impl Verb {
             Lang::Hans => spaced(self.hans, name, "失败"),
             Lang::Hant => spaced(self.hant, name, "失敗"),
             Lang::En => format!("Couldn't {} {name}", self.base),
-            Lang::Vi => match self.base {
-                "wipe" => format!("Không thể xóa {name}"),
-                "unshare" => format!("Không thể bỏ chia sẻ {name}"),
-                "repair" => format!("Không thể sửa chữa {name}"),
-                "format" => format!("Không thể định dạng {name}"),
-                _ => format!("Không thể {} {name}", self.base),
-            },
+            Lang::Vi => format!("Không {} được {name}", self.vi),
         }
     }
 }
@@ -739,7 +746,7 @@ pub fn part_stop(l: Lang, stop: &PartStop, codename: &str) -> (String, Option<St
     match stop {
         PartStop::Refused(r) => (erase_request_refusal(l, r, codename), None),
         PartStop::Unmounted(base) => (
-            tr!(l, "请先在「挂载」中挂载 {base} 分区后重试。", "請先在「掛載」中掛載 {base} 分割區後重試。", "Mount the {base} partition in Mount, then try again.", "Gắn phân vùng {base} vào Mount, sau đó thử lại."),
+            tr!(l, "请先在「挂载」中挂载 {base} 分区后重试。", "請先在「掛載」中掛載 {base} 分割區後重試。", "Mount the {base} partition in Mount, then try again.", "Hãy gắn kết phân vùng {base} trong mục Gắn kết rồi thử lại."),
             None,
         ),
         PartStop::Failed(why) => (l.pick(UNEXPECTED).into(), Some(why.clone())),
@@ -764,10 +771,10 @@ pub fn bytes(n: u64) -> String {
 const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /// A day of the calendar as the language writes it: `2026年5月8日`,
-/// `May 8, 2026`.
+/// `May 8, 2026`, `8 tháng 5, 2026`.
 fn day(l: Lang, year: i32, month: i32, d: i32) -> String {
     let name = MONTHS[(month - 1) as usize];
-    tr!(l, "{year}年{month}月{d}日", "{year}年{month}月{d}日", "{name} {d}, {year}", "{name} {d}, {year}")
+    tr!(l, "{year}年{month}月{d}日", "{year}年{month}月{d}日", "{name} {d}, {year}", "{d} tháng {month}, {year}")
 }
 
 /// `2026年4月1日`
@@ -956,13 +963,14 @@ pub fn partition_role(l: Lang, name: &str) -> &'static str {
     })
 }
 
-/// `槽位 B`, `槽位 A 和 B`, `slot B`, `slots A and B`
+/// `槽位 B`, `槽位 A 和 B`, `slot B`, `slots A and B`, `khe B`, `khe A và B`
 pub fn slots(l: Lang, slots: &[Slot]) -> String {
     let letters: Vec<&str> = slots.iter().map(|s| s.letter()).collect();
     let joined = letters.join(l.pick([" 和 ", " 和 ", " and "]));
     match (l, slots.len()) {
         (Lang::En, 1) => format!("slot {joined}"),
         (Lang::En, _) => format!("slots {joined}"),
+        (Lang::Vi, _) => format!("khe {joined}"),
         _ => format!("槽位 {joined}"),
     }
 }
@@ -987,8 +995,8 @@ pub fn screen_off(l: Lang, after_ms: Option<u64>) -> String {
 pub fn mount_failure(l: Lang, m: &MountFailure) -> String {
     let (base, detail) = (&m.base, &m.detail);
     match m.mounting {
-        true => tr!(l, "挂载 {base} 失败：{detail}", "掛載 {base} 失敗：{detail}", "Couldn't mount {base}: {detail}", "Không thể gắn {base}: {detail}"),
-        false => tr!(l, "卸载 {base} 失败：{detail}", "卸載 {base} 失敗：{detail}", "Couldn't unmount {base}: {detail}", "Không thể ngắt kết nối {base}: {detail}"),
+        true => tr!(l, "挂载 {base} 失败：{detail}", "掛載 {base} 失敗：{detail}", "Couldn't mount {base}: {detail}", "Không gắn kết được {base}: {detail}"),
+        false => tr!(l, "卸载 {base} 失败：{detail}", "卸載 {base} 失敗：{detail}", "Couldn't unmount {base}: {detail}", "Không gỡ gắn kết được {base}: {detail}"),
     }
 }
 
@@ -1011,32 +1019,37 @@ pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: usize
             l,
             "无法识别该文件，请{give} A/B 完整更新包、刷机包或分区镜像。",
             "無法辨識這個檔案，請{give} A/B 完整更新檔、刷機包或分割區映像檔。",
-            "This file isn't recognized. {give} an A/B full OTA package, a flashable zip or a partition image."
-        , "Tập tin này không được công nhận. {give} gói A/B đầy đủ OTA, tệp zip có thể flash hoặc hình ảnh phân vùng."),
+            "This file isn't recognized. {give} an A/B full OTA package, a flashable zip or a partition image.",
+            "Không nhận dạng được tệp này. Hãy {give} gói OTA đầy đủ A/B, zip flash được hoặc ảnh phân vùng.",
+        ),
         Refusal::Image => tr!(
             l,
             "无法安装分区镜像，请{give} A/B 完整更新包或刷机包。",
             "無法安裝分割區映像檔，請{give} A/B 完整更新檔或刷機包。",
-            "A partition image can't be installed this way. {give} an A/B full OTA package or a flashable zip."
-        , "Không thể cài đặt hình ảnh phân vùng theo cách này. {give} một gói A/B đầy đủ OTA hoặc một zip có thể flash."),
+            "A partition image can't be installed this way. {give} an A/B full OTA package or a flashable zip.",
+            "Không cài được ảnh phân vùng theo cách này. Hãy {give} gói OTA đầy đủ A/B hoặc zip flash được.",
+        ),
         Refusal::NotAb(kind) if kind.is_empty() => tr!(
             l,
             "该更新包未注明类型，请{give} A/B 完整更新包。",
             "這個更新檔未註明類型，請{give} A/B 完整更新檔。",
-            "This package doesn't say its type. {give} an A/B full OTA package."
-        , "Gói này không cho biết loại của nó. {give} một gói A/B đầy đủ OTA."),
+            "This package doesn't say its type. {give} an A/B full OTA package.",
+            "Gói này không cho biết loại. Hãy {give} gói OTA đầy đủ A/B.",
+        ),
         Refusal::NotAb(kind) => tr!(
             l,
             "该更新包的类型为 {kind}，请{give} A/B 完整更新包。",
             "這個更新檔的類型為 {kind}，請{give} A/B 完整更新檔。",
-            "This package's type is {kind}. {give} an A/B full OTA package."
-        , "Loại gói này là {kind}. {give} một gói A/B đầy đủ OTA."),
+            "This package's type is {kind}. {give} an A/B full OTA package.",
+            "Loại của gói này là {kind}. Hãy {give} gói OTA đầy đủ A/B.",
+        ),
         Refusal::OtherDevice(devices) => tr!(
             l,
             "该更新包适用于 {devices}，本机为 {codename}。",
             "這個更新檔適用於 {devices}，本機為 {codename}。",
-            "This package is for {devices}, and this phone is {codename}."
-        , "Gói này dành cho {devices} và điện thoại này là {codename}."),
+            "This package is for {devices}, and this phone is {codename}.",
+            "Gói này dành cho {devices}, còn máy này là {codename}.",
+        ),
         Refusal::OtherSerial => l
             .pick([
                 "该更新包仅适用于指定序列号的设备，不包括本机。",
@@ -1048,23 +1061,26 @@ pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: usize
             l,
             "无法安装增量更新包，请{give}完整更新包。",
             "無法安裝增量更新檔，請{give}完整更新檔。",
-            "An incremental OTA package can't be installed. {give} a full OTA package."
-        , "Không thể cài đặt gói OTA gia tăng. {give} một gói OTA đầy đủ."),
+            "An incremental OTA package can't be installed. {give} a full OTA package.",
+            "Không cài được gói OTA tăng dần. Hãy {give} gói OTA đầy đủ.",
+        ),
         Refusal::Older { package, installed } => {
             let (package, installed) = (date(l, *package, zone), date(l, *installed, zone));
             tr!(
                 l,
                 "该更新包的构建日期为 {package}，早于当前系统的 {installed}。",
                 "這個更新檔的建置日期為 {package}，早於目前系統的 {installed}。",
-                "This package was built on {package}, before the current system, built on {installed}."
-            , "Gói này được xây dựng trên {package}, trước hệ thống hiện tại, được xây dựng trên {installed}.")
+                "This package was built on {package}, before the current system, built on {installed}.",
+                "Gói này dựng ngày {package}, cũ hơn hệ thống hiện tại (dựng ngày {installed}).",
+            )
         }
         Refusal::OlderPatch { package, installed } => tr!(
             l,
             "该更新包的安全补丁为 {package}，早于当前系统的 {installed}。",
             "這個更新檔的安全性修補程式為 {package}，早於目前系統的 {installed}。",
-            "This package's security patch is {package}, older than the current system's {installed}."
-        , "Bản vá bảo mật của gói này là {package}, cũ hơn {installed} của hệ thống hiện tại."),
+            "This package's security patch is {package}, older than the current system's {installed}.",
+            "Bản vá bảo mật của gói này là {package}, cũ hơn {installed} của hệ thống hiện tại.",
+        ),
         Refusal::NoPartition => l.pick(["本机没有可刷入该镜像的分区。", "本機沒有可刷入這個映像檔的分割區。", "This phone has no partition this image can be flashed to."]).into(),
         Refusal::Battery { level, charging } => {
             let least = aweyuki_install::least_charge(*charging);
@@ -1072,8 +1088,9 @@ pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: usize
                 l,
                 "电量仅剩 {level}%，请充电至 {least}% 以上后重试。",
                 "電量僅剩 {level}%，請充電至 {least}% 以上後重試。",
-                "The battery is at {level}%. Charge it past {least}%, then try again."
-            , "Pin ở mức {level}%. Hãy sạc quá {least}% rồi thử lại.")
+                "The battery is at {level}%. Charge it past {least}%, then try again.",
+                "Pin còn {level}%. Hãy sạc trên {least}% rồi thử lại.",
+            )
         }
         Refusal::Pending(state) => {
             let standing = snapshot(l, state);
@@ -1081,8 +1098,9 @@ pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: usize
                 l,
                 "{standing}。请重启到系统，完成上一次更新后重试。",
                 "{standing}。請重新啟動到系統，完成上一次更新後重試。",
-                "{standing}. Reboot to the system to finish the last update, then try again."
-            , "{standing}. Khởi động lại hệ thống để hoàn tất bản cập nhật cuối cùng, sau đó thử lại.")
+                "{standing}. Reboot to the system to finish the last update, then try again.",
+                "{standing}. Hãy khởi động lại vào hệ thống để hoàn tất bản cập nhật trước rồi thử lại.",
+            )
         }
         Refusal::OldHost => l
             .pick([
@@ -1126,16 +1144,18 @@ pub fn refusal(l: Lang, r: &Refusal, codename: &str, source: Source, zone: usize
             l,
             "已安装 {name}，请先在「双系统」中删除后重试。",
             "已安裝 {name}，請先在「雙系統」中刪除後重試。",
-            "{name} is installed already. Remove it in Dual boot, then try again."
-        , "{name} đã được cài đặt rồi. Hãy xóa nó trong chế độ Khởi động kép, sau đó thử lại."),
+            "{name} is installed already. Remove it in Dual boot, then try again.",
+            "Đã cài {name} rồi. Hãy gỡ trong Khởi động kép rồi thử lại.",
+        ),
         Refusal::NoRoom { least, room } => {
             let (least, room) = (bytes(*least), bytes(*room));
             tr!(
                 l,
                 "该系统至少需要 {least}，data 分区仅剩 {room} 可用。",
                 "這個系統至少需要 {least}，data 分割區僅剩 {room} 可用。",
-                "This system needs at least {least}, and the data partition has {room} to spare."
-            , "Hệ thống này cần ít nhất {least} và phân vùng dữ liệu có {room} dự phòng.")
+                "This system needs at least {least}, and the data partition has {room} to spare.",
+                "Hệ thống này cần ít nhất {least}, mà phân vùng dữ liệu chỉ còn trống {room}.",
+            )
         }
         Refusal::NotBrick(_) | Refusal::NoSerial => unreachable!("only a request to erase partitions is refused as {r:?}"),
     }
@@ -1148,9 +1168,9 @@ pub fn erase_request_refusal(l: Lang, r: &Refusal, codename: &str) -> String {
         Refusal::Unsigned => l.pick(["该请求未签名。", "這項要求未簽署。", "The request isn't signed."]).into(),
         Refusal::Unverified => l.pick(["该请求未通过签名验证。", "這項要求未通過簽章驗證。", "The request's signature didn't verify."]).into(),
         Refusal::NotBrick(kind) if kind.is_empty() => l.pick(["该请求未注明类型。", "這項要求未註明類型。", "The request doesn't say its type."]).into(),
-        Refusal::NotBrick(kind) => tr!(l, "该请求的类型为 {kind}。", "這項要求的類型為 {kind}。", "The request's type is {kind}.", "Loại yêu cầu là {kind}."),
+        Refusal::NotBrick(kind) => tr!(l, "该请求的类型为 {kind}。", "這項要求的類型為 {kind}。", "The request's type is {kind}.", "Loại của yêu cầu là {kind}."),
         Refusal::OtherDevice(devices) => {
-            tr!(l, "该请求适用于 {devices}，本机为 {codename}。", "這項要求適用於 {devices}，本機為 {codename}。", "The request is for {devices}, and this phone is {codename}.", "Yêu cầu dành cho {devices} và điện thoại này là {codename}.")
+            tr!(l, "该请求适用于 {devices}，本机为 {codename}。", "這項要求適用於 {devices}，本機為 {codename}。", "The request is for {devices}, and this phone is {codename}.", "Yêu cầu này dành cho {devices}, còn máy này là {codename}.")
         }
         Refusal::OtherSerial => l
             .pick([
@@ -1177,8 +1197,9 @@ pub fn failure(l: Lang, f: &Failure, source: Source) -> (String, Option<String>)
                         l,
                         "更新包签名验证失败，请{give}官方更新包。",
                         "更新檔簽章驗證失敗，請{give}官方更新檔。",
-                        "The package's signature didn't verify. {give} an official package."
-                    , "Chữ ký của gói hàng không được xác minh. {give} một gói chính thức.")
+                        "The package's signature didn't verify. {give} an official package.",
+                        "Chữ ký của gói không xác minh được. Hãy {give} gói chính thức.",
+                    )
                 }
                 (Trouble::Damaged, _) => said(["更新包已损坏，请重新下载。", "更新檔已損壞，請重新下載。", "The package is damaged. Download it again."]),
                 (Trouble::Older, _) => said(["更新包的版本过旧。", "更新檔的版本過舊。", "The package is too old."]),
@@ -1205,7 +1226,7 @@ pub fn failure(l: Lang, f: &Failure, source: Source) -> (String, Option<String>)
             (what, Some(tr!(l, "错误代码：{code}", "錯誤代碼：{code}", "Error code: {code}", "Mã lỗi: {code}")))
         }
         Failure::Script(code) => {
-            (tr!(l, "安装脚本运行失败，退出码为 {code}。", "安裝指令碼執行失敗，結束代碼為 {code}。", "The install script failed with exit code {code}.", "Tập lệnh cài đặt không thành công với mã thoát {code}."), None)
+            (tr!(l, "安装脚本运行失败，退出码为 {code}。", "安裝指令碼執行失敗，結束代碼為 {code}。", "The install script failed with exit code {code}.", "Script cài đặt chạy thất bại với mã thoát {code}."), None)
         }
         Failure::Disconnected => (
             said(["电脑已停止发送，请检查数据线连接后重新发送。", "電腦已停止傳送，請檢查傳輸線連接後重新傳送。", "The computer stopped sending. Check the cable, then send it again."]),
@@ -1353,15 +1374,17 @@ pub fn unanswered(l: Lang, why: &Unanswered) -> String {
             l,
             "检查更新失败，当前 WLAN {login}",
             "檢查更新失敗，目前連線的 Wi-Fi 網路{login}",
-            "Couldn't check for updates. The Wi-Fi network joined {login}"
-        , "Không thể kiểm tra cập nhật. Mạng Wi-Fi đã tham gia {login}"),
+            "Couldn't check for updates. The Wi-Fi network joined {login}",
+            "Không kiểm tra được cập nhật. Mạng Wi-Fi đang nối {login}",
+        ),
         Unanswered::Offline(why) => tr!(
             l,
             "检查更新失败，当前 WLAN 无法访问互联网：{why}",
             "檢查更新失敗，目前連線的 Wi-Fi 網路無法連上網際網路：{why}",
-            "Couldn't check for updates. The Wi-Fi network joined doesn't reach the internet: {why}"
-        , "Không thể kiểm tra cập nhật. Mạng Wi-Fi đã tham gia không kết nối được với internet: {why}"),
-        Unanswered::Failed(why) => tr!(l, "检查更新失败：{why}", "檢查更新失敗：{why}", "Couldn't check for updates: {why}", "Không thể kiểm tra cập nhật: {why}"),
+            "Couldn't check for updates. The Wi-Fi network joined doesn't reach the internet: {why}",
+            "Không kiểm tra được cập nhật. Mạng Wi-Fi đang nối không vào được internet: {why}",
+        ),
+        Unanswered::Failed(why) => tr!(l, "检查更新失败：{why}", "檢查更新失敗：{why}", "Couldn't check for updates: {why}", "Không kiểm tra được cập nhật: {why}"),
     }
 }
 
@@ -1383,8 +1406,9 @@ pub fn download_failure(l: Lang, f: &DownloadFailure) -> String {
                 l,
                 "内部存储空间不足，需 {needed} 可用空间，当前可用 {free}。",
                 "內部儲存空間不足，需要 {needed} 的可用空間，目前可用 {free}。",
-                "Not enough internal storage: {needed} has to be free, and {free} is."
-            , "Không đủ bộ nhớ trong: {needed} phải trống và {free} thì trống.")
+                "Not enough internal storage: {needed} has to be free, and {free} is.",
+                "Không đủ bộ nhớ trong: cần trống {needed}, hiện chỉ còn {free}.",
+            )
         }
         DownloadFailure::Damaged => l
             .pick(["完整更新包校验失败，已删除，请重新下载。", "完整更新檔驗證失敗，已刪除，請重新下載。", "The full OTA package didn't verify and was deleted. Download it again."])
@@ -1392,7 +1416,7 @@ pub fn download_failure(l: Lang, f: &DownloadFailure) -> String {
         DownloadFailure::Changed => {
             l.pick(["服务器上的版本已更新，请重新检查更新。", "伺服器上的版本已更新，請重新檢查更新。", "The server has a newer version now. Check for updates again."]).into()
         }
-        DownloadFailure::Other(why) => tr!(l, "下载失败：{why}", "下載失敗：{why}", "Download failed: {why}", "Tải xuống không thành công: {why}"),
+        DownloadFailure::Other(why) => tr!(l, "下载失败：{why}", "下載失敗：{why}", "Download failed: {why}", "Tải về thất bại: {why}"),
     }
 }
 
@@ -1406,14 +1430,15 @@ pub fn aweyuki_download_failure(l: Lang, f: &DownloadFailure) -> String {
                 l,
                 "运行内存不足，需 {needed} 可用空间，当前可用 {free}。",
                 "記憶體不足，需要 {needed} 的可用空間，目前可用 {free}。",
-                "Not enough memory: {needed} has to be free, and {free} is."
-            , "Không đủ bộ nhớ: {needed} phải trống và {free} thì trống.")
+                "Not enough memory: {needed} has to be free, and {free} is.",
+                "Không đủ bộ nhớ RAM: cần trống {needed}, hiện chỉ còn {free}.",
+            )
         }
         DownloadFailure::Damaged => {
             l.pick(["安装包校验失败，已删除，请重新更新。", "安裝包驗證失敗，已刪除，請重新更新。", "The package didn't verify and was deleted. Update again."]).into()
         }
         DownloadFailure::Changed => unreachable!("GitHub is not asked again where a build is"),
-        DownloadFailure::Other(why) => tr!(l, "下载失败：{why}", "下載失敗：{why}", "Download failed: {why}", "Tải xuống không thành công: {why}"),
+        DownloadFailure::Other(why) => tr!(l, "下载失败：{why}", "下載失敗：{why}", "Download failed: {why}", "Tải về thất bại: {why}"),
     }
 }
 
@@ -1421,8 +1446,8 @@ pub fn aweyuki_download_failure(l: Lang, f: &DownloadFailure) -> String {
 pub fn term_end(l: Lang, end: &TermEnd) -> String {
     match end {
         TermEnd::Exited(code) => tr!(l, "shell 已退出，退出码 {code}", "shell 已結束，結束代碼 {code}", "The shell exited with code {code}", "Shell đã thoát với mã {code}"),
-        TermEnd::Signalled(signal) => tr!(l, "shell 已被信号 {signal} 终止", "shell 已被訊號 {signal} 終止", "Signal {signal} stopped the shell", "Tín hiệu {signal} dừng vỏ"),
-        TermEnd::Other(status) => tr!(l, "shell 已结束：{status}", "shell 已結束：{status}", "The shell ended: {status}", "Vỏ kết thúc: {status}"),
+        TermEnd::Signalled(signal) => tr!(l, "shell 已被信号 {signal} 终止", "shell 已被訊號 {signal} 終止", "Signal {signal} stopped the shell", "Shell bị dừng bởi tín hiệu {signal}"),
+        TermEnd::Other(status) => tr!(l, "shell 已结束：{status}", "shell 已結束：{status}", "The shell ended: {status}", "Shell đã kết thúc: {status}"),
     }
 }
 
@@ -1435,49 +1460,49 @@ pub fn storage_name(l: Lang) -> &'static str {
 /// File transfer kept internal storage from work that needed it back, as
 /// the system says why.
 pub fn transfer_kept(l: Lang, why: &str) -> String {
-    tr!(l, "未能停止文件传输：{why}", "無法停止檔案傳輸：{why}", "Couldn't stop file transfer: {why}", "Không thể ngừng truyền tệp: {why}")
+    tr!(l, "未能停止文件传输：{why}", "無法停止檔案傳輸：{why}", "Couldn't stop file transfer: {why}", "Không dừng được chuyển tệp: {why}")
 }
 
 /// File transfer did not turn on, as the system says why.
 pub fn transfer_failed(l: Lang, why: &str) -> String {
-    tr!(l, "无法开启文件传输：{why}", "無法開啟檔案傳輸：{why}", "Couldn't turn on file transfer: {why}", "Không thể bật truyền tệp: {why}")
+    tr!(l, "无法开启文件传输：{why}", "無法開啟檔案傳輸：{why}", "Couldn't turn on file transfer: {why}", "Không bật được chuyển tệp: {why}")
 }
 
 /// File transfer did not turn off, as the system says why.
 pub fn transfer_left_on(l: Lang, why: &str) -> String {
-    tr!(l, "关闭文件传输失败：{why}", "關閉檔案傳輸失敗：{why}", "Couldn't turn off file transfer: {why}", "Không thể tắt truyền tệp: {why}")
+    tr!(l, "关闭文件传输失败：{why}", "關閉檔案傳輸失敗：{why}", "Couldn't turn off file transfer: {why}", "Không tắt được chuyển tệp: {why}")
 }
 
 /// File transfer stopped on its own, as the system says why.
 pub fn transfer_stopped(l: Lang, why: &str) -> String {
-    tr!(l, "文件传输已停止：{why}", "檔案傳輸已停止：{why}", "File transfer stopped: {why}", "Đã ngừng truyền tệp: {why}")
+    tr!(l, "文件传输已停止：{why}", "檔案傳輸已停止：{why}", "File transfer stopped: {why}", "Chuyển tệp đã dừng: {why}")
 }
 
 /// Merging the update failed, as the system says why.
 pub fn merge_failed(l: Lang, why: &str) -> String {
-    tr!(l, "未能合并更新：{why}", "無法合併更新：{why}", "Couldn't merge the update: {why}", "Không thể hợp nhất bản cập nhật: {why}")
+    tr!(l, "未能合并更新：{why}", "無法合併更新：{why}", "Couldn't merge the update: {why}", "Không hợp nhất được bản cập nhật: {why}")
 }
 
 /// What work that takes a program of the installed system's `base`
 /// partition asks while that partition is not mounted.
 pub fn mount_first(l: Lang, base: &str) -> String {
-    tr!(l, "请先在「挂载」中挂载 {base} 分区", "請先在「掛載」中掛載 {base} 分割區", "Mount the {base} partition in Mount first", "Gắn phân vùng {base} vào Mount trước")
+    tr!(l, "请先在「挂载」中挂载 {base} 分区", "請先在「掛載」中掛載 {base} 分割區", "Mount the {base} partition in Mount first", "Hãy gắn kết phân vùng {base} trong mục Gắn kết trước")
 }
 
 /// The installed system's SELinux rules could not be read, as the system
 /// says why.
 pub fn rules_unread(l: Lang, why: &str) -> String {
-    tr!(l, "未能读取系统的 SELinux 规则：{why}", "無法讀取系統的 SELinux 規則：{why}", "Couldn't read the system's SELinux rules: {why}", "Không thể đọc quy tắc SELinux của hệ thống: {why}")
+    tr!(l, "未能读取系统的 SELinux 规则：{why}", "無法讀取系統的 SELinux 規則：{why}", "Couldn't read the system's SELinux rules: {why}", "Không đọc được quy tắc SELinux của hệ thống: {why}")
 }
 
 /// The logs were saved in `folder`.
 pub fn exported(l: Lang, folder: &str) -> String {
-    tr!(l, "已导出到 {folder}", "已匯出到 {folder}", "Exported to {folder}", "Đã xuất sang {folder}")
+    tr!(l, "已导出到 {folder}", "已匯出到 {folder}", "Exported to {folder}", "Đã xuất vào {folder}")
 }
 
 /// The logs were not saved, as the system says why.
 pub fn export_failed(l: Lang, why: &str) -> String {
-    tr!(l, "导出失败：{why}", "匯出失敗：{why}", "Couldn't export: {why}", "Không thể xuất: {why}")
+    tr!(l, "导出失败：{why}", "匯出失敗：{why}", "Couldn't export: {why}", "Không xuất được: {why}")
 }
 
 /// A screenshot went into the gallery's screenshots.
@@ -1489,13 +1514,13 @@ pub const SCREENSHOT_HELD: Text = ["截图已暂存，解密后存入相册", "�
 
 /// A screenshot was not saved, as the system says why.
 pub fn screenshot_failed(l: Lang, why: &str) -> String {
-    tr!(l, "截图保存失败：{why}", "截圖儲存失敗：{why}", "Couldn't save the screenshot: {why}", "Không thể lưu ảnh chụp màn hình: {why}")
+    tr!(l, "截图保存失败：{why}", "截圖儲存失敗：{why}", "Couldn't save the screenshot: {why}", "Không lưu được ảnh chụp màn hình: {why}")
 }
 
 /// The screenshots held while the owner's storage was closed did not go into
 /// the gallery's, as the system says why.
 pub fn screenshots_not_kept(l: Lang, why: &str) -> String {
-    tr!(l, "暂存的截图未能存入相册：{why}", "暫存的截圖未能存入相簿：{why}", "Kept screenshots couldn't go to the gallery: {why}", "Ảnh chụp màn hình đã giữ không thể vào thư viện: {why}")
+    tr!(l, "暂存的截图未能存入相册：{why}", "暫存的截圖未能存入相簿：{why}", "Kept screenshots couldn't go to the gallery: {why}", "Không đưa được ảnh chụp đã giữ vào thư viện: {why}")
 }
 
 /// The name a screenshot taken `unix_ms` milliseconds into Unix time is saved
@@ -1908,5 +1933,50 @@ mod tests {
         assert_eq!(term_end(HANS, &TermEnd::Exited(0)), "shell 已退出，退出码 0");
         assert_eq!(term_end(Lang::Hant, &TermEnd::Signalled(9)), "shell 已被訊號 9 終止");
         assert_eq!(term_end(Lang::En, &TermEnd::Exited(127)), "The shell exited with code 127");
+        assert_eq!(term_end(Lang::Vi, &TermEnd::Signalled(9)), "Shell bị dừng bởi tín hiệu 9");
+        assert_eq!(term_end(Lang::Vi, &TermEnd::Other("stopped".into())), "Shell đã kết thúc: stopped");
+    }
+
+    #[test]
+    fn vietnamese_sentences_and_values_fit_their_contexts() {
+        let b = Battery {
+            level: 100,
+            charge: Charge::Full,
+            temp: Some(338),
+            health: Some("Good".into()),
+            cycles: Some(169),
+            design: Some(5_500_000),
+            full: Some(5_095_000),
+            voltage: Some(4_482_000),
+            quick: false,
+            plugged: true,
+        };
+        assert_eq!(cpu(Lang::Vi, &Cpu { cores: 8, max_khz: Some(4_608_000) }), "8 nhân, tối đa 4.61GHz");
+        assert_eq!(level(Lang::Vi, &b), "100% · Đã đầy");
+        assert_eq!(wear(Lang::Vi, &b).unwrap(), "Tốt · Dung lượng tối đa 93%");
+        assert_eq!(date(Lang::Vi, 1_778_243_655, 0), "8 tháng 5, 2026");
+        assert_eq!(datetime(Lang::Vi, 1_792_348_260, 0), "19 tháng 10, 2026, 02:31");
+        assert_eq!(slots(Lang::Vi, &[Slot::B]), "khe B");
+        assert_eq!(slots(Lang::Vi, &[Slot::A, Slot::B]), "khe A và B");
+        assert_eq!(parts(Lang::Vi, &[true, true, true, true]), "Phân vùng khởi động, phân vùng hệ thống, phân vùng dữ liệu, modem và EFS");
+        assert_eq!(data(Lang::Vi, &Data::Locked { user: 0, lock: 0 }), "Chưa giải mã");
+        assert_eq!(security(Lang::Vi, Security::Open), "Không");
+        assert_eq!(update_value(Lang::Vi, &Standing::None), "Không có");
+        assert_eq!(erase_stop(Lang::Vi, &EraseStop::Failed(Part::Data, "x".into())).0, "Không xóa được phân vùng dữ liệu.");
+        assert_eq!(erase_stop(Lang::Vi, &EraseStop::Failed(Part::Art, "x".into())).0, "Không xóa được bộ nhớ đệm ART.");
+        let repair = Verb::of(&PartKind::Repair);
+        assert_eq!(
+            [repair.going(Lang::Vi), repair.complete(Lang::Vi), repair.failed(Lang::Vi), repair.not_done(Lang::Vi)],
+            ["Đang sửa", "Sửa xong", "Sửa thất bại", "Chưa sửa"]
+        );
+        assert_eq!(repair.failed_on(Lang::Vi, "vendor"), "Không sửa được vendor");
+        assert_eq!(
+            failure(Lang::Vi, &Failure::Engine(26), Source::Computer).0,
+            "Chữ ký của gói không xác minh được. Hãy gửi gói chính thức."
+        );
+        assert_eq!(
+            failure(Lang::Vi, &Failure::Engine(26), Source::File(Place::Storage)).0,
+            "Chữ ký của gói không xác minh được. Hãy chọn gói chính thức."
+        );
     }
 }

@@ -39,7 +39,7 @@ impl App {
         let l = self.state.lang;
         let bits = match outcome {
             Ok(bits) => bits,
-            Err(why) => return self.report(&tr!(l, "修改权限失败：{why}", "修改權限失敗：{why}", "Couldn't change the permissions: {why}", "Không thể thay đổi quyền: {why}"), now),
+            Err(why) => return self.report(&tr!(l, "修改权限失败：{why}", "修改權限失敗：{why}", "Couldn't change the permissions: {why}", "Không đổi được quyền: {why}"), now),
         };
         let entry = self.state.file.as_mut().expect("the permissions page shows an entry");
         entry.mode = (entry.mode & !0o7777) | bits;
@@ -64,7 +64,7 @@ impl App {
         let bytes = match read {
             Ok(Some(bytes)) => bytes,
             Ok(None) => return self.say(l.pick(["暂不支持编辑超过 2 MB 的文件", "尚不支援編輯超過 2 MB 的檔案", "Files over 2 MB can't be edited"]), now),
-            Err(why) => return self.report(&tr!(l, "读取失败：{why}", "讀取失敗：{why}", "Couldn't read it: {why}", "Không thể đọc được: {why}"), now),
+            Err(why) => return self.report(&tr!(l, "读取失败：{why}", "讀取失敗：{why}", "Couldn't read it: {why}", "Không đọc được: {why}"), now),
         };
         let Some(text) = String::from_utf8(bytes).ok().filter(|text| !text.contains('\0')) else {
             return self.say(l.pick(["仅支持编辑 UTF-8 编码的文本文件", "僅支援編輯 UTF-8 編碼的文字檔", "Only UTF-8 text files can be edited"]), now);
@@ -174,7 +174,7 @@ mod tests {
         assert_eq!(app.screen(), Screen::Rename, "a name refused can be typed again");
         app.toast = None;
         app.renamed(Err(RenameRefused::Taken), 0);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("该文件夹中已有\"ab\""), "as the folder compares names");
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("This folder already has “ab”"), "as the folder compares names");
         app.renamed(Ok(()), 0);
         assert_eq!(app.screen(), Screen::Files, "renamed, the folder shows again");
     }
@@ -195,9 +195,9 @@ mod tests {
         assert_eq!(tap(&mut app, &f, &i, Action::ModeBit(0o100)), set(0o657), "and back off");
         app.toast = None;
         app.mode_set(0o4757, Ok(0o757), 0);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("该位置不支持修改权限"), "a filesystem that kept none of it");
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Permissions can't be changed here"), "a filesystem that kept none of it");
         app.mode_set(0o755, Err("give /sdcard/a.zip the permissions 0755: Read-only file system (os error 30)".into()), 0);
-        assert!(app.toast.as_ref().is_some_and(|t| t.0.starts_with("修改权限失败：give /sdcard/a.zip")), "{:?}", app.toast);
+        assert!(app.toast.as_ref().is_some_and(|t| t.0.starts_with("Couldn't change the permissions: give /sdcard/a.zip")), "{:?}", app.toast);
         assert_eq!(app.state.file.as_ref().unwrap().mode, 0o040_757, "as it last was");
         tap_back(&mut app, &f, &i, 0);
         tap_back(&mut app, &f, &i, 0);
@@ -240,11 +240,11 @@ mod tests {
         let save = vec![Effect::SaveText { path: "/data/adb/run.sh".into(), text: "X \t\necho hi\n".into() }];
         assert_eq!(tap_button(&mut app, &f, &i, 0), save);
         app.text_saved(Err("rename /data/adb/.run.sh.0.saving to /data/adb/run.sh: Read-only file system (os error 30)".into()), 0);
-        assert!(toast(&app).is_some_and(|t| t.starts_with("保存失败：rename")), "{:?}", app.toast);
+        assert!(toast(&app).is_some_and(|t| t.starts_with("Couldn't save it: rename")), "{:?}", app.toast);
         assert_eq!(app.frame(&f, &i).button, Some((widgets::Glyph::Done, Action::SaveText)), "still to save");
         assert_eq!(tap_button(&mut app, &f, &i, 0), save);
         app.text_saved(Ok(()), 0);
-        assert_eq!(toast(&app), Some("已保存"));
+        assert_eq!(toast(&app), Some("Saved"));
         assert_eq!(app.frame(&f, &i).button, None);
         tap_back(&mut app, &f, &i, 0);
         assert_eq!(app.screen(), Screen::Files, "a file saved leaves at once");
@@ -260,7 +260,7 @@ mod tests {
         tap(&mut app, &f, &i, Action::Type(Cap::Char('b')));
         tap_back(&mut app, &f, &i, 1000);
         assert_eq!(app.screen(), Screen::Editor, "the first back only warns");
-        assert_eq!(toast(&app), Some("修改尚未保存，再次返回将放弃修改"));
+        assert_eq!(toast(&app), Some("Changes aren't saved. Go back again to discard them"));
         tap_back(&mut app, &f, &i, 1000 + TOAST_MS);
         assert_eq!(app.screen(), Screen::Editor, "once the warning is gone, back warns again");
         tap_back(&mut app, &f, &i, 1000 + TOAST_MS + 500);
@@ -273,9 +273,9 @@ mod tests {
         let (f, i) = (fonts(), info());
         let mut app = in_sdcard(&f, &i);
         let refused = [
-            (Ok(None), "暂不支持编辑超过 2 MB 的文件"),
-            (Ok(Some(vec![0xff, 0xfe, b'a'])), "仅支持编辑 UTF-8 编码的文本文件"),
-            (Ok(Some(b"\x7fELF\x02\x01\x01\0".to_vec())), "仅支持编辑 UTF-8 编码的文本文件"),
+            (Ok(None), "Files over 2 MB can't be edited"),
+            (Ok(Some(vec![0xff, 0xfe, b'a'])), "Only UTF-8 text files can be edited"),
+            (Ok(Some(b"\x7fELF\x02\x01\x01\0".to_vec())), "Only UTF-8 text files can be edited"),
         ];
         for (read, said) in refused {
             app.toast = None;
@@ -284,7 +284,7 @@ mod tests {
             assert_eq!(toast(&app), Some(said));
         }
         app.text_opened(&f, "/sdcard/a.bin".into(), Err("open /sdcard/a.bin: Permission denied (os error 13)".into()), 0);
-        assert_eq!(toast(&app), Some("读取失败：open /sdcard/a.bin: Permission denied (os error 13)"));
+        assert_eq!(toast(&app), Some("Couldn't read it: open /sdcard/a.bin: Permission denied (os error 13)"));
         assert_eq!(app.state.editor, None);
     }
 
@@ -356,7 +356,7 @@ mod tests {
         hold_entry(&mut app, &f, &i, 1);
         tap(&mut app, &f, &i, Action::RenameEntry);
         let refused =
-            [("", "请输入名称"), ("..", "名称不能为\".\"或\"..\""), ("x/y", "名称不能包含\"/\""), ("DCIM", "该文件夹中已有\"DCIM\"")];
+            [("", "Enter a name"), ("..", "A name can't be “.” or “..”"), ("x/y", "A name can't hold “/”"), ("DCIM", "This folder already has “DCIM”")];
         for (name, said) in refused {
             app.state.new_name = name.into();
             app.toast = None;

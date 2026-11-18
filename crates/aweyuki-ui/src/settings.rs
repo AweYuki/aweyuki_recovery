@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn the_settings_go_round_through_their_file() {
         let state = State {
-            lang: Lang::En,
+            lang: Lang::Vi,
             language_chosen: true,
             dark: true,
             brightness: 0.7,
@@ -322,7 +322,7 @@ mod tests {
         let mut back = State::default();
         kept.apply(&mut back);
         assert_eq!(Settings::of(&back), Settings::of(&state));
-        assert_eq!((back.lang, back.screen_off, back.time_zone), (Lang::En, 6, 7));
+        assert_eq!((back.lang, back.screen_off, back.time_zone), (Lang::Vi, 6, 7));
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod tests {
         assert_eq!(json["time_zone"], "Asia/Hong_Kong");
         assert_eq!(json["backup"]["parts"], serde_json::json!(["boot", "modem"]));
         assert_eq!(json["logs"]["to"], "temporary");
-        assert_eq!(json["spoken"], "zh-Hans");
+        assert_eq!(json["spoken"], "en");
         assert!(json.get("language").is_none(), "no language is chosen until one is");
         let never = Settings::of(&State { screen_off: SCREEN_OFF.len() - 1, ..State::default() });
         assert_eq!(never.screen_off, 0, "a screen that stays on");

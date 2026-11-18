@@ -168,7 +168,7 @@ impl App {
                 vec![self.find_backups()]
             }
             Err(why) => {
-                self.report(&tr!(self.state.lang, "删除失败：{why}", "刪除失敗：{why}", "Couldn't delete it: {why}", "Không thể xóa nó: {why}"), now);
+                self.report(&tr!(self.state.lang, "删除失败：{why}", "刪除失敗：{why}", "Couldn't delete it: {why}", "Không xóa được: {why}"), now);
                 Vec::new()
             }
         }

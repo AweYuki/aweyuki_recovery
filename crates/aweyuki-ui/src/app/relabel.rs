@@ -57,7 +57,7 @@ mod tests {
         tap(&mut app, &f, &i, Action::Open(Screen::Relabel));
         assert_eq!(app.screen(), Screen::Relabel);
         assert!(swipe(&mut app, &f, &i, Confirm::Relabel).is_empty());
-        assert_eq!(toast(&app), Some("请先在「解密」中打开 data 分区"));
+        assert_eq!(toast(&app), Some("Open the data partition in Decrypt first"));
         app.state.data = Data::Locked { user: 0, keys: Keys::Digits, checking: false };
         app.refresh();
         assert_eq!(swipe(&mut app, &f, &i, Confirm::Relabel), vec![Effect::Relabel], "open, though a user has yet to unlock");
@@ -68,7 +68,7 @@ mod tests {
         assert!(!app.frame(&f, &i).back, "no going back while it works");
         app.key(Key::Back, 0);
         assert_eq!(app.screen(), Screen::Relabel);
-        assert_eq!(toast(&app), Some("请等待完成或停止后再返回"));
+        assert_eq!(toast(&app), Some("Wait for it to finish, or stop it, before going back"));
         app.relabel_progress(0, 0, 0);
         app.relabel_progress(10, 400, 2);
         assert_eq!(tap(&mut app, &f, &i, Action::StopRelabel), vec![Effect::StopRelabel]);

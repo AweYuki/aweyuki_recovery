@@ -446,7 +446,7 @@ mod tests {
         app.frame(&f, &i);
         light_on(&mut app, &f, &i, Stop::Hit(Action::Confirm(Confirm::Reboot)));
         assert!(press(&mut app, Key::Power, 0).is_empty());
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("请按住电源键"), "a short press says how");
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Hold the power key"), "a short press says how");
         app.key(Key::Power, 1000);
         assert_eq!(app.deadline(1000), Some(1000 + CHORD_MS), "it waits for volume down first");
         app.tick(1000 + CHORD_MS);
@@ -475,7 +475,7 @@ mod tests {
         light_on(&mut app, &f, &i, Stop::Hit(Action::Slider(Slider::Brightness)));
         assert_eq!(app.state.brightness, SLIDER_START, "it starts a step from its left end");
         press(&mut app, Key::Power, 0);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("按音量键调节亮度，按电源键完成"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Set the brightness with the volume keys, then press the power key"));
         assert!(press(&mut app, Key::VolumeUp, 0).is_empty(), "the panel shows the brightness");
         assert!((app.state.brightness - (SLIDER_START + SLIDER_STEP)).abs() < 1e-5, "up turns it up");
         press(&mut app, Key::VolumeDown, 0);
@@ -496,7 +496,7 @@ mod tests {
         app.frame(&f, &i);
         light_on(&mut app, &f, &i, Stop::Hit(Action::Slider(Slider::Vibration)));
         press(&mut app, Key::Power, 0);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("按音量键调节振动强度，按电源键完成"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Set the vibration with the volume keys, then press the power key"));
         assert_eq!(press(&mut app, Key::VolumeDown, 0), vec![Effect::Haptic], "each step taps at the strength reached");
         assert_eq!(app.state.vibration, 0.0, "it starts a step from its left end, the lightest");
         for _ in 0..20 {
@@ -518,10 +518,10 @@ mod tests {
         assert_eq!(lit(&mut app, &f, &i), Some(Stop::Dot(0)), "the grid's first dot is lit first");
         assert!(press(&mut app, Key::Power, 0).is_empty());
         assert_eq!(app.state.pattern, [0]);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("连接完成后，在最后一个点上再按一次电源键"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("When the pattern is done, press the power key again on its last dot"));
         press(&mut app, Key::Power, 0);
         assert!(app.state.pattern.is_empty(), "ended at one dot, the pattern is wiped");
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("请至少连接 4 个点"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Connect at least 4 dots"));
         press(&mut app, Key::Power, 0);
         press(&mut app, Key::VolumeDown, 0);
         press(&mut app, Key::VolumeDown, 0);

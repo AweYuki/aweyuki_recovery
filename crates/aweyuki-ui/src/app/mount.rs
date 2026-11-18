@@ -143,8 +143,8 @@ mod tests {
         let (f, i) = (fonts(), info());
         let mut app = App::new(Screen::Mount, W, H, PPD);
         app.set_mounts(Ok(vec![MountRow { base: "odm".into(), point: "/odm".into(), mounted: true, holders: vec!["qseecomd".into()] }]));
-        tap(&mut app, &f, &i, Action::Unavailable("无法卸载正在使用的分区"));
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("无法卸载正在使用的分区"));
+        tap(&mut app, &f, &i, Action::Unavailable("A partition in use can't be unmounted"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("A partition in use can't be unmounted"));
         // Once the row tapped has faded back, only the message waits.
         app.tick(1000);
         assert_eq!(app.deadline(1000), Some(TOAST_MS));

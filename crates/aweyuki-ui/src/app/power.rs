@@ -221,13 +221,13 @@ mod tests {
     fn a_screenshot_says_where_it_went() {
         let mut app = App::new(Screen::Home, W, H, PPD);
         app.screenshot_saved(Ok(Shot::Album), 0);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("截图已保存到相册"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Screenshot saved to the gallery"));
         app.screenshot_saved(Ok(Shot::Held), 0);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("截图已暂存，解密后存入相册"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Screenshot kept. It goes to the gallery once decrypted"));
         app.screenshot_saved(Err("No space left on device".into()), 0);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("截图保存失败：No space left on device"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Couldn't save the screenshot: No space left on device"));
         app.screenshots_not_kept("Read-only file system", 0);
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("暂存的截图未能存入相册：Read-only file system"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Kept screenshots couldn't go to the gallery: Read-only file system"));
     }
 
     /// With the default two minutes, when the panel dims and when it goes

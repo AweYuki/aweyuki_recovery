@@ -113,7 +113,7 @@ mod tests {
         let nearby = vec![network("Aweyuki", -34, Security::Psk), network("Aweyuki-Open", -72, Security::Open), network("Aweyuki-WEP", -60, Security::Wep)];
         app.set_wlan(Wlan { power: Power::On, networks: nearby, joined: None });
         tap(&mut app, &f, &i, Action::JoinNetwork(2));
-        assert_eq!(toast(&app), Some("暂不支持 WEP 加密的网络"));
+        assert_eq!(toast(&app), Some("WEP networks aren't supported"));
         let cafe = Effect::JoinWlan { ssid: b"Aweyuki-Open".to_vec(), name: "Aweyuki-Open".into(), security: Security::Open, password: Secret::default() };
         assert_eq!(tap(&mut app, &f, &i, Action::JoinNetwork(1)), vec![cafe], "an open network is joined at once");
         tap(&mut app, &f, &i, Action::JoinNetwork(0));
@@ -125,7 +125,7 @@ mod tests {
         };
         type_in(&mut app, "secret");
         assert!(tap(&mut app, &f, &i, Action::Type(Cap::Enter)).is_empty());
-        assert_eq!(toast(&app), Some("请输入 8 到 63 位密码"));
+        assert_eq!(toast(&app), Some("Enter a password of 8 to 63 characters"));
         tap(&mut app, &f, &i, Action::Type(Cap::Show(Layer::Digits)));
         type_in(&mut app, "12");
         let fx = tap(&mut app, &f, &i, Action::Type(Cap::Enter));
@@ -195,7 +195,7 @@ mod tests {
             }
         };
         assert!(tap(&mut app, &f, &i, Action::Type(Cap::Enter)).is_empty());
-        assert_eq!(toast(&app), Some("请输入网络名称"));
+        assert_eq!(toast(&app), Some("Enter the network's name"));
         type_in(&mut app, "aweyuki");
         let frame = app.frame(&f, &i);
         assert!(!frame.hits.iter().any(|h| h.action == Action::TypeInto(Field::Password)), "an open network takes no password");
@@ -223,7 +223,7 @@ mod tests {
         tap(&mut app, &f, &i, Action::TypeInto(Field::Name));
         assert_eq!((app.state.adding.as_ref().unwrap().name.as_str(), app.state.password.as_str()), ("aweyuki", "secret"));
         assert!(tap(&mut app, &f, &i, Action::Type(Cap::Enter)).is_empty());
-        assert_eq!(toast(&app), Some("请输入 8 到 63 位密码"));
+        assert_eq!(toast(&app), Some("Enter a password of 8 to 63 characters"));
         assert_eq!(app.state.adding.as_ref().unwrap().field, Field::Password, "the keyboard types into the field turned down");
         tap(&mut app, &f, &i, Action::Type(Cap::Show(Layer::Digits)));
         type_in(&mut app, "12");
@@ -252,7 +252,7 @@ mod tests {
             tap(&mut app, &f, &i, Action::Type(Cap::Char('a')));
         }
         assert!(tap(&mut app, &f, &i, Action::Type(Cap::Enter)).is_empty());
-        assert_eq!(toast(&app), Some("网络名称不能超过 32 个字符"));
+        assert_eq!(toast(&app), Some("A network's name can't be over 32 characters"));
         tap(&mut app, &f, &i, Action::Type(Cap::Backspace));
         let fx = tap(&mut app, &f, &i, Action::Type(Cap::Enter));
         let name = "a".repeat(32);

@@ -602,7 +602,7 @@ mod tests {
         assert_eq!((app.screen(), app.state.source), (Screen::Installing, Source::Asked { security: false }));
         app.asked_opening();
         app.key(Key::Back, 0);
-        assert_eq!((app.screen(), toast(&app)), (Screen::Installing, Some("正在打开 data 分区，请稍后再试")));
+        assert_eq!((app.screen(), toast(&app)), (Screen::Installing, Some("Opening the data partition. Try again shortly")));
         app.asked_locked(0, 0);
         assert_eq!(app.state.install, Install::Locked(0));
         assert!(app.frame(&f, &i).hits.iter().any(|h| h.action == Action::Open(Screen::Decrypt)));
@@ -623,7 +623,7 @@ mod tests {
         assert!(matches!(app.state.install, Install::Finished { .. }));
         app.rescue_wiping();
         app.key(Key::Back, 5000);
-        assert_eq!((app.screen(), toast(&app)), (Screen::Installing, Some("正在清除，请等待清除完成")));
+        assert_eq!((app.screen(), toast(&app)), (Screen::Installing, Some("Wiping. Wait for it to finish")));
         app.rescue_wiped(Ok(()), 6000);
         assert_eq!((app.state.install.clone(), app.state.data.clone()), (Install::Wiped(Ok(())), Data::Erased));
         app.frame(&f, &i);

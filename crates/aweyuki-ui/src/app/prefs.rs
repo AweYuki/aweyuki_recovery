@@ -150,10 +150,10 @@ mod tests {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Settings, &f, &i);
         tap(&mut app, &f, &i, Action::Open(Screen::Language));
-        assert_eq!(app.frame(&f, &i).title, "语言");
-        tap(&mut app, &f, &i, Action::Language(Lang::En));
-        assert_eq!((app.state.lang, app.screen()), (Lang::En, Screen::Language), "the page stays");
         assert_eq!(app.frame(&f, &i).title, "Language");
+        tap(&mut app, &f, &i, Action::Language(Lang::Vi));
+        assert_eq!((app.state.lang, app.screen()), (Lang::Vi, Screen::Language), "the page stays");
+        assert_eq!(app.frame(&f, &i).title, "Ngôn ngữ");
         tap(&mut app, &f, &i, Action::Language(Lang::Hant));
         assert_eq!(app.frame(&f, &i).title, "語言");
         tap_back(&mut app, &f, &i, 0);
@@ -178,28 +178,28 @@ mod tests {
         app.take_settings(None, Some(Lang::Hant));
         assert_eq!((app.state.lang, app.settings().language), (Lang::Hant, None), "the system's, until one is chosen");
         tap(&mut app, &f, &i, Action::Open(Screen::Language));
-        tap(&mut app, &f, &i, Action::Language(Lang::En));
+        tap(&mut app, &f, &i, Action::Language(Lang::Vi));
         let kept = app.settings();
-        assert_eq!(kept.language.as_deref(), Some("en"));
+        assert_eq!(kept.language.as_deref(), Some("vi"));
 
         let mut next = App::new(Screen::Home, W, H, PPD);
         next.take_settings(Some(&kept), Some(Lang::Hans));
-        assert_eq!(next.state.lang, Lang::En, "the next start speaks the language chosen");
+        assert_eq!(next.state.lang, Lang::Vi, "the next start speaks the language chosen");
         assert_eq!(next.settings(), kept, "and keeps it chosen");
     }
 
     #[test]
     fn with_no_language_chosen_a_start_speaks_the_system_s_or_else_the_one_last_spoken() {
-        let spoke_english = Settings { spoken: Some("en".into()), ..Settings::default() };
+        let spoke_vietnamese = Settings { spoken: Some("vi".into()), ..Settings::default() };
         let mut app = App::new(Screen::Home, W, H, PPD);
-        app.take_settings(Some(&spoke_english), Some(Lang::Hant));
+        app.take_settings(Some(&spoke_vietnamese), Some(Lang::Hant));
         assert_eq!(app.state.lang, Lang::Hant, "the one the system names");
         let mut fastboot = App::new(Screen::Fastboot, W, H, PPD);
-        fastboot.take_settings(Some(&spoke_english), None);
-        assert_eq!(fastboot.state.lang, Lang::En, "a start that names none, as fastboot's");
+        fastboot.take_settings(Some(&spoke_vietnamese), None);
+        assert_eq!(fastboot.state.lang, Lang::Vi, "a start that names none, as fastboot's");
         let mut first = App::new(Screen::Fastboot, W, H, PPD);
         first.take_settings(None, None);
-        assert_eq!(first.state.lang, State::default().lang, "and with nothing kept, the pages' own");
+        assert_eq!(first.state.lang, Lang::En, "and with nothing kept, English");
     }
 
     #[test]
@@ -254,7 +254,7 @@ mod tests {
         tap(&mut app, &f, &i, Action::Open(Screen::ScreenOff));
         assert_eq!(app.screen(), Screen::ScreenOff);
         let frame = app.frame(&f, &i);
-        assert_eq!(frame.title, "息屏时间");
+        assert_eq!(frame.title, "Screen timeout");
         assert!(frame.back);
         // The choices sit in order, top to bottom.
         let actions: Vec<Action> = frame.hits.iter().map(|h| h.action).collect();

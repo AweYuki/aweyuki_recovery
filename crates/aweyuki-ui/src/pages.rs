@@ -470,7 +470,7 @@ pub fn mount(cx: &Ctx) -> Frame {
                     let (point, holders) = (&m.point, m.holders.join(l.pick(["、", "、", ", "])));
                     match m.holders.is_empty() {
                         true => point.clone(),
-                        false => tr!(l, "{point} · {holders} 正在使用", "{point} · {holders} 正在使用", "{point} · in use by {holders}", "{point} · được sử dụng bởi {holders}"),
+                        false => tr!(l, "{point} · {holders} 正在使用", "{point} · {holders} 正在使用", "{point} · in use by {holders}", "{point} · đang được {holders} dùng"),
                     }
                 })
                 .collect();
@@ -499,8 +499,9 @@ pub fn mount(cx: &Ctx) -> Frame {
                     l,
                     "仅显示当前槽位 {slot} 在 super 中的分区，挂载后均为只读。",
                     "僅顯示目前槽位 {slot} 在 super 中的分割區，掛載後均為唯讀。",
-                    "Only the current slot {slot}'s partitions in super show here, all mounted read-only."
-                , "Chỉ các phân vùng của khe hiện tại {slot} trong siêu hiển thị ở đây, tất cả đều được gắn ở chế độ chỉ đọc."),
+                    "Only the current slot {slot}'s partitions in super show here, all mounted read-only.",
+                    "Chỉ hiện các phân vùng của khe {slot} hiện tại trong super, tất cả gắn kết ở chế độ chỉ đọc.",
+                ),
                 None => l
                     .pick(["仅显示 super 中的分区，挂载后均为只读。", "僅顯示 super 中的分割區，掛載後均為唯讀。", "Only partitions in super show here, all mounted read-only."])
                     .into(),
@@ -671,8 +672,8 @@ pub fn specs(cx: &Ctx) -> Frame {
 
     let total = fmt::capacity(i.storage.total);
     let storage = match i.storage.free.map(fmt::gb) {
-        Some(free) => tr!(l, "可用存储 {free} / 总存储 {total}", "可用空間 {free} / 總容量 {total}", "{free} free of {total}", "{free} không có {total}"),
-        None => tr!(l, "总存储 {total} · data 分区未挂载", "總容量 {total} · data 分割區未掛載", "{total} in all · data partition not mounted", "{total} hoàn toàn · phân vùng dữ liệu chưa được gắn kết"),
+        Some(free) => tr!(l, "可用存储 {free} / 总存储 {total}", "可用空間 {free} / 總容量 {total}", "{free} free of {total}", "Còn trống {free} / {total}"),
+        None => tr!(l, "总存储 {total} · data 分区未挂载", "總容量 {total} · data 分割區未掛載", "{total} in all · data partition not mounted", "Tổng {total} · phân vùng dữ liệu chưa gắn kết"),
     };
     y = widgets::info_card(&mut c, t, f, y + gap, &[(l.pick(["机身存储", "內建儲存空間", "Internal storage"]), storage)]);
     let links = widgets::list(&mut c, t, f, y + gap, &[
@@ -761,7 +762,7 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
     let mut out = Vec::new();
     let title = match (keys == Keys::Pattern, user) {
         (true, 0) => l.pick(["绘制锁屏图案", "繪製螢幕鎖定圖案", "Draw the screen lock pattern"]).to_string(),
-        (true, user) => tr!(l, "绘制用户 {user} 的锁屏图案", "繪製使用者 {user} 的螢幕鎖定圖案", "Draw user {user}'s screen lock pattern", "Vẽ mẫu khóa màn hình của người dùng {user}"),
+        (true, user) => tr!(l, "绘制用户 {user} 的锁屏图案", "繪製使用者 {user} 的螢幕鎖定圖案", "Draw user {user}'s screen lock pattern", "Vẽ hình khóa màn hình của người dùng {user}"),
         (false, 0) => l.pick(["输入锁屏密码", "輸入螢幕鎖定密碼", "Enter the screen lock"]).to_string(),
         (false, user) => tr!(l, "输入用户 {user} 的锁屏密码", "輸入使用者 {user} 的螢幕鎖定密碼", "Enter user {user}'s screen lock", "Nhập khóa màn hình của người dùng {user}"),
     };
@@ -869,7 +870,7 @@ pub fn install(cx: &Ctx) -> Frame {
     }
     if let Some(s) = i.slot {
         let (slot, other) = (s.letter(), s.other().letter());
-        let detail = tr!(l, "{slot}，系统更新将安装到槽位 {other}", "{slot}，系統更新將安裝到槽位 {other}", "{slot}, and a system update installs to slot {other}", "{slot} và bản cập nhật hệ thống sẽ cài đặt vào khe {other}");
+        let detail = tr!(l, "{slot}，系统更新将安装到槽位 {other}", "{slot}，系統更新將安裝到槽位 {other}", "{slot}, and a system update installs to slot {other}", "{slot}, bản cập nhật hệ thống sẽ cài vào khe {other}");
         facts.push((l.pick(CURRENT_SLOT), detail));
     }
     let ways = l.pick(["安装方式", "安裝方式", "Ways to install"]);
@@ -992,7 +993,7 @@ fn update_stage(l: Lang, stage: Option<&Stage>) -> (String, Option<f32>) {
         Some(Stage::Writing { done, total }) => {
             let s = share(*done, *total);
             let p = percent(s);
-            (tr!(l, "第 1 步，共 3 步：写入新系统 {p}%", "第 1 步，共 3 步：寫入新系統 {p}%", "Step 1 of 3: writing the new system {p}%", "Bước 1/3: viết hệ thống mới {p}%"), Some(s))
+            (tr!(l, "第 1 步，共 3 步：写入新系统 {p}%", "第 1 步，共 3 步：寫入新系統 {p}%", "Step 1 of 3: writing the new system {p}%", "Bước 1/3: ghi hệ thống mới {p}%"), Some(s))
         }
         Some(Stage::Verifying { index, count, partition }) => {
             let n = index + 1;
@@ -1014,13 +1015,13 @@ fn system_stage(l: Lang, stage: Option<&Stage>) -> (String, Option<f32>) {
         Some(Stage::Allocating { done, total }) => {
             let s = share(*done, *total);
             let p = percent(s);
-            (tr!(l, "第 1 步，共 3 步：在 data 分区中分配空间 {p}%", "第 1 步，共 3 步：在 data 分割區中分配空間 {p}%", "Step 1 of 3: setting room aside in the data partition {p}%", "Bước 1/3: dành chỗ trong phân vùng dữ liệu {p}%"), Some(s))
+            (tr!(l, "第 1 步，共 3 步：在 data 分区中分配空间 {p}%", "第 1 步，共 3 步：在 data 分割區中分配空間 {p}%", "Step 1 of 3: setting room aside in the data partition {p}%", "Bước 1/3: dành dung lượng trong phân vùng dữ liệu {p}%"), Some(s))
         }
         Some(Stage::Root { done, total }) => {
             let s = share(*done, *total);
             let p = percent(s);
             let said = match done * 2 <= *total {
-                true => tr!(l, "第 2 步，共 3 步：写入系统 {p}%", "第 2 步，共 3 步：寫入系統 {p}%", "Step 2 of 3: writing the system {p}%", "Bước 2/3: viết hệ thống {p}%"),
+                true => tr!(l, "第 2 步，共 3 步：写入系统 {p}%", "第 2 步，共 3 步：寫入系統 {p}%", "Step 2 of 3: writing the system {p}%", "Bước 2/3: ghi hệ thống {p}%"),
                 false => tr!(l, "第 2 步，共 3 步：校验系统 {p}%", "第 2 步，共 3 步：驗證系統 {p}%", "Step 2 of 3: verifying the system {p}%", "Bước 2/3: xác minh hệ thống {p}%"),
             };
             (said, Some(s))
@@ -1055,7 +1056,7 @@ fn reflashed(c: &mut Canvas, cx: &Ctx, y: f32) -> f32 {
             let slots = fmt::slots(l, written);
             let said = match (l, written.len()) {
                 (Lang::En, 1) => format!("Aweyuki went back into {slots}'s recovery partition."),
-                _ => tr!(l, "已将 Aweyuki 重新刷入{slots} 的 recovery 分区。", "已將 Aweyuki 重新刷入{slots} 的 recovery 分割區。", "Aweyuki went back into the recovery partitions of {slots}.", "Aweyuki quay trở lại phân vùng khôi phục của {slots}."),
+                _ => tr!(l, "已将 Aweyuki 重新刷入{slots} 的 recovery 分区。", "已將 Aweyuki 重新刷入{slots} 的 recovery 分割區。", "Aweyuki went back into the recovery partitions of {slots}.", "Đã flash lại Aweyuki vào phân vùng recovery của {slots}."),
             };
             widgets::footnote(c, t, f, y, &said)
         }
@@ -1178,7 +1179,7 @@ pub fn installing(cx: &Ctx) -> Frame {
         Install::Checking { stage: Some(Stage::Signature { done, total }), .. } => {
             let read = share(*done, *total);
             let p = percent(read);
-            let detail = tr!(l, "已读取 {p}%", "已讀取 {p}%", "{p}% read", "{p}% đã đọc");
+            let detail = tr!(l, "已读取 {p}%", "已讀取 {p}%", "{p}% read", "Đã đọc {p}%");
             let y = widgets::progress_card(&mut c, t, f, top, l.pick(["正在验证签名", "正在驗證簽章", "Verifying the signature"]), &detail, Some(read));
             let note = l.pick(match s.source {
                 Source::Computer => [
@@ -1257,13 +1258,13 @@ pub fn installing(cx: &Ctx) -> Frame {
             let (title, color, icon, detail, which) = if *wipe {
                 let reset = factory_reset(s);
                 let detail = match version {
-                    Some(v) => tr!(l, "安装 {v} 后将{reset}。", "安裝 {v} 後將{reset}。", "Installing {v} then {reset}.", "Đang cài đặt {v} rồi {reset}."),
-                    None => tr!(l, "安装该更新后将{reset}。", "安裝這個更新後將{reset}。", "Installing this update then {reset}.", "Cài đặt bản cập nhật này thì {reset}."),
+                    Some(v) => tr!(l, "安装 {v} 后将{reset}。", "安裝 {v} 後將{reset}。", "Installing {v} then {reset}.", "Cài {v} xong sẽ {reset}."),
+                    None => tr!(l, "安装该更新后将{reset}。", "安裝這個更新後將{reset}。", "Installing this update then {reset}.", "Cài bản cập nhật này xong sẽ {reset}."),
                 };
                 (l.pick(["需清除全部数据", "需清除全部資料", "All data has to be wiped"]).to_string(), ORANGE, Icon::Wipe, detail, Confirm::InstallWipe)
             } else {
                 let title = match version {
-                    Some(v) => tr!(l, "安装 {v}", "安裝 {v}", "Install {v}", "Cài đặt {v}"),
+                    Some(v) => tr!(l, "安装 {v}", "安裝 {v}", "Install {v}", "Cài {v}"),
                     None => l.pick(["安装系统更新", "安裝系統更新", "Install the system update"]).into(),
                 };
                 let detail = match i.slot.map(|s| s.other().letter()) {
@@ -1271,8 +1272,9 @@ pub fn installing(cx: &Ctx) -> Frame {
                         l,
                         "新系统将安装到槽位 {slot}，重启后将从该槽位启动。",
                         "新系統將安裝到槽位 {slot}，重新啟動後將從該槽位啟動。",
-                        "The new system installs to slot {slot}, which starts after a reboot."
-                    , "Hệ thống mới sẽ cài đặt vào khe {slot}, bắt đầu sau khi khởi động lại."),
+                        "The new system installs to slot {slot}, which starts after a reboot.",
+                        "Hệ thống mới sẽ cài vào khe {slot}, rồi khởi động từ khe đó sau khi khởi động lại.",
+                    ),
                     None => l.pick(["重启后将从新系统启动。", "重新啟動後將從新系統啟動。", "The new system starts after a reboot."]).into(),
                 };
                 (title, GREEN, Icon::Install, detail, Confirm::Install)
@@ -1286,14 +1288,14 @@ pub fn installing(cx: &Ctx) -> Frame {
         }
         Install::Updating { version, stage, overwriting } => {
             let title = match version {
-                Some(v) => tr!(l, "正在安装 {v}", "正在安裝 {v}", "Installing {v}", "Đang cài đặt {v}"),
+                Some(v) => tr!(l, "正在安装 {v}", "正在安裝 {v}", "Installing {v}", "Đang cài {v}"),
                 None => l.pick(["正在安装系统更新", "正在安裝系統更新", "Installing the system update"]).into(),
             };
             let (detail, done) = update_stage(l, stage.as_ref());
             let y = widgets::progress_card(&mut c, t, f, top, &title, &detail, done);
             let until = until_installed(l, s.source);
             let note = match i.slot.map(|s| s.other().letter()) {
-                Some(slot) => tr!(l, "{until}新系统将安装到槽位 {slot}。", "{until}新系統將安裝到槽位 {slot}。", "{until} The new system installs to slot {slot}.", "{until} Hệ thống mới cài đặt vào khe {slot}."),
+                Some(slot) => tr!(l, "{until}新系统将安装到槽位 {slot}。", "{until}新系統將安裝到槽位 {slot}。", "{until} The new system installs to slot {slot}.", "{until} Hệ thống mới sẽ cài vào khe {slot}."),
                 None => until.to_string(),
             };
             let y = widgets::footnote(&mut c, t, f, y, &note);
@@ -1314,14 +1316,14 @@ pub fn installing(cx: &Ctx) -> Frame {
                     let s = share(*done, *total);
                     let p = percent(s);
                     let detail = match done * 2 < *total {
-                        true => tr!(l, "正在写入 {p}%", "正在寫入 {p}%", "Writing {p}%", "Viết {p}%"),
+                        true => tr!(l, "正在写入 {p}%", "正在寫入 {p}%", "Writing {p}%", "Đang ghi {p}%"),
                         false => tr!(l, "正在校验 {p}%", "正在驗證 {p}%", "Verifying {p}%", "Đang xác minh {p}%"),
                     };
                     (detail, Some(s))
                 }
                 _ => (l.pick(GETTING_READY).into(), None),
             };
-            let title = tr!(l, "正在刷入 {partition}", "正在刷入 {partition}", "Flashing {partition}", "Nhấp nháy {partition}");
+            let title = tr!(l, "正在刷入 {partition}", "正在刷入 {partition}", "Flashing {partition}", "Đang flash {partition}");
             let y = widgets::progress_card(&mut c, t, f, top, &title, &detail, done);
             let keep = l.pick(match s.source {
                 Source::Computer | Source::Rescue => ["刷入完成前，请不要断开数据线。", "刷入完成前，請不要拔除傳輸線。", "Keep the cable in until it's flashed."],
@@ -1336,7 +1338,7 @@ pub fn installing(cx: &Ctx) -> Frame {
         }
         Install::SystemChoosing(choice) => {
             let version = &choice.version;
-            let detail = tr!(l, "{version}，将安装为第二系统", "{version}，將安裝為第二系統", "{version}, to install as the second system", "{version}, để cài đặt làm hệ thống thứ hai");
+            let detail = tr!(l, "{version}，将安装为第二系统", "{version}，將安裝為第二系統", "{version}, to install as the second system", "{version}, sẽ cài làm hệ thống thứ hai");
             let y = widgets::list(&mut c, t, f, top, &[standing(&choice.name, PURPLE, Icon::Systems, &detail)]).bottom;
             let y = widgets::section(&mut c, t, f, y, l.pick(["分配空间", "分配空間", "Room for it"]));
             let sizes: Vec<String> = choice.sizes.iter().map(|&b| fmt::bytes(b)).collect();
@@ -1365,7 +1367,7 @@ pub fn installing(cx: &Ctx) -> Frame {
             widgets::footnote(&mut c, t, f, track.y + track.h, note)
         }
         Install::Systeming { name, stage } => {
-            let title = tr!(l, "正在安装 {name}", "正在安裝 {name}", "Installing {name}", "Đang cài đặt {name}");
+            let title = tr!(l, "正在安装 {name}", "正在安裝 {name}", "Installing {name}", "Đang cài {name}");
             let (detail, done) = system_stage(l, stage.as_ref());
             let y = widgets::progress_card(&mut c, t, f, top, &title, &detail, done);
             widgets::footnote(&mut c, t, f, y, until_installed(l, s.source))
@@ -1492,8 +1494,9 @@ fn finished(
                 l,
                 "新系统已安装到槽位 {slot}，重启后将从该槽位启动。",
                 "新系統已安裝到槽位 {slot}，重新啟動後將從該槽位啟動。",
-                "The new system is installed to slot {slot}, which starts after a reboot."
-            , "Hệ thống mới được cài đặt vào khe {slot}, khởi động sau khi khởi động lại.");
+                "The new system is installed to slot {slot}, which starts after a reboot.",
+                "Hệ thống mới đã cài vào khe {slot}, sẽ khởi động từ khe đó sau khi khởi động lại.",
+            );
             let y = widgets::list(c, t, f, top, &[standing(installed, GREEN, Icon::Install, &detail)]).bottom;
             let next = widgets::list(c, t, f, y + gap, &[restart]);
             out.extend(hits(&next.rows, &[Action::RebootTo(Target::System)]));
@@ -1502,7 +1505,7 @@ fn finished(
         }
         Outcome::Flashed { partition, slots } => {
             let slots = fmt::slots(l, slots);
-            let detail = tr!(l, "{partition} 已刷入{slots}。", "{partition} 已刷入{slots}。", "Flashed to {partition} in {slots}.", "Đã flash tới {partition} trong {slots}.");
+            let detail = tr!(l, "{partition} 已刷入{slots}。", "{partition} 已刷入{slots}。", "Flashed to {partition} in {slots}.", "Đã flash vào {partition} ở {slots}.");
             let y = widgets::list(c, t, f, top, &[standing(l.pick(["刷入成功", "刷入成功", "Flashed"]), GREEN, Icon::Install, &detail)]).bottom;
             let mut rows = vec![restart];
             let mut acts = vec![Action::RebootTo(Target::System)];
@@ -1530,8 +1533,9 @@ fn finished(
                 l,
                 "{name} 已安装为第二系统，可在「双系统」中切换。",
                 "{name} 已安裝為第二系統，可在「雙系統」中切換。",
-                "{name} is installed as the second system. Switch to it from Dual boot."
-            , "{name} được cài đặt làm hệ thống thứ hai. Chuyển sang nó từ Khởi động kép.");
+                "{name} is installed as the second system. Switch to it from Dual boot.",
+                "Đã cài {name} làm hệ thống thứ hai. Có thể chuyển sang từ mục Khởi động kép.",
+            );
             let y = widgets::list(c, t, f, top, &[standing(installed, GREEN, Icon::Systems, &detail)]).bottom;
             let next = widgets::list(c, t, f, y + gap, &[Row::new(l.pick(DUAL_BOOT)).icon(PURPLE, Icon::Systems)]);
             out.extend(hits(&next.rows, &[Action::Open(Screen::Systems)]));
@@ -1573,20 +1577,23 @@ fn finished(
                     l,
                     "当前系统已被部分覆盖，重启后将无法进入系统。请{install}完整更新包，安装完成后再重启。",
                     "目前的系統已被部分覆寫，重新啟動後將無法進入系統。請{install}完整更新檔，安裝完成後再重新啟動。",
-                    "The current system was partly written over, so a reboot starts no system. {install} the full OTA package again, and reboot once it's installed."
-                , "Hệ thống hiện tại đã được ghi đè một phần nên việc khởi động lại sẽ không khởi động được hệ thống. {install} gói OTA đầy đủ lại và khởi động lại sau khi cài đặt xong."),
+                    "The current system was partly written over, so a reboot starts no system. {install} the full OTA package again, and reboot once it's installed.",
+                    "Hệ thống hiện tại đã bị ghi đè một phần nên khởi động lại sẽ không vào được hệ thống. Hãy {install} gói OTA đầy đủ, cài xong rồi mới khởi động lại.",
+                ),
                 Some(Damage::Partition(p)) => tr!(
                     l,
                     "{p} 仅写入了部分内容，重启后可能无法正常启动。请{flash}该镜像，刷入完成后再重启。",
                     "{p} 僅寫入了部分內容，重新啟動後可能無法正常啟動。請{flash}這個映像檔，刷入完成後再重新啟動。",
-                    "{p} was only partly written, so the phone may not start properly after a reboot. {flash} the image again, and reboot once it's flashed."
-                , "{p} chỉ được viết một phần nên điện thoại có thể không khởi động bình thường sau khi khởi động lại. {flash} hình ảnh một lần nữa và khởi động lại sau khi nó nhấp nháy."),
+                    "{p} was only partly written, so the phone may not start properly after a reboot. {flash} the image again, and reboot once it's flashed.",
+                    "{p} mới chỉ ghi một phần nên máy có thể không khởi động bình thường sau khi khởi động lại. Hãy {flash} ảnh đó, flash xong rồi mới khởi động lại.",
+                ),
                 Some(Damage::Script) => tr!(
                     l,
                     "本机的分区可能已被部分改写，重启后可能无法正常启动。请{install}该刷机包，安装完成后再重启。",
                     "本機的分割區可能已被部分改寫，重新啟動後可能無法正常啟動。請{install}這個刷機包，安裝完成後再重新啟動。",
-                    "This phone's partitions may have been partly rewritten, so it may not start properly after a reboot. {install} the zip again, and reboot once it's installed."
-                , "Các phân vùng của điện thoại này có thể đã được ghi lại một phần nên điện thoại có thể không khởi động bình thường sau khi khởi động lại. {install} lại zip và khởi động lại sau khi cài đặt xong."),
+                    "This phone's partitions may have been partly rewritten, so it may not start properly after a reboot. {install} the zip again, and reboot once it's installed.",
+                    "Một phần phân vùng của máy có thể đã bị ghi lại nên máy có thể không khởi động bình thường sau khi khởi động lại. Hãy {install} zip đó, cài xong rồi mới khởi động lại.",
+                ),
                 None => l.pick(["当前系统未受影响。", "目前的系統未受影響。", "The current system is untouched."]).into(),
             };
             let mut y = widgets::footnote(c, t, f, next.bottom, &warning);
@@ -1635,8 +1642,9 @@ fn factory_reset(s: &State) -> String {
         s.lang,
         "清空 data 分区，包括应用、账户、设置和内部存储，并格式化 {also}",
         "清空 data 分割區，包括應用程式、帳戶、設定和內部儲存空間，並格式化 {also}",
-        "empties the data partition, apps, accounts, settings and internal storage included, and formats {also}"
-    , "làm trống phân vùng dữ liệu, ứng dụng, tài khoản, cài đặt và bộ nhớ trong đi kèm cũng như các định dạng {also}")
+        "empties the data partition, apps, accounts, settings and internal storage included, and formats {also}",
+        "xóa sạch phân vùng dữ liệu, gồm ứng dụng, tài khoản, cài đặt và bộ nhớ trong, đồng thời định dạng {also}",
+    )
 }
 
 /// A choice of the wipe page as it lists it: its title, and exactly what it
@@ -1689,14 +1697,15 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
             let own = match (l, s.phone_logs) {
                 (_, 0) => String::new(),
                 (Lang::En, 1) => ", and this phone's own log folder".into(),
-                (_, n) => tr!(l, "，以及本机的 {n} 个日志文件夹", "，以及本機的 {n} 個記錄資料夾", ", and this phone's own {n} log folders", "và thư mục nhật ký {n} của chính điện thoại này"),
+                (_, n) => tr!(l, "，以及本机的 {n} 个日志文件夹", "，以及本機的 {n} 個記錄資料夾", ", and this phone's own {n} log folders", ", cùng {n} thư mục nhật ký riêng của máy"),
             };
             let what = tr!(
                 l,
                 "/data/tombstones、/data/anr、/data/system/dropbox、/data/misc/logd 等系统日志和崩溃记录，各用户的错误报告{own}",
                 "/data/tombstones、/data/anr、/data/system/dropbox、/data/misc/logd 等系統記錄和當機記錄，各使用者的錯誤報告{own}",
-                "System logs and crash records, such as /data/tombstones, /data/anr, /data/system/dropbox and /data/misc/logd, each user's bug reports{own}"
-            , "Nhật ký hệ thống và hồ sơ sự cố, chẳng hạn như /data/tombstones, /data/anr, /data/system/dropbox và /data/misc/logd, báo cáo lỗi của mỗi người dùng{own}");
+                "System logs and crash records, such as /data/tombstones, /data/anr, /data/system/dropbox and /data/misc/logd, each user's bug reports{own}",
+                "Nhật ký hệ thống và bản ghi sự cố như /data/tombstones, /data/anr, /data/system/dropbox và /data/misc/logd, báo cáo lỗi của từng người dùng{own}",
+            );
             (["日志", "記錄", "Logs"], what)
         }
         Wipe::Updates => (
@@ -1836,7 +1845,7 @@ pub fn backup(cx: &Ctx) -> Frame {
     out.extend(hits(&parts.rows, &[0, 1, 2, 3].map(Action::BackupPart)));
     let y = widgets::section(&mut c, t, f, parts.bottom, l.pick(["存放位置", "存放位置", "Save to"]));
     let storage = match (s.data.storage_open(), i.storage.free.map(fmt::gb)) {
-        (true, Some(free)) => tr!(l, "剩余 {free}", "剩餘 {free}", "{free} free", "{free} miễn phí"),
+        (true, Some(free)) => tr!(l, "剩余 {free}", "剩餘 {free}", "{free} free", "Còn trống {free}"),
         (true, None) => l.pick(["无法读取剩余空间", "無法讀取剩餘空間", "Free space unknown"]).to_string(),
         (false, _) if s.data == Data::Erased => l.pick(DATA_ERASED).to_string(),
         (false, _) => l.pick(DECRYPT_NEEDED).to_string(),
@@ -1920,8 +1929,9 @@ pub fn restore_backup(cx: &Ctx) -> Frame {
                 l,
                 "无法读取该备份，备份可能未完成或已损坏。{why}",
                 "無法讀取這份備份，備份可能未完成或已損壞。{why}",
-                "This backup can't be read. It may not have finished, or it may be damaged. {why}"
-            , "Bản sao lưu này không thể đọc được. Nó có thể chưa hoàn thành, hoặc nó có thể bị hư hỏng. {why}");
+                "This backup can't be read. It may not have finished, or it may be damaged. {why}",
+                "Không đọc được bản sao lưu này. Có thể bản sao lưu chưa hoàn tất hoặc đã hỏng. {why}",
+            );
             widgets::footnote(&mut c, t, f, y, &note)
         }
         Ok(held) => {
@@ -1943,8 +1953,9 @@ pub fn restore_backup(cx: &Ctx) -> Frame {
                     l,
                     "该备份来自其他设备（{device}），无法恢复到本机。",
                     "這份備份來自其他裝置（{device}），無法還原到本機。",
-                    "This backup is from another device ({device}) and can't be restored to this phone."
-                , "Bản sao lưu này đến từ một thiết bị khác ({device}) và không thể khôi phục vào điện thoại này.");
+                    "This backup is from another device ({device}) and can't be restored to this phone.",
+                    "Bản sao lưu này thuộc máy khác ({device}), không khôi phục vào máy này được.",
+                );
                 widgets::footnote(&mut c, t, f, y, &note)
             } else {
                 let y = widgets::section(&mut c, t, f, y, l.pick(["恢复内容", "還原內容", "Contents"]));
@@ -1972,8 +1983,9 @@ pub fn restore_backup(cx: &Ctx) -> Frame {
                         l,
                         "该备份来自 {was}，本机当前为 {now}。仅恢复启动分区或系统分区中的一项，可能导致无法开机。",
                         "這份備份來自 {was}，本機目前為 {now}。僅還原啟動分割區或系統分割區中的一項，可能導致無法開機。",
-                        "This backup is from {was}, and this phone runs {now}. Restoring only one of the boot and system partitions may keep the phone from starting."
-                    , "Bản sao lưu này được lấy từ {was} và điện thoại này chạy {now}. Chỉ khôi phục một trong các phân vùng khởi động và hệ thống có thể khiến điện thoại không khởi động được.");
+                        "This backup is from {was}, and this phone runs {now}. Restoring only one of the boot and system partitions may keep the phone from starting.",
+                        "Bản sao lưu này lấy từ {was}, còn máy đang chạy {now}. Chỉ khôi phục một trong hai mục phân vùng khởi động hoặc phân vùng hệ thống có thể khiến máy không khởi động được.",
+                    );
                     y = widgets::footnote(&mut c, t, f, y, &warn);
                 }
                 let (label, danger) = confirm_label(Confirm::Restore, cx.state);
@@ -2084,7 +2096,7 @@ pub fn backup_job(cx: &Ctx) -> Frame {
                     let total = fmt::bytes(job.plan.iter().map(|(_, n)| n).sum());
                     let (verb, past) = if a.checking { (l.pick(VERIFYING), l.pick(VERIFIED)) } else { (l.pick(doing), l.pick(did)) };
                     let (name, passed) = (&job.plan[a.item].0, fmt::bytes(passed));
-                    (format!("{verb} {name}"), tr!(l, "{past} {passed}，共 {total}", "{past} {passed}，共 {total}", "{past} {passed} of {total}", "{past} {passed} trong số {total}"), over)
+                    (format!("{verb} {name}"), tr!(l, "{past} {passed}，共 {total}", "{past} {passed}，共 {total}", "{past} {passed} of {total}", "{past} {passed} / {total}"), over)
                 }
                 None if job.restore => (
                     l.pick(["正在读取备份", "正在讀取備份", "Reading the backup"]).to_string(),
@@ -2101,8 +2113,8 @@ pub fn backup_job(cx: &Ctx) -> Frame {
             let (title, color, detail) = match end {
                 BackupEnd::Saved(name) => {
                     let saved = match job.place {
-                        Place::Storage => tr!(l, "已保存到内部存储的 Aweyuki/backups/{name}", "已儲存到內部儲存空間的 Aweyuki/backups/{name}", "Saved to Aweyuki/backups/{name} in internal storage", "Đã lưu vào Aweyuki/backups/__PH0__ trong bộ nhớ trong"),
-                        Place::UsbDrive => tr!(l, "已保存到 U 盘的 Aweyuki/backups/{name}", "已儲存到 USB 隨身碟的 Aweyuki/backups/{name}", "Saved to Aweyuki/backups/{name} on the USB drive", "Đã lưu vào Aweyuki/backups/__PH0__ trên ổ USB"),
+                        Place::Storage => tr!(l, "已保存到内部存储的 Aweyuki/backups/{name}", "已儲存到內部儲存空間的 Aweyuki/backups/{name}", "Saved to Aweyuki/backups/{name} in internal storage", "Đã lưu vào Aweyuki/backups/{name} trong bộ nhớ trong"),
+                        Place::UsbDrive => tr!(l, "已保存到 U 盘的 Aweyuki/backups/{name}", "已儲存到 USB 隨身碟的 Aweyuki/backups/{name}", "Saved to Aweyuki/backups/{name} on the USB drive", "Đã lưu vào Aweyuki/backups/{name} trên ổ USB"),
                     };
                     (l.pick(BACKUP_COMPLETE), GREEN, saved)
                 }
@@ -2134,8 +2146,8 @@ pub fn backup_job(cx: &Ctx) -> Frame {
     match &job.outcome {
         None => {
             let note = match (job.restore, job.at) {
-                (false, _) => tr!(l, "备份完成前，{keep}停止后将删除未完成的备份。", "備份完成前，{keep}停止後將刪除未完成的備份。", "{keep} until the backup is done. Stopping deletes the unfinished backup.", "{keep} cho đến khi sao lưu xong. Việc dừng sẽ xóa bản sao lưu chưa hoàn thành."),
-                (true, Some(a)) if !a.checking => tr!(l, "恢复完成前，{keep}", "還原完成前，{keep}", "{keep} until the restore is done.", "{keep} cho đến khi quá trình khôi phục hoàn tất."),
+                (false, _) => tr!(l, "备份完成前，{keep}停止后将删除未完成的备份。", "備份完成前，{keep}停止後將刪除未完成的備份。", "{keep} until the backup is done. Stopping deletes the unfinished backup.", "{keep} cho đến khi sao lưu xong. Dừng lại sẽ xóa bản sao lưu đang dở."),
+                (true, Some(a)) if !a.checking => tr!(l, "恢复完成前，{keep}", "還原完成前，{keep}", "{keep} until the restore is done.", "{keep} cho đến khi khôi phục xong."),
                 (true, _) => l.pick(["校验备份完成前，不会写入任何内容。", "驗證備份完成前，不會寫入任何內容。", "Nothing is written until the backup is verified."]).to_string(),
             };
             y = widgets::footnote(&mut c, t, f, y, &note);
@@ -2157,8 +2169,9 @@ pub fn backup_job(cx: &Ctx) -> Frame {
                         l,
                         "以下文件夹所属的用户已不存在，其中的内容未恢复：{folders}",
                         "以下資料夾所屬的使用者已不存在，其中的內容未還原：{folders}",
-                        "The users these folders belonged to no longer exist, so what they hold wasn't restored: {folders}"
-                    , "Những người dùng thuộc về các thư mục này không còn tồn tại nên những gì họ giữ không được khôi phục: {folders}");
+                        "The users these folders belonged to no longer exist, so what they hold wasn't restored: {folders}",
+                        "Người dùng sở hữu các thư mục sau không còn tồn tại nên nội dung trong đó không được khôi phục: {folders}",
+                    );
                     y = widgets::footnote(&mut c, t, f, y, &note);
                 }
                 BackupEnd::Failed(why) => y = widgets::footnote(&mut c, t, f, y, why),
@@ -2269,7 +2282,7 @@ pub fn relabel(cx: &Ctx) -> Frame {
     };
     let detail = match (job.total, job.checked) {
         (0, _) if job.outcome.is_none() => l.pick(GETTING_READY).to_string(),
-        (total, checked) => tr!(l, "已检查 {checked} 项，共 {total} 项", "已檢查 {checked} 項，共 {total} 項", "{checked} of {total} checked", "Đã chọn {checked} trong số {total}"),
+        (total, checked) => tr!(l, "已检查 {checked} 项，共 {total} 项", "已檢查 {checked} 項，共 {total} 項", "{checked} of {total} checked", "Đã kiểm tra {checked}/{total} mục"),
     };
     let y = widgets::progress_card(&mut c, t, f, top, &heading, &detail, Some(share(job.checked, job.total)));
     match &job.outcome {
@@ -2290,10 +2303,11 @@ pub fn relabel(cx: &Ctx) -> Frame {
                     l,
                     "已按规则重新设置 {changed} 项的 SELinux 上下文。",
                     "已按規則重新設定 {changed} 項的 SELinux 上下文。",
-                    "{changed} entries got the SELinux context the rules give them."
-                , "Các mục {changed} có ngữ cảnh SELinux mà quy tắc cung cấp cho chúng."),
-                JobEnd::Stopped => tr!(l, "已停止，已重新设置 {changed} 项。", "已停止，已重新設定 {changed} 項。", "Stopped, with {changed} entries set again.", "Đã dừng, với các mục nhập {changed} được đặt lại."),
-                JobEnd::Failed(why) => tr!(l, "修复失败：{why}", "修復失敗：{why}", "Repair failed: {why}", "Sửa chữa không thành công: {why}"),
+                    "{changed} entries got the SELinux context the rules give them.",
+                    "Đã gán lại ngữ cảnh SELinux theo quy tắc cho {changed} mục.",
+                ),
+                JobEnd::Stopped => tr!(l, "已停止，已重新设置 {changed} 项。", "已停止，已重新設定 {changed} 項。", "Stopped, with {changed} entries set again.", "Đã dừng, đã gán lại cho {changed} mục."),
+                JobEnd::Failed(why) => tr!(l, "修复失败：{why}", "修復失敗：{why}", "Repair failed: {why}", "Sửa thất bại: {why}"),
             };
             let y = widgets::footnote(&mut c, t, f, y, &note);
             let finish = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(DONE)).trail(Trail::None)]);
@@ -2361,7 +2375,7 @@ pub fn filesystem(cx: &Ctx) -> Frame {
     let y = widgets::info_card(&mut c, t, f, top, &facts);
     let y = widgets::section(&mut c, t, f, y, l.pick(ACTIONS));
     let chosen = |action: &FsAction| s.fs_action == *action;
-    let remakes: Vec<String> = row.others.iter().map(|fs| tr!(l, "更换为 {fs}", "更換為 {fs}", "Change to {fs}", "Đổi thành {fs}")).collect();
+    let remakes: Vec<String> = row.others.iter().map(|fs| tr!(l, "更换为 {fs}", "更換為 {fs}", "Change to {fs}", "Đổi sang {fs}")).collect();
     let made: Vec<String> = row.others.iter().map(|_| remade(row, s)).collect();
     let repair = Row::new(l.pick(["修复文件系统", "修復檔案系統", "Repair the filesystem"]))
         .subtitle(l.pick(["检查整个文件系统，并修复发现的错误", "檢查整個檔案系統，並修復發現的錯誤", "Checks the whole filesystem and fixes the errors found"]))
@@ -2416,11 +2430,11 @@ fn remade(row: &FsRow, s: &State) -> String {
                 true => ["data、cache、metadata 分区", "data、cache、metadata 分割區", "the data, cache and metadata partitions"],
                 false => ["data、metadata 分区", "data、metadata 分割區", "the data and metadata partitions"],
             });
-            tr!(s.lang, "格式化 {parts}，清空本机的全部数据", "格式化 {parts}，清空本機的全部資料", "Formats {parts}, emptying all of this phone's data", "Định dạng {parts}, xóa tất cả dữ liệu của điện thoại này")
+            tr!(s.lang, "格式化 {parts}，清空本机的全部数据", "格式化 {parts}，清空本機的全部資料", "Formats {parts}, emptying all of this phone's data", "Định dạng {parts}, xóa sạch toàn bộ dữ liệu của máy")
         }
         false => {
             let name = &row.name;
-            tr!(s.lang, "格式化 {name} 分区，清空其中的全部内容", "格式化 {name} 分割區，清空其中的全部內容", "Formats the {name} partition, emptying all it holds", "Định dạng phân vùng {name}, làm trống tất cả những gì nó chứa")
+            tr!(s.lang, "格式化 {name} 分区，清空其中的全部内容", "格式化 {name} 分割區，清空其中的全部內容", "Formats the {name} partition, emptying all it holds", "Định dạng phân vùng {name}, xóa sạch toàn bộ nội dung bên trong")
         }
     }
 }
@@ -2557,7 +2571,7 @@ pub fn update(cx: &Ctx) -> Frame {
     if let Standing::Merging(done) = s.update {
         let share = done as f32;
         let p = percent(share);
-        let detail = tr!(l, "已完成 {p}%", "已完成 {p}%", "{p}% done", "{p}% đã xong");
+        let detail = tr!(l, "已完成 {p}%", "已完成 {p}%", "{p}% done", "Đã xong {p}%");
         let y = widgets::progress_card(&mut c, t, f, top, l.pick(["正在合并更新", "正在合併更新", "Merging the update"]), &detail, Some(share));
         let note = l.pick([
             "合并完成前，暂不刷写 super 中的分区。返回后将继续合并。",
@@ -2645,7 +2659,7 @@ fn online(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
         Some(length) => fmt::file_size(length),
         None => fmt::package_size(&release.size),
     };
-    let package = tr!(l, "完整更新包 {size}", "完整更新檔 {size}", "Full OTA package {size}", "Trọn gói OTA {size}");
+    let package = tr!(l, "完整更新包 {size}", "完整更新檔 {size}", "Full OTA package {size}", "Gói OTA đầy đủ {size}");
     let mut y = widgets::list(c, t, f, y, &[Row::new(&title).icon(GREEN, Icon::Layers).subtitle(&package).trail(Trail::None)]).bottom;
     match (&s.download, s.have) {
         (Some(job), _) if job.outcome.is_none() => {
@@ -2677,7 +2691,7 @@ fn online(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
             let had = match have {
                 Have::Part(done) => {
                     let done = fmt::file_size(done);
-                    Some(tr!(l, "已下载 {done}", "已下載 {done}", "{done} downloaded", "{done} đã tải xuống"))
+                    Some(tr!(l, "已下载 {done}", "已下載 {done}", "{done} downloaded", "Đã tải {done}"))
                 }
                 _ => None,
             };
@@ -2698,8 +2712,9 @@ fn online(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
         l,
         "完整更新包将保存到\"/sdcard/{DOWNLOADS}\"中，安装后不会自动删除。",
         "完整更新檔將儲存到「/sdcard/{DOWNLOADS}」中，安裝後不會自動刪除。",
-        "The full OTA package is saved in “/sdcard/{DOWNLOADS}”, and stays there after it's installed."
-    , "Gói OTA đầy đủ được lưu trong “/sdcard/__PH0__” và vẫn ở đó sau khi được cài đặt.");
+        "The full OTA package is saved in “/sdcard/{DOWNLOADS}”, and stays there after it's installed.",
+        "Gói OTA đầy đủ được lưu trong “/sdcard/{DOWNLOADS}”, và vẫn ở đó sau khi cài xong.",
+    );
     let points = [
         l.pick(["安装系统更新不会删除用户数据，建议在安装前进行备份。", "安裝系統更新不會刪除使用者資料，建議在安裝前進行備份。", "Installing a system update deletes no user data. Backing up first is still wise."]),
         saved.as_str(),
@@ -2806,7 +2821,7 @@ fn aweyuki_online(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
                 Some(AweyukiStage::Write { done, total }) => {
                     let part = share(done, total);
                     let p = percent(part);
-                    (l.pick(["正在写入 recovery 分区", "正在寫入 recovery 分割區", "Writing the recovery partitions"]), tr!(l, "已完成 {p}%", "已完成 {p}%", "{p}% done", "{p}% đã xong"), Some(part))
+                    (l.pick(["正在写入 recovery 分区", "正在寫入 recovery 分割區", "Writing the recovery partitions"]), tr!(l, "已完成 {p}%", "已完成 {p}%", "{p}% done", "Đã xong {p}%"), Some(part))
                 }
             };
             let y = widgets::progress_card(c, t, f, y + gap, heading, &detail, share);
@@ -2827,8 +2842,9 @@ fn aweyuki_online(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
                     l,
                     "已将 Aweyuki {version} 刷入{names} 的 recovery 分区。",
                     "已將 Aweyuki {version} 刷入{names} 的 recovery 分割區。",
-                    "Aweyuki {version} is in the recovery partitions of {names}."
-                , "Aweyuki {version} nằm trong phân vùng khôi phục của {names}."),
+                    "Aweyuki {version} is in the recovery partitions of {names}.",
+                    "Đã flash Aweyuki {version} vào phân vùng recovery của {names}.",
+                ),
             };
             let y = widgets::list(c, t, f, y + gap, &[standing(l.pick(["更新成功", "更新成功", "Updated"]), GREEN, Icon::Install, &detail)]).bottom;
             let restart = widgets::list(c, t, f, y + gap, &[Row::new(l.pick(["重启到恢复模式", "重新啟動到復原模式", "Reboot to recovery"])).icon(ORANGE, Icon::Power)]);
@@ -2855,8 +2871,9 @@ fn aweyuki_online(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
                             l,
                             "{names} 的 recovery 分区仅写入了部分内容，重启到恢复模式可能无法进入 Aweyuki。请重新更新，完成后再重启。",
                             "{names} 的 recovery 分割區僅寫入了部分內容，重新啟動到復原模式可能無法進入 Aweyuki。請重新更新，完成後再重新啟動。",
-                            "The recovery partitions of {names} were only partly written, so rebooting to recovery may not start Aweyuki. Update again, and reboot once it's done."
-                        , "Các phân vùng khôi phục của {names} chỉ được ghi một phần, do đó việc khởi động lại vào recovery có thể không bắt đầu Aweyuki. Cập nhật lại và khởi động lại sau khi hoàn tất."),
+                            "The recovery partitions of {names} were only partly written, so rebooting to recovery may not start Aweyuki. Update again, and reboot once it's done.",
+                            "Phân vùng recovery của {names} mới chỉ ghi một phần, nên khởi động lại vào recovery có thể không vào được Aweyuki. Hãy cập nhật lại, xong rồi mới khởi động lại.",
+                        ),
                     };
                     y = widgets::footnote(c, t, f, y, &warning);
                     y = widgets::footnote(c, t, f, y, why);
@@ -3117,7 +3134,7 @@ pub fn choose(cx: &Ctx, place: Place) -> Frame {
             l.pick(["通过 OTG 连接 U 盘后，将在此显示其中的文件。", "透過 OTG 連接 USB 隨身碟後，將在此顯示其中的檔案。", "Connect a USB drive through OTG to see its files here."]),
         )),
         (Place::UsbDrive, Some(UsbDrive::Unreadable(why))) => {
-            unreadable = tr!(l, "请使用 FAT32 或 exFAT 格式的 U 盘。{why}", "請使用 FAT32 或 exFAT 格式的 USB 隨身碟。{why}", "Use a USB drive formatted as FAT32 or exFAT. {why}", "Sử dụng ổ USB được định dạng là FAT32 hoặc exFAT. {why}");
+            unreadable = tr!(l, "请使用 FAT32 或 exFAT 格式的 U 盘。{why}", "請使用 FAT32 或 exFAT 格式的 USB 隨身碟。{why}", "Use a USB drive formatted as FAT32 or exFAT. {why}", "Hãy dùng ổ USB định dạng FAT32 hoặc exFAT. {why}");
             Some((l.pick(USB_DRIVE_UNREADABLE), unreadable.as_str()))
         }
         _ => None,
@@ -3245,9 +3262,10 @@ pub fn file_info(cx: &Ctx) -> Frame {
                 l,
                 "删除\"{name}\"及其中的全部内容？删除后无法恢复。",
                 "刪除「{name}」及其中的全部內容？刪除後無法復原。",
-                "Delete “{name}” and everything in it? It can't be brought back."
-            , "Xóa “{name}” và mọi thứ trong đó? Nó không thể được mang trở lại."),
-            false => tr!(l, "删除\"{name}\"？删除后无法恢复。", "刪除「{name}」？刪除後無法復原。", "Delete “{name}”? It can't be brought back.", "Xóa “{name}”? Nó không thể được mang trở lại."),
+                "Delete “{name}” and everything in it? It can't be brought back.",
+                "Xóa “{name}” và toàn bộ nội dung bên trong? Không lấy lại được.",
+            ),
+            false => tr!(l, "删除\"{name}\"？删除后无法恢复。", "刪除「{name}」？刪除後無法復原。", "Delete “{name}”? It can't be brought back.", "Xóa “{name}”? Không lấy lại được."),
         };
         let y = widgets::footnote(&mut c, t, f, actions.bottom, &what);
         let (label, danger) = confirm_label(Confirm::DeleteEntry, cx.state);
@@ -3314,9 +3332,9 @@ pub fn clash(cx: &Ctx) -> Frame {
     });
     let mut c = page(cx);
     let top = t.m.content_top;
-    let there = tr!(l, "\"{into}\"中已有同名的\"{name}\"。", "「{into}」中已有同名的「{name}」。", "“{into}” already holds an entry named “{name}”.", "“{into}” đã có mục nhập có tên “{name}”.");
+    let there = tr!(l, "\"{into}\"中已有同名的\"{name}\"。", "「{into}」中已有同名的「{name}」。", "“{into}” already holds an entry named “{name}”.", "Trong “{into}” đã có mục tên “{name}”.");
     let y = widgets::paragraph(&mut c, t, f, top, &there);
-    let skip = tr!(l, "保留已有的同名项，不{verb}该项", "保留已有的同名項目，不{verb}這個項目", "Keeps the entry there, and doesn't {verb} this one", "Giữ mục ở đó và không {verb} mục này");
+    let skip = tr!(l, "保留已有的同名项，不{verb}该项", "保留已有的同名項目，不{verb}這個項目", "Keeps the entry there, and doesn't {verb} this one", "Giữ mục hiện có, không {verb} mục này");
     let choices = widgets::list(&mut c, t, f, y + t.m.dp(12.0), &[
         Row::new(l.pick(["替换", "取代", "Replace"])).subtitle(l.pick(["覆盖已有的同名项", "覆寫已有的同名項目", "Writes over the entry there"])),
         Row::new(l.pick(["跳过", "略過", "Skip"])).subtitle(&skip),
@@ -3331,13 +3349,15 @@ pub fn clash(cx: &Ctx) -> Frame {
 }
 
 /// How work on files is told of: the Chinese verb its sentences build on,
-/// in simplified and in traditional characters, then English's own words
-/// for what is done and for doing it; the page's titles while it goes on
-/// and once it ended short; and what stopping it may have left.
+/// in simplified and in traditional characters, English's own words for
+/// what is done and for doing it, and Vietnamese's verb; the page's titles
+/// while it goes on and once it ended short; and what stopping it may have
+/// left.
 struct FileWords {
     verb: [&'static str; 2],
     done: &'static str,
     base: &'static str,
+    vi: &'static str,
     titles: (Text, Text),
     stopped: Text,
 }
@@ -3348,6 +3368,7 @@ fn file_words(task: &FileTask) -> FileWords {
             verb: ["复制", "複製"],
             done: "copied",
             base: "copy",
+            vi: "sao chép",
             titles: (["正在复制", "正在複製", "Copying"], ["复制未完成", "複製未完成", "Copy incomplete"]),
             stopped: ["已停止，部分内容可能已复制到目标文件夹。", "已停止，部分內容可能已複製到目標資料夾。", "Stopped. Part of it may have been copied into the folder."],
         },
@@ -3355,6 +3376,7 @@ fn file_words(task: &FileTask) -> FileWords {
             verb: ["移动", "移動"],
             done: "moved",
             base: "move",
+            vi: "di chuyển",
             titles: (["正在移动", "正在移動", "Moving"], ["移动未完成", "移動未完成", "Move incomplete"]),
             stopped: ["已停止，部分内容可能已移动到目标文件夹。", "已停止，部分內容可能已移動到目標資料夾。", "Stopped. Part of it may have been moved into the folder."],
         },
@@ -3362,6 +3384,7 @@ fn file_words(task: &FileTask) -> FileWords {
             verb: ["删除", "刪除"],
             done: "deleted",
             base: "delete",
+            vi: "xóa",
             titles: (["正在删除", "正在刪除", "Deleting"], ["删除未完成", "刪除未完成", "Delete incomplete"]),
             stopped: ["已停止，部分内容可能已删除。", "已停止，部分內容可能已刪除。", "Stopped. Part of it may have been deleted."],
         },
@@ -3377,7 +3400,7 @@ pub fn file_job(cx: &Ctx) -> Frame {
         FileTask::Copy { path, .. } | FileTask::Move { path, .. } | FileTask::Delete { path } => path,
     };
     let words = file_words(&job.task);
-    let ([hans, hant], done_en, base) = (words.verb, words.done, words.base);
+    let ([hans, hant], done_en, base, vi) = (words.verb, words.done, words.base, words.vi);
     let name = Path::new(path).file_name().map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
     let share = |(done, total): (u64, u64)| if total == 0 { 0.0 } else { done as f32 / total as f32 };
     // The bar stays while the work measures, so that the button under it
@@ -3387,11 +3410,11 @@ pub fn file_job(cx: &Ctx) -> Frame {
         (None, _) => (l.pick(GETTING_READY).to_string(), 0.0),
         (Some((bytes, _)), FileTask::Copy { .. } | FileTask::Move { .. }) if bytes.1 > 0 => {
             let (did, total) = (fmt::file_size(bytes.0), fmt::file_size(bytes.1));
-            (tr!(l, "已{hans} {did}，共 {total}", "已{hant} {did}，共 {total}", "{did} of {total} {done_en}", "{did} trong số {total} {done_en}"), share(bytes))
+            (tr!(l, "已{hans} {did}，共 {total}", "已{hant} {did}，共 {total}", "{did} of {total} {done_en}", "Đã {vi} {did} / {total}"), share(bytes))
         }
         (Some((_, entries)), _) => {
             let (did, total) = entries;
-            (tr!(l, "已{hans} {did} 项，共 {total} 项", "已{hant} {did} 項，共 {total} 項", "{did} of {total} items {done_en}", "{did} trong số {total} mục {done_en}"), share(entries))
+            (tr!(l, "已{hans} {did} 项，共 {total} 项", "已{hant} {did} 項，共 {total} 項", "{did} of {total} items {done_en}", "Đã {vi} {did}/{total} mục"), share(entries))
         }
     };
     let mut c = page(cx);
@@ -3409,7 +3432,7 @@ pub fn file_job(cx: &Ctx) -> Frame {
         Some(end) => {
             let why = match end {
                 JobEnd::Stopped => l.pick(words.stopped).to_string(),
-                JobEnd::Failed(why) => tr!(l, "{hans}失败：{why}", "{hant}失敗：{why}", "Couldn't {base} it: {why}", "Không thể {base} nó: {why}"),
+                JobEnd::Failed(why) => tr!(l, "{hans}失败：{why}", "{hant}失敗：{why}", "Couldn't {base} it: {why}", "Không {vi} được: {why}"),
                 JobEnd::Done => unreachable!("work done leaves its page"),
             };
             let y = widgets::footnote(&mut c, t, f, y, &why);
@@ -3639,8 +3662,8 @@ pub fn slot(cx: &Ctx) -> Frame {
         let k = slot.number() as usize;
         let which = l.pick(if slot == current { ["当前运行的系统", "目前執行的系統", "The system running now"] } else { ["另一个槽位", "另一個槽位", "The other slot"] });
         match (slots.bootable[k], slots.successful[k]) {
-            (false, _) => tr!(l, "{which}，已标记为无法启动", "{which}，已標記為無法啟動", "{which}, marked unbootable", "{which}, được đánh dấu là không thể khởi động được"),
-            (true, false) => tr!(l, "{which}，尚未完整启动过", "{which}，尚未完整啟動過", "{which}, not yet fully started", "{which}, chưa bắt đầu hoàn toàn"),
+            (false, _) => tr!(l, "{which}，已标记为无法启动", "{which}，已標記為無法啟動", "{which}, marked unbootable", "{which}, được đánh dấu không khởi động được"),
+            (true, false) => tr!(l, "{which}，尚未完整启动过", "{which}，尚未完整啟動過", "{which}, not yet fully started", "{which}, chưa từng khởi động hoàn tất"),
             (true, true) => which.to_string(),
         }
     });

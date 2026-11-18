@@ -28,7 +28,7 @@ mod matcher;
 const CLOCK: &str = "23:46";
 
 /// The language the pages are drawn in, as `--lang` names its locale;
-/// simplified Chinese where it names none.
+/// English where it names none.
 static LANG: OnceLock<Lang> = OnceLock::new();
 
 fn lang() -> Lang {
@@ -131,7 +131,7 @@ fn main() -> Result<()> {
     std::fs::create_dir_all(&out)?;
     let lang = match args.iter().position(|a| a == "--lang") {
         Some(k) => Lang::for_locale(args.get(k + 1).ok_or_else(|| anyhow!("--lang needs a locale"))?)?,
-        None => Lang::Hans,
+        None => Lang::En,
     };
     LANG.set(lang).expect("the language is chosen once");
 

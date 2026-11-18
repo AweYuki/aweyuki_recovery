@@ -44,14 +44,16 @@ impl Lang {
 
     /// Of the same thing written in each language, in the order of
     /// [`Lang::ALL`], the one in this language. Vietnamese is kept apart
-    /// from the texts the pages write: it is looked up by the English
-    /// text, so a page that has not been translated yet falls back to it.
+    /// from the texts the pages write: it is looked up by the Chinese and
+    /// English texts, so two places that share an English word still tell
+    /// their own meaning, and a page that has not been translated yet falls
+    /// back to English.
     pub fn pick(self, [hans, hant, en]: [&'static str; 3]) -> &'static str {
         match self {
             Lang::Hans => hans,
             Lang::Hant => hant,
             Lang::En => en,
-            Lang::Vi => vi::text(en),
+            Lang::Vi => vi::text(hans, en),
         }
     }
 
@@ -158,6 +160,74 @@ mod tests {
         assert!(missing.is_empty(), "MiSans draws none of {missing:?}");
     }
 
+    fn is_test_only(attrs: &[syn::Attribute]) -> bool {
+        attrs.iter().any(|a| {
+            a.path().is_ident("test")
+                || (a.path().is_ident("cfg") && matches!(&a.meta, syn::Meta::List(l) if l.tokens.to_string().trim() == "test"))
+        })
+    }
+
+    fn has_cjk(s: &str) -> bool {
+        s.chars().any(|c| ('\u{3000}'..='\u{9fff}').contains(&c))
+    }
+
+    #[derive(Default)]
+    struct Triples(Vec<(String, String)>);
+
+    impl<'ast> Visit<'ast> for Triples {
+        fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+            if !is_test_only(&node.attrs) {
+                syn::visit::visit_item_mod(self, node);
+            }
+        }
+
+        fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+            if !is_test_only(&node.attrs) {
+                syn::visit::visit_item_fn(self, node);
+            }
+        }
+
+        fn visit_expr_array(&mut self, node: &'ast syn::ExprArray) {
+            if let [a, b, c] = node.elems.iter().collect::<Vec<_>>().as_slice()
+                && let (
+                    syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(hans), .. }),
+                    syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(hant), .. }),
+                    syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(en), .. }),
+                ) = (a, b, c)
+            {
+                let (hans, hant, en) = (hans.value(), hant.value(), en.value());
+                if has_cjk(&hans) || has_cjk(&hant) || (hans == "WLAN" && en == "Wi-Fi") || (hans == "UTC" && en == "UTC") {
+                    self.0.push((hans, en));
+                }
+            }
+            syn::visit::visit_expr_array(self, node);
+        }
+    }
+
+    fn read_triples(triples: &mut Triples, folder: &Path) {
+        for entry in fs::read_dir(folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                read_triples(triples, &path);
+                continue;
+            }
+            if path.file_name().is_some_and(|n| n == "vi.rs") {
+                continue;
+            }
+            let file = syn::parse_file(&fs::read_to_string(&path).unwrap()).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
+            triples.visit_file(&file);
+        }
+    }
+
+    #[test]
+    fn every_text_picked_has_a_vietnamese_translation() {
+        let mut triples = Triples::default();
+        read_triples(&mut triples, &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
+        assert!(!triples.0.is_empty());
+        let missing: BTreeSet<(String, String)> = triples.0.into_iter().filter(|(hans, en)| vi::lookup(hans, en).is_none()).collect();
+        assert!(missing.is_empty(), "missing Vietnamese translations: {missing:#?}");
+    }
+
     #[test]
     fn a_locale_picks_the_language_and_its_characters() {
         let of = |tag| Lang::for_locale(tag).unwrap();
@@ -186,8 +256,12 @@ mod tests {
     #[test]
     fn a_text_is_picked_and_made_in_the_language() {
         assert_eq!(Lang::Hant.pick(["设置", "設定", "Settings"]), "設定");
+        assert_eq!(Lang::Vi.pick(["已锁定", "已鎖定", "Locked"]), "Đã khóa");
+        assert_eq!(Lang::Vi.pick(["未解密", "未解密", "Locked"]), "Chưa giải mã");
+        assert_eq!(Lang::Vi.pick(["安装", "安裝", "Install"]), "Cài đặt");
+        assert_eq!(Lang::Vi.pick(["重新安装", "重新安裝", "Install"]), "cài lại");
         let base = "vendor";
-        assert_eq!(tr!(Lang::En, "挂载 {base} 失败", "掛載 {base} 失敗", "Couldn't mount {base}", "Không thể gắn {base}"), "Couldn't mount vendor");
+        assert_eq!(tr!(Lang::En, "挂载 {base} 失败", "掛載 {base} 失敗", "Couldn't mount {base}", "Không gắn kết được {base}"), "Couldn't mount vendor");
         assert_eq!(Lang::ALL.map(Lang::name), ["简体中文", "繁體中文", "English", "Tiếng Việt"]);
     }
 }

@@ -89,10 +89,15 @@ if grep -qF '$vi:literal' crates/aweyuki-ui/src/lang.rs; then
 else
   bad 'tr! no longer takes a fourth argument; every call site needs it'
 fi
-if grep -q 'Lang::Vi => vi::text(en)' crates/aweyuki-ui/src/lang.rs; then
-  pass 'pick looks Vietnamese up by its English text'
+if grep -q 'Lang::Vi => vi::text(hans, en)' crates/aweyuki-ui/src/lang.rs; then
+  pass 'pick looks Vietnamese up by its Chinese and English texts'
 else
   bad 'pick no longer falls back to the table; untranslated text will not show'
+fi
+if grep -q 'lang: Lang::En,' crates/aweyuki-ui/src/app/state.rs && ! grep -q 'info\.locale' crates/aweyuki/src/ui.rs; then
+  pass 'recovery defaults to English and ignores ro.product.locale'
+else
+  bad 'default language reverted from English or ro.product.locale was put back in ui.rs'
 fi
 
 python3 - "${PWD}" <<'PY' || fail=1
@@ -100,19 +105,22 @@ import re, sys, pathlib
 root = pathlib.Path(sys.argv[1])
 table = root / 'crates/aweyuki-ui/src/lang/vi.rs'
 text = table.read_text()
+ctx_arms = re.findall(r'^\s*\("((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)"\)\s*=>\s*"((?:[^"\\]|\\.)*)",', text, re.M)
 arms = re.findall(r'^\s*"((?:[^"\\]|\\.)*)" => "((?:[^"\\]|\\.)*)",', text, re.M)
 if not arms:
     print('  FAIL  the Vietnamese table holds no entry')
     sys.exit(1)
 keys = [k for k, _ in arms]
-dupes = {k for k in keys if keys.count(k) > 1}
-placeholders = [(k, v) for k, v in arms if sorted(re.findall(r'\{[^}]+\}', k)) != sorted(re.findall(r'\{[^}]+\}', v))]
+ctx_keys = [(h, e) for h, e, _ in ctx_arms]
+dupes = {k for k in keys if keys.count(k) > 1} | {k for k in ctx_keys if ctx_keys.count(k) > 1}
+all_pairs = [(e, v) for _, e, v in ctx_arms] + arms
+placeholders = [(k, v) for k, v in all_pairs if sorted(re.findall(r'\{[^}]+\}', k)) != sorted(re.findall(r'\{[^}]+\}', v))]
 problems = 0
 if dupes:
     print(f'  FAIL  {len(dupes)} duplicate key(s) in the table, which will not compile')
     problems += 1
 else:
-    print(f'  ok    {len(arms)} entries, no duplicate')
+    print(f'  ok    {len(arms)} entries and {len(ctx_arms)} contextual entries, no duplicate')
 if placeholders:
     print(f'  FAIL  {len(placeholders)} entry/entries lost or renamed a {{placeholder}}')
     for k, v in placeholders[:5]:

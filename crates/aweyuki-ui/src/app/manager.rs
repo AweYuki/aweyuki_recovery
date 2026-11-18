@@ -534,9 +534,9 @@ mod tests {
             tap(app, &f, &i, Action::Paste)
         };
         assert!(paste(&mut app, FileOp::Copy, "/sdcard").is_empty());
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("无法将\"sdcard\"放入其自身中"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("“sdcard” can't go inside itself"));
         assert!(paste(&mut app, FileOp::Move, "/sdcard/a.zip").is_empty());
-        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("\"a.zip\"已在该文件夹中"));
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("“a.zip” is already in this folder"));
         assert!(app.state.clip.is_some(), "the entry stays picked, for another folder");
         let copy = Effect::Paste { op: FileOp::Copy, path: "/sdcard/a.zip".into(), into: "/sdcard".into(), clash: None };
         assert_eq!(paste(&mut app, FileOp::Copy, "/sdcard/a.zip"), vec![copy], "a copy where the entry is makes a second one");
@@ -587,7 +587,7 @@ mod tests {
         assert_eq!(app.key(Key::Back, 1000), vec![Effect::Cancel]);
         assert_eq!(app.screen(), Screen::Files);
         assert!(tap_at(&mut app, &f, &i, Action::OpenEntry(1), 2000).is_empty());
-        assert_eq!(toast(&app), Some("上一次安装尚未结束，请稍后再试"));
+        assert_eq!(toast(&app), Some("The last install hasn't ended. Try again shortly"));
     }
 
     #[test]
@@ -638,7 +638,7 @@ mod tests {
         app.compose(&mut c, &f, &i, "12:00", 0);
         app.file_job_ended(JobEnd::Stopped, 0);
         app.compose(&mut c, &f, &i, "12:00", 16);
-        assert_eq!(app.titles.as_ref().map(|((title, _), _, _)| *title), Some("复制未完成"));
+        assert_eq!(app.titles.as_ref().map(|((title, _), _, _)| *title), Some("Copy incomplete"));
     }
 
     #[test]

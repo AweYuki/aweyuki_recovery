@@ -50,10 +50,10 @@ impl App {
                 self.state.next_slot = None;
                 self.state.boot_slots = Some(Ok(slots));
                 let slot = slots.active.letter();
-                self.say(&tr!(self.state.lang, "下次将从槽位 {slot} 启动", "下次將從槽位 {slot} 啟動", "Slot {slot} starts next", "Khe {slot} bắt đầu tiếp theo"), now);
+                self.say(&tr!(self.state.lang, "下次将从槽位 {slot} 启动", "下次將從槽位 {slot} 啟動", "Slot {slot} starts next", "Lần tới sẽ khởi động từ khe {slot}"), now);
                 self.refresh();
             }
-            Err(why) => self.say(&tr!(self.state.lang, "切换失败：{why}", "切換失敗：{why}", "Couldn't switch: {why}", "Không thể chuyển đổi: {why}"), now),
+            Err(why) => self.say(&tr!(self.state.lang, "切换失败：{why}", "切換失敗：{why}", "Couldn't switch: {why}", "Không chuyển được: {why}"), now),
         }
     }
 
@@ -70,8 +70,8 @@ impl App {
     pub fn systems_work_failed(&mut self, why: &str, now: u64) {
         let l = self.state.lang;
         let said = match self.state.systems_work.take() {
-            Some(SystemsWork::Removing) => tr!(l, "删除失败：{why}", "刪除失敗：{why}", "Couldn't remove: {why}", "Không thể xóa: {why}"),
-            _ => tr!(l, "切换失败：{why}", "切換失敗：{why}", "Couldn't switch: {why}", "Không thể chuyển đổi: {why}"),
+            Some(SystemsWork::Removing) => tr!(l, "删除失败：{why}", "刪除失敗：{why}", "Couldn't remove: {why}", "Không gỡ được: {why}"),
+            _ => tr!(l, "切换失败：{why}", "切換失敗：{why}", "Couldn't switch: {why}", "Không chuyển được: {why}"),
         };
         self.say(&said, now);
         self.refresh();
