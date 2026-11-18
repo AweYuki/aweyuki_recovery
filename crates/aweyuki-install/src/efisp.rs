@@ -4,6 +4,7 @@
 use anyhow::{bail, ensure, Context, Result};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
+#[cfg(target_os = "android")]
 use std::path::Path;
 
 const PE_MACHINE_ARM64: u16 = 0xaa64;
