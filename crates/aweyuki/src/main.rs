@@ -119,6 +119,13 @@ enum Cmd {
         #[arg(long, default_value_t = 8080)]
         port: u16,
     },
+    /// List installed runtime plugins.
+    Plugins,
+    /// Run a runtime plugin by its id.
+    Plugin {
+        id: String,
+        args: Vec<String>,
+    },
     /// Discard all a block device holds and write zeros over its start, as
     /// a factory reset erases the data partition.
     #[cfg(target_os = "android")]
@@ -332,6 +339,25 @@ fn main() -> Result<()> {
         Cmd::Share { root, port } => {
             let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
             aweyuki_net::share::serve(&root, addr)
+        }
+        Cmd::Plugins => {
+            let dirs: Vec<&Path> = aweyuki_install::plugins::DEFAULT_PLUGIN_DIRS.iter().map(Path::new).collect();
+            for p in aweyuki_install::plugins::discover(&dirs) {
+                println!("{} ({}) - {}", p.manifest.id, p.manifest.version, p.manifest.name);
+            }
+            Ok(())
+        }
+        Cmd::Plugin { id, args } => {
+            let dirs: Vec<&Path> = aweyuki_install::plugins::DEFAULT_PLUGIN_DIRS.iter().map(Path::new).collect();
+            let plugin = aweyuki_install::plugins::discover(&dirs)
+                .into_iter()
+                .find(|p| p.manifest.id == id)
+                .with_context(|| format!("plugin {id:?} not found"))?;
+            let code = plugin.run(&args)?;
+            if code != 0 {
+                std::process::exit(code);
+            }
+            Ok(())
         }
         Cmd::Mount => {
             let mounts = aweyuki_vab::mount_partitions(booted_slot()?)?;
