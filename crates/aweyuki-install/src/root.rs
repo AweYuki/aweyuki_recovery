@@ -10,6 +10,10 @@ use std::path::Path;
 pub const DEFAULT_ADB_ROOT: &str = "/data/adb";
 
 pub const SUPPORTED_KMIS: &[&str] = &[
+    "android12-5.10",
+    "android13-5.10",
+    "android13-5.15",
+    "android14-5.15",
     "android14-6.1",
     "android15-6.6",
     "android16-6.12",
@@ -204,6 +208,14 @@ mod tests {
         assert_eq!(
             kmi_from_release("6.12.69-android16-6-g43b5ab7e247d-abogki561813157-4k").as_deref(),
             Some("android16-6.12")
+        );
+        assert_eq!(
+            kmi_from_release("5.15.178-android13-8-g123456").as_deref(),
+            Some("android13-5.15")
+        );
+        assert_eq!(
+            kmi_from_release("5.10.198-android12-9-gabcdef").as_deref(),
+            Some("android12-5.10")
         );
         assert_eq!(
             resolve_kmi("6.6.30-g123456", SUPPORTED_KMIS).as_deref(),
