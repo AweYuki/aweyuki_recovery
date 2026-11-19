@@ -2,10 +2,11 @@
 //! with a `plugin.toml` manifest under `/aweyuki/plugins` or
 //! `/sdcard/Aweyuki/plugins`.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 
 pub const DEFAULT_PLUGIN_DIRS: &[&str] = &[
     "/aweyuki/plugins",
@@ -22,13 +23,58 @@ pub struct PluginManifest {
     pub args: Vec<String>,
 }
 
-fn unquote(s: &str) -> Result<String> {
-    let s = s.trim();
-    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
-        Ok(s[1..s.len() - 1].to_string())
-    } else {
-        bail!("expected quoted string, got {s:?}")
+fn parse_quoted(src: &str) -> Result<(String, &str)> {
+    let s = src.trim_start();
+    let Some(rest) = s.strip_prefix('"') else {
+        bail!("expected quoted string near {s:?}");
+    };
+    let mut out = String::new();
+    let mut chars = rest.char_indices();
+    while let Some((idx, ch)) = chars.next() {
+        match ch {
+            '"' => return Ok((out, &rest[idx + 1..])),
+            '\\' => match chars.next() {
+                Some((_, escaped)) => out.push(escaped),
+                None => bail!("unterminated escape sequence"),
+            },
+            c => out.push(c),
+        }
     }
+    bail!("unterminated quoted string")
+}
+
+fn unquote(src: &str) -> Result<String> {
+    let (val, tail) = parse_quoted(src)?;
+    ensure!(tail.trim().is_empty(), "unexpected trailing characters {tail:?}");
+    Ok(val)
+}
+
+fn parse_args(src: &str) -> Result<Vec<String>> {
+    let mut rest = src
+        .trim()
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .context("invalid args array")?
+        .trim();
+    let mut args = Vec::new();
+    while !rest.is_empty() {
+        let (arg, tail) = parse_quoted(rest)?;
+        args.push(arg);
+        rest = tail.trim_start();
+        if let Some(after_comma) = rest.strip_prefix(',') {
+            rest = after_comma.trim_start();
+        } else {
+            ensure!(rest.is_empty(), "expected comma in args array near {rest:?}");
+        }
+    }
+    Ok(args)
+}
+
+fn valid_id(id: &str) -> bool {
+    !id.is_empty()
+        && id != "."
+        && !id.contains("..")
+        && id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
 fn parse_manifest(text: &str) -> Result<PluginManifest> {
@@ -54,15 +100,7 @@ fn parse_manifest(text: &str) -> Result<PluginManifest> {
             "version" => version = unquote(v)?,
             "description" => description = unquote(v)?,
             "entry" => entry = unquote(v)?,
-            "args" => {
-                let inner = v.strip_prefix('[').and_then(|s| s.strip_suffix(']')).context("invalid args array")?;
-                for item in inner.split(',') {
-                    let item = item.trim();
-                    if !item.is_empty() {
-                        args.push(unquote(item)?);
-                    }
-                }
-            }
+            "args" => args = parse_args(v)?,
             _ => {}
         }
     }
@@ -79,42 +117,54 @@ pub struct Plugin {
 }
 
 impl Plugin {
-    /// Load a plugin from `dir/plugin.toml` and validate its `entry` path.
+    /// Load a plugin from `dir/plugin.toml` and validate its `id` and `entry`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the manifest is missing/malformed, `id` or `entry`
+    /// fails validation, or the entry file does not exist.
     pub fn load(dir: &Path) -> Result<Self> {
         let manifest_path = dir.join("plugin.toml");
         let text = fs::read_to_string(&manifest_path)
             .with_context(|| format!("read {}", manifest_path.display()))?;
         let manifest = parse_manifest(&text)
             .with_context(|| format!("parse {}", manifest_path.display()))?;
-        if manifest.id.is_empty() || manifest.id.contains('/') || manifest.id.contains("..") {
-            bail!("invalid plugin id {:?}", manifest.id);
-        }
-        let entry_path = Path::new(&manifest.entry);
-        if entry_path.is_absolute()
-            || entry_path.components().any(|c| !matches!(c, Component::Normal(_)))
-        {
-            bail!("invalid plugin entry {:?}", manifest.entry);
-        }
+        ensure!(valid_id(&manifest.id), "invalid plugin id {:?}", manifest.id);
+        let entry_rel = Path::new(&manifest.entry);
+        ensure!(
+            !entry_rel.as_os_str().is_empty()
+                && !entry_rel.is_absolute()
+                && entry_rel.components().all(|c| matches!(c, Component::Normal(_))),
+            "invalid plugin entry {:?}",
+            manifest.entry
+        );
+        let entry_full = dir.join(entry_rel);
+        ensure!(entry_full.is_file(), "plugin entry {} does not exist", entry_full.display());
         Ok(Plugin { dir: dir.to_path_buf(), manifest })
     }
 
-    /// Execute the plugin's entry binary/script, returning its exit code.
-    pub fn run(&self, extra_args: &[String]) -> Result<i32> {
+    /// Execute the plugin's entry binary/script, returning its exit status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin process fails to spawn or wait.
+    pub fn run(&self, extra_args: &[&str]) -> Result<ExitStatus> {
         let entry = self.dir.join(&self.manifest.entry);
-        let status = Command::new(&entry)
+        Command::new(&entry)
             .args(&self.manifest.args)
             .args(extra_args)
             .env("AWEYUKI_PLUGIN_DIR", &self.dir)
             .env("AWEYUKI_PLUGIN_ID", &self.manifest.id)
             .status()
-            .with_context(|| format!("run {}", entry.display()))?;
-        Ok(status.code().unwrap_or(-1))
+            .with_context(|| format!("run {}", entry.display()))
     }
 }
 
-/// Discover all valid plugins across `dirs` (sorted by plugin `id`).
+/// Discover all valid plugins across `dirs`, deduplicating by `id` (earlier
+/// directories take precedence) and returning them sorted by `id`.
+#[must_use]
 pub fn discover(dirs: &[&Path]) -> Vec<Plugin> {
-    let mut found = Vec::new();
+    let mut by_id = BTreeMap::new();
     for dir in dirs {
         let Ok(entries) = fs::read_dir(dir) else {
             continue;
@@ -124,12 +174,11 @@ pub fn discover(dirs: &[&Path]) -> Vec<Plugin> {
             if path.is_dir()
                 && let Ok(plugin) = Plugin::load(&path)
             {
-                found.push(plugin);
+                by_id.entry(plugin.manifest.id.clone()).or_insert(plugin);
             }
         }
     }
-    found.sort_by(|a, b| a.manifest.id.cmp(&b.manifest.id));
-    found
+    by_id.into_values().collect()
 }
 
 #[cfg(test)]
@@ -137,39 +186,55 @@ mod tests {
     use super::*;
 
     #[test]
-    fn valid_plugin_is_discovered_and_run() {
-        let base = std::env::temp_dir().join("aweyuki-plugin-tests");
-        let _ = fs::remove_dir_all(&base);
-        let pdir = base.join("hello");
-        fs::create_dir_all(&pdir).unwrap();
+    fn valid_plugin_is_discovered_deduplicated_and_run() {
+        let tmp = tempfile::tempdir().unwrap();
+        let high = tmp.path().join("high");
+        let low = tmp.path().join("low");
+        let p_high = high.join("hello");
+        let p_low = low.join("hello");
+        fs::create_dir_all(&p_high).unwrap();
+        fs::create_dir_all(&p_low).unwrap();
+
         fs::write(
-            pdir.join("plugin.toml"),
-            "id = \"hello\"\nname = \"Hello Plugin\"\nversion = \"1.0\"\nentry = \"run.sh\"\nargs = [\"--ok\"]\n",
+            p_high.join("plugin.toml"),
+            "id = \"hello\"\nname = \"Hello Plugin\"\nversion = \"1.0\"\nentry = \"run.sh\"\nargs = [\"--fmt=a,b\", \"--ok\"]\n",
         )
         .unwrap();
-        fs::write(pdir.join("run.sh"), "#!/bin/sh\nexit 0\n").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(pdir.join("run.sh"), fs::Permissions::from_mode(0o755)).unwrap();
+        fs::write(p_low.join("plugin.toml"), "id = \"hello\"\nname = \"Shadowed\"\nentry = \"run.sh\"\n").unwrap();
+        for p in [&p_high, &p_low] {
+            let sh = p.join("run.sh");
+            fs::write(&sh, "#!/bin/sh\nexit 0\n").unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&sh, fs::Permissions::from_mode(0o755)).unwrap();
+            }
         }
 
-        let found = discover(&[base.as_path()]);
+        let found = discover(&[high.as_path(), low.as_path()]);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].manifest.name, "Hello Plugin");
-        assert_eq!(found[0].run(&[]).unwrap(), 0);
+        assert_eq!(found[0].manifest.args, ["--fmt=a,b", "--ok"]);
+        assert!(found[0].run(&["--extra"]).unwrap().success());
     }
 
     #[test]
-    fn traversal_entry_is_rejected() {
-        let base = std::env::temp_dir().join("aweyuki-plugin-bad");
-        let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base).unwrap();
-        fs::write(
-            base.join("plugin.toml"),
-            "id = \"bad\"\nname = \"Bad\"\nentry = \"../../bin/sh\"\n",
-        )
-        .unwrap();
-        assert!(Plugin::load(&base).is_err());
+    fn invalid_plugins_are_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bad_trav = tmp.path().join("trav");
+        fs::create_dir_all(&bad_trav).unwrap();
+        fs::write(bad_trav.join("plugin.toml"), "id = \"bad\"\nname = \"Bad\"\nentry = \"../../bin/sh\"\n").unwrap();
+        assert!(Plugin::load(&bad_trav).is_err());
+
+        let bad_missing = tmp.path().join("missing");
+        fs::create_dir_all(&bad_missing).unwrap();
+        fs::write(bad_missing.join("plugin.toml"), "id = \"ok\"\nname = \"Missing\"\nentry = \"nope.sh\"\n").unwrap();
+        assert!(Plugin::load(&bad_missing).is_err());
+
+        let bad_id = tmp.path().join("id");
+        fs::create_dir_all(&bad_id).unwrap();
+        fs::write(bad_id.join("run.sh"), "#!/bin/sh\n").unwrap();
+        fs::write(bad_id.join("plugin.toml"), "id = \"bad/id\"\nname = \"Bad Id\"\nentry = \"run.sh\"\n").unwrap();
+        assert!(Plugin::load(&bad_id).is_err());
     }
 }

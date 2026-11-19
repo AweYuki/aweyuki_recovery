@@ -113,6 +113,7 @@ enum Cmd {
         remove: bool,
     },
     /// Serve a directory over HTTP/1.1 for browser or curl file transfer.
+    #[cfg(target_os = "android")]
     Share {
         #[arg(long, default_value = "/sdcard")]
         root: PathBuf,
@@ -316,8 +317,12 @@ fn main() -> Result<()> {
             println!("kernel  = {release}");
             println!("kmi     = {}", kmi.as_deref().unwrap_or("unknown"));
             let adb = Path::new(aweyuki_install::root::DEFAULT_ADB_ROOT);
-            let providers = aweyuki_install::root::detect_providers(adb);
-            println!("root    = {:?}", providers);
+            let providers: Vec<String> = aweyuki_install::root::detect_providers(adb)
+                .into_iter()
+                .map(|p| p.to_string())
+                .collect();
+            let summary = if providers.is_empty() { "none".to_string() } else { providers.join(", ") };
+            println!("root    = {summary}");
             for m in aweyuki_install::root::list_modules(adb)? {
                 let state = if m.remove_pending { "remove" } else if m.enabled { "enabled" } else { "disabled" };
                 println!("module  = {} ({}) [{}]", m.id, m.version, state);
@@ -325,20 +330,25 @@ fn main() -> Result<()> {
             Ok(())
         }
         Cmd::RootModule { id, enable, disable, remove } => {
+            anyhow::ensure!(enable || disable || remove, "pass --enable, --disable, or --remove");
             let adb = Path::new(aweyuki_install::root::DEFAULT_ADB_ROOT);
             if enable {
-                aweyuki_install::root::set_module_enabled(adb, &id, true)?;
+                aweyuki_install::root::enable_module(adb, &id)?;
             } else if disable {
-                aweyuki_install::root::set_module_enabled(adb, &id, false)?;
+                aweyuki_install::root::disable_module(adb, &id)?;
             }
             if remove {
-                aweyuki_install::root::set_module_remove(adb, &id, true)?;
+                aweyuki_install::root::mark_module_for_removal(adb, &id)?;
             }
             Ok(())
         }
+        #[cfg(target_os = "android")]
         Cmd::Share { root, port } => {
             let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-            aweyuki_net::share::serve(&root, addr)
+            let listener = aweyuki_net::share::bind(addr)?;
+            let local = listener.local_addr()?;
+            println!("aweyuki-share listening on http://{local} (root: {})", root.display());
+            aweyuki_net::share::serve_listener(listener, &root)
         }
         Cmd::Plugins => {
             let dirs: Vec<&Path> = aweyuki_install::plugins::DEFAULT_PLUGIN_DIRS.iter().map(Path::new).collect();
@@ -353,9 +363,10 @@ fn main() -> Result<()> {
                 .into_iter()
                 .find(|p| p.manifest.id == id)
                 .with_context(|| format!("plugin {id:?} not found"))?;
-            let code = plugin.run(&args)?;
-            if code != 0 {
-                std::process::exit(code);
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+            let status = plugin.run(&arg_refs)?;
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
             }
             Ok(())
         }
