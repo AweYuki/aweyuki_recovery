@@ -111,7 +111,7 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::WlanAdd => wlan_add(cx),
         Screen::Root => root(cx),
         Screen::RootModule => root_module(cx),
-        Screen::Share => share(cx),
+        Screen::Share => sharing(cx),
         Screen::Plugins => plugins(cx),
         Screen::PluginRun => plugin_run(cx),
     }
@@ -4248,7 +4248,7 @@ pub fn root_module(cx: &Ctx) -> Frame {
         return Frame::new(t, fit(c, t, y), out, l.pick(ROOT), top);
     };
 
-    let mut items = vec![("ID", m.id.clone())];
+    let mut items = vec![(l.pick(NAME), m.name.clone()), ("ID", m.id.clone())];
     if !m.version.is_empty() {
         items.push((l.pick(["版本", "版本", "Version"]), m.version.clone()));
     }
@@ -4282,11 +4282,11 @@ pub fn root_module(cx: &Ctx) -> Frame {
             "Changes take effect on the next Android boot.",
         ]),
     );
-    Frame::new(t, fit(c, t, y), out, &m.name, top)
+    Frame::new(t, fit(c, t, y), out, l.pick(ROOT), top)
 }
 
 /// Network file sharing: HTTP/1.1 browser upload and download server.
-pub fn share(cx: &Ctx) -> Frame {
+pub fn sharing(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
     let mut c = long_page(cx);
     let mut out = Vec::new();
@@ -4465,7 +4465,8 @@ pub fn plugin_run(cx: &Ctx) -> Frame {
                 ),
                 PluginEnd::Failed(why) => (["运行失败", "執行失敗", "Failed"], RED, why.clone()),
             };
-            let y = widgets::list(&mut c, t, f, top, &[standing(l.pick(title), color, Icon::Terminal, &detail)]).bottom;
+            let full_detail = format!("{} · {detail}", run.name);
+            let y = widgets::list(&mut c, t, f, top, &[standing(l.pick(title), color, Icon::Terminal, &full_detail)]).bottom;
             let finish = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(DONE)).trail(Trail::None)]);
             out.extend(hits(&finish.rows, &[Action::Back]));
             finish.bottom
@@ -4479,7 +4480,7 @@ pub fn plugin_run(cx: &Ctx) -> Frame {
     }
 
     let back = run.outcome.is_some();
-    Frame { rows, back, ..Frame::new(t, fit(c, t, y), out, &run.name, top) }
+    Frame { rows, back, ..Frame::new(t, fit(c, t, y), out, l.pick(PLUGINS), top) }
 }
 
 #[cfg(test)]
