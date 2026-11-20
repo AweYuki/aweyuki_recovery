@@ -636,9 +636,11 @@ mod tests {
         let (f, i) = (fonts(), info());
         let mut app = sideloading(&f, &i);
         app.install(Event::Image { kind: ImageKind::Efisp, size: 128 * 1024, partitions: vec!["efisp"] }, 0);
-        let hits = app.frame(&f, &i).hits;
-        assert!(hits.iter().all(|h| !matches!(h.action, Action::FlashSlots(_))), "efisp offers no slot picker");
-        let track = hits.iter().find(|h| h.action == Action::Confirm(Confirm::Flash)).unwrap().rect;
+        let track = {
+            let hits = &app.frame(&f, &i).hits;
+            assert!(hits.iter().all(|h| !matches!(h.action, Action::FlashSlots(_))), "efisp offers no slot picker");
+            hits.iter().find(|h| h.action == Action::Confirm(Confirm::Flash)).unwrap().rect
+        };
         let y = track.centre().1 - app.top().1;
         app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
         app.touch(Touch::Move(track.x + track.w, y), &f, 1000);
