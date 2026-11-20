@@ -630,4 +630,18 @@ mod tests {
         assert_eq!(app.key(Key::Back, 12000), vec![Effect::Cancel], "leaving ends rescue");
         assert_eq!(app.state.install, Install::Ending);
     }
+
+    #[test]
+    fn arm64_efi_flashes_non_slotted_efisp_without_slot_picker() {
+        let (f, i) = (fonts(), info());
+        let mut app = sideloading(&f, &i);
+        app.install(Event::Image { kind: ImageKind::Efisp, size: 128 * 1024, partitions: vec!["efisp"] }, 0);
+        let hits = app.frame(&f, &i).hits;
+        assert!(hits.iter().all(|h| !matches!(h.action, Action::FlashSlots(_))), "efisp offers no slot picker");
+        let track = hits.iter().find(|h| h.action == Action::Confirm(Confirm::Flash)).unwrap().rect;
+        let y = track.centre().1 - app.top().1;
+        app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
+        app.touch(Touch::Move(track.x + track.w, y), &f, 1000);
+        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Flash { partition: "efisp", pick: Pick::Current }]);
+    }
 }

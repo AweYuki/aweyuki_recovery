@@ -79,6 +79,9 @@ read and set properties.
 
 - Reboot to system, recovery, fastboot, bootloader or EDL, and switch slots
 - Light and dark themes; Simplified Chinese, Traditional Chinese, English and Vietnamese
+- Direct non-slotted ARM64 `.efi` flashing to `efisp` and verified zero-fill wiping for `efisp` and `frp` partitions
+- Root Manager (kernel KMI resolution, Magisk/KernelSU/APatch framework detection, and `/data/adb/modules/*` enable/disable/remove toggles)
+- Network File Sharing over HTTP/1.1 with browser download/upload, runtime plugins with live streaming output and cancellation, and recent Flash/Wipe History on the Logs page
 
 ### Without a system
 

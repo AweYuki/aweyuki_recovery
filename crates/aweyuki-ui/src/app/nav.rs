@@ -201,6 +201,14 @@ impl App {
                 }
                 self.state.backup_job = None;
             }
+            Screen::RootModule => self.state.root_module = None,
+            Screen::PluginRun => {
+                if self.state.plugin_run.as_ref().is_some_and(|r| r.outcome.is_none()) {
+                    self.say(l.pick(WAIT_OR_STOP), now);
+                    return fx;
+                }
+                self.state.plugin_run = None;
+            }
             _ => {}
         }
         if self.screen() == Screen::Installing {
@@ -322,6 +330,9 @@ impl App {
                 vec![Effect::CheckAweyuki]
             }
             Screen::Wlan if self.state.wlan.as_ref().is_some_and(|w| w.power == Power::On) => vec![Effect::ScanWlan],
+            Screen::Root => vec![Effect::ReadRoot],
+            Screen::Plugins => vec![Effect::ReadPlugins],
+            Screen::Logs => vec![Effect::ReadHistory],
             _ => Vec::new(),
         }
     }
@@ -446,7 +457,7 @@ mod tests {
     #[test]
     fn every_unfinished_entry_now_opens_its_page() {
         let (f, i) = (fonts(), DeviceInfo { slot: Some(Slot::B), ..info() });
-        let routes: [(Screen, Screen); 13] = [
+        let routes: [(Screen, Screen); 16] = [
             (Screen::Home, Screen::Search),
             (Screen::Home, Screen::Backup),
             (Screen::Home, Screen::Restore),
@@ -454,6 +465,9 @@ mod tests {
             (Screen::Advanced, Screen::Files),
             (Screen::Advanced, Screen::Terminal),
             (Screen::Advanced, Screen::Logs),
+            (Screen::Advanced, Screen::Root),
+            (Screen::Advanced, Screen::Share),
+            (Screen::Advanced, Screen::Plugins),
             (Screen::Settings, Screen::Language),
             (Screen::Settings, Screen::TimeZone),
             (Screen::Settings, Screen::Terminal),

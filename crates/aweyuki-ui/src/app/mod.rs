@@ -46,12 +46,15 @@ mod keys;
 mod manager;
 mod mount;
 mod nav;
+mod plugins;
 mod power;
 mod prefs;
 mod reboot;
 mod relabel;
+mod root;
 mod scroll;
 mod aweyuki;
+mod share;
 mod state;
 mod systems;
 mod terminal;
@@ -69,10 +72,13 @@ pub use frame::*;
 pub use install::*;
 pub use manager::*;
 pub use mount::*;
+pub use plugins::*;
 pub use prefs::*;
 pub use reboot::*;
 pub use relabel::*;
+pub use root::*;
 pub use aweyuki::*;
+pub use share::*;
 pub use state::*;
 pub use systems::*;
 pub use terminal::*;
@@ -186,6 +192,16 @@ pub enum Screen {
     /// A network added by hand: its name, how it is protected and its
     /// password, typed on the screen's keyboard.
     WlanAdd,
+    /// Root Manager: kernel KMI, providers, and installed modules.
+    Root,
+    /// One root module's details and enable/remove toggles.
+    RootModule,
+    /// HTTP/1.1 browser upload/download server.
+    Share,
+    /// Runtime plugins discovered under `/aweyuki/plugins` and `/sdcard/Aweyuki/plugins`.
+    Plugins,
+    /// Live stdout/stderr output of a running or finished plugin.
+    PluginRun,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -382,6 +398,22 @@ pub enum Action {
     UpdateAweyuki,
     /// Stop downloading the build.
     StopAweyukiUpdate,
+    /// Refresh Root Manager KMI, providers, and module list.
+    RefreshRoot,
+    /// Open one root module's page by index.
+    OpenRootModule(usize),
+    /// Toggle enable/disable on the opened root module.
+    RootToggleEnabled,
+    /// Toggle pending removal on the opened root module.
+    RootToggleRemove,
+    /// Switch which folder the HTTP file-sharing server serves.
+    ShareRoot(ShareRoot),
+    /// Refresh the discovered runtime plugins list.
+    RefreshPlugins,
+    /// Run a discovered runtime plugin by index.
+    RunPlugin(usize),
+    /// Stop the active runtime plugin process.
+    StopPlugin,
     /// A control whose work is not wired up yet; touching it says so.
     Unavailable(&'static str),
 }
@@ -589,6 +621,23 @@ pub enum Effect {
     /// Merge the update that waits in the slot the phone runs from,
     /// telling how it goes with [`App::set_update`].
     Merge,
+    /// Read KMI, root providers, and `/data/adb/modules/*`, replying via [`App::set_root`].
+    ReadRoot,
+    /// Enable or disable root module `id`, replying via [`App::root_changed`].
+    RootSetEnabled { id: String, enabled: bool },
+    /// Mark or unmark root module `id` for removal, replying via [`App::root_changed`].
+    RootSetRemove { id: String, remove: bool },
+    /// Start or stop the HTTP file-sharing server, replying via [`App::set_share`].
+    Share { on: bool, root: ShareRoot, port: u16 },
+    /// Scan runtime plugin directories, replying via [`App::set_plugins`].
+    ReadPlugins,
+    /// Execute plugin `id`, reporting via [`App::plugin_started`],
+    /// [`App::plugin_output`], and [`App::plugin_ended`].
+    RunPlugin(String),
+    /// Request termination of the active plugin process.
+    StopPlugin,
+    /// Read persistent and session flash/wipe history, replying via [`App::set_history`].
+    ReadHistory,
 }
 
 enum Drag {
@@ -1600,5 +1649,13 @@ impl App {
         self.shown = None;
         self.layer = None;
         self.dirty = true;
+    }
+
+    /// Update the recent flash/wipe history shown on the logs page.
+    pub fn set_history(&mut self, entries: Vec<aweyuki_install::history::Entry>) {
+        self.state.history = entries;
+        if self.screen() == Screen::Logs {
+            self.refresh();
+        }
     }
 }

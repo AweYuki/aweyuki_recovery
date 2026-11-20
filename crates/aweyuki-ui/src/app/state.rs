@@ -31,6 +31,10 @@ pub struct State {
     pub wipe: [bool; WIPES.len()],
     /// The phone has a cache partition, which the wipe page then offers.
     pub cache_partition: bool,
+    /// The phone exposes an `frp` partition, which the wipe page offers.
+    pub frp_partition: bool,
+    /// The phone exposes an `efisp` partition, which the wipe page offers.
+    pub efisp_partition: bool,
     /// How many folders of its own the phone keeps logs in on the data
     /// partition, which erasing the logs takes in.
     pub phone_logs: usize,
@@ -182,6 +186,17 @@ pub struct State {
     pub aweyuki_job: Option<AweyukiJob>,
     /// How fast data went over the network joined in the last second.
     pub traffic: Traffic,
+    /// Root Manager state and opened module id.
+    pub root: Option<RootOverview>,
+    pub root_module: Option<String>,
+    /// Network file-sharing HTTP server state.
+    pub share: ShareState,
+    /// Runtime plugins discovered under `/aweyuki/plugins` and `/sdcard/Aweyuki/plugins`.
+    pub plugins: Option<Vec<aweyuki_install::plugins::PluginManifest>>,
+    /// Active or finished plugin run.
+    pub plugin_run: Option<PluginRun>,
+    /// Recent flash/install/wipe history entries shown on the logs page.
+    pub history: Vec<aweyuki_install::history::Entry>,
 }
 
 impl Default for State {
@@ -200,6 +215,8 @@ impl Default for State {
             reboot: 0,
             wipe: [false; WIPES.len()],
             cache_partition: false,
+            frp_partition: false,
+            efisp_partition: false,
             phone_logs: 0,
             pattern: Vec::new(),
             confirm: 0.0,
@@ -267,6 +284,12 @@ impl Default for State {
             aweyuki_check: AweyukiCheck::Idle,
             aweyuki_job: None,
             traffic: Traffic::default(),
+            root: None,
+            root_module: None,
+            share: ShareState::default(),
+            plugins: None,
+            plugin_run: None,
+            history: Vec::new(),
         }
     }
 }

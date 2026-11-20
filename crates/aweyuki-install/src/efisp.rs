@@ -5,7 +5,7 @@ use anyhow::{bail, ensure, Context, Result};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(target_os = "android")]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 #[cfg(target_os = "android")]
 use std::path::{Path, PathBuf};
 
@@ -97,6 +97,7 @@ pub fn write_and_verify<R: Read + Seek>(source: &mut R, dest: &mut File, bytes: 
         remaining -= count as u64;
     }
     dest.sync_all().context("sync efisp")?;
+    aweyuki_block::drop_cache(dest).context("drop cached efisp pages")?;
 
     source.seek(SeekFrom::Start(0))?;
     dest.seek(SeekFrom::Start(0))?;
@@ -171,6 +172,74 @@ pub fn flash(efi_path: &Path) -> Result<u64> {
     Ok(bytes)
 }
 
+/// Zero-fill `bytes` from the start of `dest`, sync to disk, and verify every
+/// byte reads back as zero.
+///
+/// # Errors
+///
+/// Returns an error if writing, syncing, or read-back verification fails.
+pub fn zero_and_verify(dest: &mut File, bytes: u64) -> Result<()> {
+    ensure!(bytes > 0, "partition size is zero");
+    dest.seek(SeekFrom::Start(0))?;
+
+    let zeros = vec![0u8; CHUNK_SIZE];
+    let mut remaining = bytes;
+    while remaining > 0 {
+        let count = usize::try_from(remaining.min(CHUNK_SIZE as u64)).expect("bounded by CHUNK_SIZE");
+        dest.write_all(&zeros[..count]).context("write zeros")?;
+        remaining -= count as u64;
+    }
+    dest.sync_all().context("sync zeroed partition")?;
+    aweyuki_block::drop_cache(dest).context("drop cached partition pages")?;
+
+    dest.seek(SeekFrom::Start(0))?;
+    let mut buf = vec![0u8; CHUNK_SIZE];
+    let mut remaining = bytes;
+    while remaining > 0 {
+        let count = usize::try_from(remaining.min(CHUNK_SIZE as u64)).expect("bounded by CHUNK_SIZE");
+        dest.read_exact(&mut buf[..count]).context("read back zeroed partition")?;
+        if buf[..count].iter().any(|&b| b != 0) {
+            bail!("partition zero verification failed");
+        }
+        remaining -= count as u64;
+    }
+    Ok(())
+}
+
+/// Wipe the non-slotted `efisp` partition by zeroing and verifying all bytes.
+///
+/// # Errors
+///
+/// Returns an error if `efisp` cannot be found, is in use (`O_EXCL`), or
+/// zeroing/verification fails.
+#[cfg(target_os = "android")]
+pub fn wipe() -> Result<u64> {
+    let (dev_path, expected_bytes) = discover_partition()?;
+    let resolved = std::fs::canonicalize(&dev_path).with_context(|| format!("resolve {}", dev_path.display()))?;
+    ensure!(
+        crate::frp::is_block_path(&resolved),
+        "resolved efisp path {} is outside /dev/block",
+        resolved.display()
+    );
+    let expected_meta = std::fs::metadata(&resolved).with_context(|| format!("stat {}", resolved.display()))?;
+    ensure!(expected_meta.file_type().is_block_device(), "{} is not a block device", resolved.display());
+    let expected_rdev = expected_meta.rdev();
+
+    let mut dst = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(&resolved)
+        .with_context(|| format!("open {} exclusively for wiping", resolved.display()))?;
+    let meta = dst.metadata().context("stat opened efisp device")?;
+    ensure!(meta.file_type().is_block_device() && meta.rdev() == expected_rdev, "efisp device changed before wipe");
+    let actual_bytes = dst.seek(SeekFrom::End(0)).context("find efisp size")?;
+    ensure!(actual_bytes == expected_bytes, "efisp size changed before wipe");
+
+    zero_and_verify(&mut dst, expected_bytes)?;
+    Ok(expected_bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,5 +292,18 @@ mod tests {
 
         let too_large = synthetic_arm64_efi(PE_MACHINE_ARM64, PE32_PLUS_MAGIC, SUBSYSTEM_EFI_APPLICATION, 128);
         assert!(validate_arm64_efi(&mut Cursor::new(too_large), 256).is_err());
+    }
+
+    #[test]
+    fn zero_and_verify_clears_and_verifies_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("part.img");
+        std::fs::write(&path, vec![0x5Au8; 128 * 1024 + 321]).unwrap();
+        let size = std::fs::metadata(&path).unwrap().len();
+        let mut file = std::fs::OpenOptions::new().read(true).write(true).open(&path).unwrap();
+        zero_and_verify(&mut file, size).unwrap();
+        let after = std::fs::read(&path).unwrap();
+        assert_eq!(after.len() as u64, size);
+        assert!(after.iter().all(|&b| b == 0));
     }
 }

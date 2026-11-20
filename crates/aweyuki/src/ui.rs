@@ -37,8 +37,8 @@ use aweyuki_systems::Who;
 use aweyuki_ui::app::{
     App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ClashChoice, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp,
     FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place,
-    RenameRefused, Screen, Shot, AweyukiEnd, AweyukiStage, Target, UsbDrive, UsbLink, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS,
-    INSTALL_UNFINISHED, USB_DRIVE,
+    PluginEnd, RenameRefused, RootOverview, Screen, ShareRoot, Shot, Source, AweyukiEnd, AweyukiStage, Target, UsbDrive, UsbLink, Wipe,
+    DATA_OPENING, DATA_PARTITION, DOWNLOADS, INSTALL_UNFINISHED, USB_DRIVE,
 };
 use aweyuki_ui::settings::Keeper;
 use aweyuki_ui::surface::kms::KmsSurface;
@@ -47,8 +47,10 @@ use aweyuki_vab::{Merge, Standing};
 use std::collections::{BTreeSet, VecDeque};
 use std::fs;
 use std::io::Write;
+use std::net::SocketAddr;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -373,7 +375,11 @@ fn export_logs(recovery: bool, kernel: bool, into: &Path, zone: usize) -> Result
     };
     if recovery {
         save("recovery.log", &fs::read(aweyuki_sys::LOG).with_context(|| format!("read {}", aweyuki_sys::LOG))?)?;
-        for (name, path) in [("update_engine.log", aweyuki_install::ENGINE_LOG), ("install-script.log", aweyuki_install::SCRIPT_LOG)] {
+        for (name, path) in [
+            ("update_engine.log", aweyuki_install::ENGINE_LOG),
+            ("install-script.log", aweyuki_install::SCRIPT_LOG),
+            ("flash-history.log", aweyuki_install::history::RUN_HISTORY),
+        ] {
             match fs::read(path) {
                 Ok(log) => save(name, &log)?,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -626,6 +632,8 @@ fn part(step: Step) -> Part {
         Step::Art => Part::Art,
         Step::Logs => Part::Logs,
         Step::Updates => Part::Updates,
+        Step::Frp => Part::Frp,
+        Step::Efisp => Part::Efisp,
     }
 }
 
@@ -641,6 +649,8 @@ fn step(choice: Wipe) -> Step {
         Wipe::Cache => Step::Cache,
         Wipe::Logs => Step::Logs,
         Wipe::Updates => Step::Updates,
+        Wipe::Frp => Step::Frp,
+        Wipe::Efisp => Step::Efisp,
         Wipe::All => unreachable!("everything is a factory reset, not a part of one"),
     }
 }
@@ -651,9 +661,109 @@ fn erase_stop(stop: wipe::Stop) -> EraseStop {
         wipe::Stop::Refused(wipe::Refusal::Update(hold)) => EraseStop::Update(hold),
         wipe::Stop::Refused(wipe::Refusal::NotRebuilt) => EraseStop::NotRebuilt,
         wipe::Stop::Refused(wipe::Refusal::NoCache) => EraseStop::NoCache,
+        wipe::Stop::Refused(wipe::Refusal::NoFrp) => EraseStop::NoFrp,
+        wipe::Stop::Refused(wipe::Refusal::NoEfisp) => EraseStop::NoEfisp,
         wipe::Stop::Closed(why) => EraseStop::Closed(why),
         wipe::Stop::Locked(users) => EraseStop::Locked(users),
         wipe::Stop::Failed(step, e) => EraseStop::Failed(part(step), format!("{e:#}")),
+    }
+}
+
+enum PluginEvent {
+    Line(String),
+    Ended(PluginEnd),
+}
+
+struct PluginWorker {
+    told: aweyuki_sys::worker::Told<PluginEvent>,
+    cancel: Arc<AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl PluginWorker {
+    fn start(plugin: aweyuki_install::plugins::Plugin) -> Result<Self> {
+        let (teller, told) = aweyuki_sys::worker::telling::<PluginEvent>()?;
+        let cancel = Arc::new(AtomicBool::new(false));
+        let stop = cancel.clone();
+        let thread = std::thread::Builder::new()
+            .name("aweyuki-plugin".into())
+            .spawn(move || {
+                let end = match plugin.run_streaming(&[], &stop, |line| {
+                    let _ = teller.tell(PluginEvent::Line(line));
+                }) {
+                    Ok(_) if stop.load(Ordering::Acquire) => PluginEnd::Stopped,
+                    Ok(status) => PluginEnd::Exited(status.code().unwrap_or(-1)),
+                    Err(e) => PluginEnd::Failed(format!("{e:#}")),
+                };
+                let _ = teller.tell(PluginEvent::Ended(end));
+            })
+            .context("start plugin thread")?;
+        Ok(PluginWorker { told, cancel, thread: Some(thread) })
+    }
+
+    fn fd(&self) -> std::os::fd::RawFd {
+        self.told.fd()
+    }
+
+    fn events(&self) -> Vec<PluginEvent> {
+        self.told.take()
+    }
+
+    fn stop(&self) {
+        self.cancel.store(true, Ordering::Release);
+    }
+}
+
+impl Drop for PluginWorker {
+    fn drop(&mut self) {
+        self.stop();
+        if let Some(handle) = self.thread.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+fn read_root() -> RootOverview {
+    let kernel = aweyuki_info::kernel_release().unwrap_or_default();
+    let kmi = aweyuki_install::root::resolve_kmi(&kernel, aweyuki_install::root::SUPPORTED_KMIS);
+    let adb = Path::new(aweyuki_install::root::DEFAULT_ADB_ROOT);
+    let providers = aweyuki_install::root::detect_providers(adb);
+    let modules = aweyuki_install::root::list_modules(adb).map_err(|e| format!("{e:#}"));
+    RootOverview { kernel, kmi, providers, modules }
+}
+
+fn set_root_module(op: impl FnOnce(&Path) -> Result<()>) -> Result<RootOverview, String> {
+    let adb = Path::new(aweyuki_install::root::DEFAULT_ADB_ROOT);
+    op(adb).map(|()| read_root()).map_err(|e| format!("{e:#}"))
+}
+
+fn discover_plugins() -> Vec<aweyuki_install::plugins::Plugin> {
+    let dirs: Vec<&Path> = aweyuki_install::plugins::DEFAULT_PLUGIN_DIRS.iter().map(Path::new).collect();
+    aweyuki_install::plugins::discover(&dirs)
+}
+
+fn install_history(outcome: &aweyuki_install::Outcome) -> Option<(String, String, String)> {
+    use aweyuki_install::Outcome;
+    match outcome {
+        Outcome::Installed { slot, wipe } => Some((
+            "install".into(),
+            format!("slot {}", slot.letter()),
+            if *wipe { "ok (wipe)".into() } else { "ok".into() },
+        )),
+        Outcome::Flashed { partition, slots } => {
+            let target = if slots.is_empty() {
+                (*partition).to_string()
+            } else {
+                let letters: Vec<_> = slots.iter().map(|s| s.letter()).collect();
+                format!("{partition} ({})", letters.join("/"))
+            };
+            Some(("flash".into(), target, "ok".into()))
+        }
+        Outcome::Ran { .. } => Some(("script".into(), "package".into(), "ok".into())),
+        Outcome::SystemInstalled { name } => Some(("system".into(), name.clone(), "ok".into())),
+        Outcome::Cancelled => None,
+        Outcome::Refused(r) => Some(("install".into(), "package".into(), format!("refused: {r:?}"))),
+        Outcome::Failed(f) => Some(("install".into(), "package".into(), format!("failed: {f:?}"))),
     }
 }
 
@@ -1216,6 +1326,10 @@ struct Pages<'a> {
     aweyuki_updater: Option<updates::Worker>,
     /// The terminal page's shell, from when the page first asks for one.
     shell: Option<pty::Shell>,
+    /// Background HTTP/1.1 file-sharing server while Share is turned on.
+    share_server: Option<aweyuki_net::share::Server>,
+    /// Streaming worker for an active runtime plugin.
+    plugin_worker: Option<PluginWorker>,
     /// The USB drive plugged in, looked for each second.
     plugged: Option<Plugged>,
     seen: Option<String>,
@@ -1335,6 +1449,8 @@ impl<'a> Pages<'a> {
             }
         };
         app.state.phone_logs = cfg.wipe.logs.len();
+        app.state.frp_partition = aweyuki_install::frp::discover_partition().is_ok();
+        app.state.efisp_partition = aweyuki_install::efisp::discover_partition().is_ok();
         // Aweyuki lives in a recovery partition of each slot where the phone
         // has them, and the install page then offers to keep it there. Such a
         // phone holds a second system where it also has boot and init_boot
@@ -1423,6 +1539,8 @@ impl<'a> Pages<'a> {
             aweyuki_checker: None,
             aweyuki_updater: None,
             shell: None,
+            share_server: None,
+            plugin_worker: None,
             plugged: None,
             seen: None,
             drive_at: Instant::now(),
@@ -1608,6 +1726,7 @@ impl<'a> Pages<'a> {
         self.aweyuki_told(now)?;
         self.decrypt_told(now)?;
         self.shell_told()?;
+        self.plugin_told(now);
         self.take_in(drive_told, now)?;
         self.offer_storage(now)
     }
@@ -1803,6 +1922,9 @@ impl<'a> Pages<'a> {
         if let Some(s) = &self.systems_worker {
             fds.push(s.fd());
         }
+        if let Some(p) = &self.plugin_worker {
+            fds.push(p.fd());
+        }
         fds.push(self.readings.fd());
         wait(&fds, timeout)
     }
@@ -1826,6 +1948,8 @@ impl<'a> Pages<'a> {
             || self.downloader.is_some()
             || self.aweyuki_checker.is_some()
             || self.aweyuki_updater.is_some()
+            || self.share_server.is_some()
+            || self.plugin_worker.is_some()
             || systems_busy;
         let joining = self.app.state.wlan.as_ref().and_then(|w| w.joined.as_ref()).is_some_and(|j| matches!(j.stage, Joining::Joining | Joining::Addressing));
         let running = match &self.shell {
@@ -1894,7 +2018,15 @@ impl Pages<'_> {
                 Told::Reboot(target) => self.rescue_leaves = Some(rescue_target(target)),
                 _ => {}
             }
+            let history = match &ev {
+                Told::Done(o) => install_history(o),
+                Told::Finished(o) if self.app.state.source != Source::Rescue => install_history(o),
+                _ => None,
+            };
             self.app.install(ev, now);
+            if let Some((action, target, outcome)) = history {
+                self.record_history(action, target, outcome);
+            }
             if finished {
                 self.installer = None;
                 self.sideloading = false;
@@ -1973,6 +2105,18 @@ impl Pages<'_> {
                 wipe::Event::Ended(outcome) => {
                     let said = outcome.as_ref().map_or_else(wipe::said, |_| "done".to_string());
                     aweyuki_sys::kmsg(&format!("erasing ended: {said}"))?;
+                    let target = if self.app.state.erase.reset {
+                        "factory-reset".to_string()
+                    } else {
+                        self.app
+                            .state
+                            .erase
+                            .parts
+                            .iter()
+                            .map(|p| format!("{p:?}").to_lowercase())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    };
                     // As with the phone's own recovery, the request is
                     // done with either way, so a restart starts the
                     // system rather than erasing again. A factory
@@ -1986,10 +2130,17 @@ impl Pages<'_> {
                         self.leave_at = Some(now + LEAVE_AFTER_MS);
                     }
                     self.app.erase_ended(outcome.map_err(erase_stop), now);
+                    self.record_history("wipe".into(), target, said);
                     // Users of a data partition erased whole have no
                     // files left to open.
                     if self.app.state.data == Data::Erased {
                         self.closed.clear();
+                        if self.app.state.share.root == ShareRoot::Storage
+                            && let Some(s) = self.share_server.take()
+                        {
+                            s.stop();
+                            self.app.set_share(false, None, None);
+                        }
                     }
                     erased = true;
                 }
@@ -2002,6 +2153,70 @@ impl Pages<'_> {
             self.keeper.remade();
         }
         Ok(())
+    }
+
+    fn share_ip(&self) -> Option<String> {
+        if let Some(wlan) = &self.app.state.wlan
+            && let Some(joined) = &wlan.joined
+            && let Joining::Connected(link) = &joined.stage
+        {
+            return Some(link.address.to_string());
+        }
+        let configured = self.cfg.wlan.as_ref().map(|w| w.interface.as_str());
+        for iface in configured.into_iter().chain(["wlan0", "usb0", "rndis0", "ncm0"]) {
+            if let Ok(ip) = aweyuki_net::iface::ipv4_address(iface)
+                && !ip.is_unspecified()
+                && !ip.is_loopback()
+            {
+                return Some(ip.to_string());
+            }
+        }
+        None
+    }
+
+    fn record_history(&self, action: String, target: String, outcome: String) {
+        let entry = aweyuki_install::history::Entry {
+            timestamp: unix_now().unwrap_or(0),
+            action,
+            target,
+            outcome,
+        };
+        if let Err(e) = aweyuki_install::history::record(Path::new(aweyuki_install::history::RUN_HISTORY), &entry) {
+            let _ = aweyuki_sys::kmsg(&format!("flash history log write failed: {e:#}"));
+        }
+        if self.app.state.data.storage_open()
+            && let Err(e) = aweyuki_install::history::record(Path::new(aweyuki_install::history::STORAGE_HISTORY), &entry)
+        {
+            let _ = aweyuki_sys::kmsg(&format!("persistent flash history write failed: {e:#}"));
+        }
+    }
+
+    fn read_history(&self) -> Vec<aweyuki_install::history::Entry> {
+        let mut paths = vec![Path::new(aweyuki_install::history::RUN_HISTORY)];
+        if self.app.state.data.storage_open() {
+            paths.push(Path::new(aweyuki_install::history::STORAGE_HISTORY));
+        }
+        aweyuki_install::history::merge_recent(&paths, 50)
+    }
+
+    fn plugin_told(&mut self, now: u64) {
+        let events = self.plugin_worker.as_ref().map(PluginWorker::events).unwrap_or_default();
+        let mut ended = false;
+        for ev in events {
+            match ev {
+                PluginEvent::Line(line) => self.app.plugin_output(line),
+                PluginEvent::Ended(end) => {
+                    self.app.plugin_ended(end, now);
+                    ended = true;
+                }
+            }
+        }
+        if ended
+            && let Some(mut worker) = self.plugin_worker.take()
+            && let Some(handle) = worker.thread.take()
+        {
+            let _ = handle.join();
+        }
     }
 
     /// What copying, moving or deleting told; once it has ended, the
@@ -2524,8 +2739,13 @@ impl Pages<'_> {
                 }
             }
             Effect::Flash { partition, pick } => {
-                let slot = aweyuki_vab::current_slot()?.context("not an A/B phone")?;
-                self.installer.as_ref().context("no installer holds an image")?.flash(partition, pick.slots(slot));
+                let slots = if partition == "efisp" {
+                    Vec::new()
+                } else {
+                    let slot = aweyuki_vab::current_slot()?.context("not an A/B phone")?;
+                    pick.slots(slot)
+                };
+                self.installer.as_ref().context("no installer holds an image")?.flash(partition, slots);
             }
             Effect::Cancel => self.cancel_install(now)?,
             Effect::ReadMounts => self.app.set_mounts(self.mounts()),
@@ -2687,6 +2907,77 @@ impl Pages<'_> {
             }
             Effect::EnterRecovery => self.enter_recovery()?,
             Effect::FileTransfer(on) => self.file_transfer(on, now)?,
+            Effect::ReadRoot => self.app.set_root(read_root()),
+            Effect::RootSetEnabled { id, enabled } => {
+                let outcome = set_root_module(|adb| {
+                    if enabled {
+                        aweyuki_install::root::enable_module(adb, &id)
+                    } else {
+                        aweyuki_install::root::disable_module(adb, &id)
+                    }
+                });
+                self.app.root_changed(outcome, now);
+            }
+            Effect::RootSetRemove { id, remove } => {
+                let outcome = set_root_module(|adb| {
+                    if remove {
+                        aweyuki_install::root::mark_module_for_removal(adb, &id)
+                    } else {
+                        aweyuki_install::root::clear_module_removal(adb, &id)
+                    }
+                });
+                self.app.root_changed(outcome, now);
+            }
+            Effect::Share { on, root, port } => {
+                if let Some(s) = self.share_server.take() {
+                    s.stop();
+                }
+                if on {
+                    let dir = match root {
+                        ShareRoot::Storage => PathBuf::from(aweyuki_crypto::data::SDCARD),
+                        ShareRoot::Root => PathBuf::from("/"),
+                    };
+                    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+                    match aweyuki_net::share::Server::start(dir, addr) {
+                        Ok(server) => {
+                            self.share_server = Some(server);
+                            self.app.set_share(true, self.share_ip(), None);
+                        }
+                        Err(e) => {
+                            let _ = aweyuki_sys::kmsg(&format!("share server failed: {e:#}"));
+                            self.app.set_share(false, None, Some(format!("{e:#}")));
+                        }
+                    }
+                } else {
+                    self.app.set_share(false, None, None);
+                }
+            }
+            Effect::ReadPlugins => {
+                let manifests = discover_plugins().into_iter().map(|p| p.manifest).collect();
+                self.app.set_plugins(manifests);
+            }
+            Effect::RunPlugin(id) => {
+                if self.plugin_worker.is_some() {
+                    self.app.report("a plugin is already running", now);
+                } else if let Some(plugin) = discover_plugins().into_iter().find(|p| p.manifest.id == id) {
+                    let name = plugin.manifest.name.clone();
+                    match PluginWorker::start(plugin) {
+                        Ok(worker) => {
+                            self.plugin_worker = Some(worker);
+                            self.app.plugin_started(id, name);
+                        }
+                        Err(e) => self.app.report(&format!("{e:#}"), now),
+                    }
+                } else {
+                    self.app.report(&format!("plugin not found: {id}"), now);
+                }
+            }
+            Effect::StopPlugin => {
+                if let Some(worker) = &self.plugin_worker {
+                    worker.stop();
+                }
+            }
+            Effect::ReadHistory => self.app.set_history(self.read_history()),
         }
         Ok(Vec::new())
     }
@@ -2730,7 +3021,7 @@ impl Pages<'_> {
         self.erase_leaves = false;
         if chosen.contains(&Wipe::All) {
             self.eraser = Some(factory_reset(&mut self.app, false, false, None)?);
-        } else if chosen.iter().any(|&w| w != Wipe::Cache) && self.app.state.data == Data::Erased {
+        } else if chosen.iter().any(|&w| !matches!(w, Wipe::Cache | Wipe::Frp | Wipe::Efisp)) && self.app.state.data == Data::Erased {
             self.app.erase_started(false, false, Vec::new());
             self.app.erase_ended(Err(EraseStop::Erased), now);
         } else {

@@ -81,6 +81,9 @@ Chúng cũng có `avbctl` và `resetprop` để tắt các kiểm tra của veri
 - Khởi động lại vào hệ thống, recovery, fastboot, bootloader hoặc EDL, và chuyển khe
 - Giao diện sáng và tối; tiếng Trung giản thể, tiếng Trung phồn thể, tiếng Anh và
   tiếng Việt
+- Flash trực tiếp ảnh ARM64 `.efi` vào phân vùng `efisp` (không phân khe) và xóa kiểm tra từng byte cho phân vùng `efisp` / `frp`
+- Trình quản lý Root (nhận diện KMI nhân, phát hiện Magisk/KernelSU/APatch và bật/tắt/gỡ mô-đun trong `/data/adb/modules/*`)
+- Chia sẻ tệp qua mạng HTTP/1.1 hỗ trợ tải lên/tải xuống trên trình duyệt, tiện ích mở rộng thời gian chạy với luồng đầu ra trực tiếp và nhật ký lịch sử Flash/Xóa trong trang Nhật ký
 
 ### Không có hệ thống
 

@@ -976,7 +976,7 @@ fn main() -> Result<()> {
         ("92-wipe-dark-parts-cache", Screen::Wipe, true, &|app| {
             app.state.cache_partition = true;
             app.state.phone_logs = 7;
-            app.state.wipe = [false, false, true, true, true, false, true, false, true];
+            app.state.wipe = [false, false, true, true, true, false, true, false, true, false, false];
         }),
         ("93-erase-light-media", Screen::Erase, false, &|app| {
             app.erase_started(false, false, vec![Part::Media, Part::AppCaches, Part::SystemCaches, Part::Logs]);

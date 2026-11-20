@@ -505,6 +505,8 @@ pub fn part(l: Lang, p: Part) -> &'static str {
         Part::Art => ["ART 缓存", "ART 快取", "ART cache"],
         Part::Logs => ["日志", "記錄", "Logs"],
         Part::Updates => ["下载的更新包", "下載的更新檔", "Downloaded updates"],
+        Part::Frp => ["FRP 分区", "FRP 分割區", "FRP partition"],
+        Part::Efisp => ["EFISP 分区", "EFISP 分割區", "EFISP partition"],
     })
 }
 
@@ -522,6 +524,8 @@ fn part_in_sentence(p: Part) -> &'static str {
         Part::Art => "the ART cache",
         Part::Logs => "the logs",
         Part::Updates => "the downloaded updates",
+        Part::Frp => "the FRP partition",
+        Part::Efisp => "the EFISP partition",
     }
 }
 
@@ -610,6 +614,8 @@ pub fn erase_stop(l: Lang, s: &EraseStop) -> (String, Option<String>) {
             None,
         ),
         EraseStop::NoCache => (said(["本机没有 cache 分区。", "本機沒有 cache 分割區。", "This phone has no cache partition."]), None),
+        EraseStop::NoFrp => (said(["本机没有 FRP 分区。", "本機沒有 FRP 分割區。", "This phone has no FRP partition."]), None),
+        EraseStop::NoEfisp => (said(["本机没有 EFISP 分区。", "本機沒有 EFISP 分割區。", "This phone has no EFISP partition."]), None),
         EraseStop::Erased => (
             said([
                 "data 分区已清空，下次开机时将重新创建，暂无可清除的内容。",
@@ -944,6 +950,7 @@ pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, &'static str) {
         }
         ImageKind::Dtbo => (["dtbo 镜像", "dtbo 映像檔", "dtbo image"], ["包含设备树叠加层", "包含裝置樹疊加層", "Holds device tree overlays"]),
         ImageKind::Vbmeta => (["vbmeta 镜像", "vbmeta 映像檔", "vbmeta image"], ["包含启动验证数据", "包含啟動驗證資料", "Holds verified boot data"]),
+        ImageKind::Efisp => (["EFI 应用", "EFI 應用程式", "EFI application"], ["ARM64 PE32+ EFI 应用", "ARM64 PE32+ EFI 應用程式", "Holds an ARM64 PE32+ EFI application"]),
     };
     (l.pick(name), l.pick(holds))
 }
@@ -959,6 +966,7 @@ pub fn partition_role(l: Lang, name: &str) -> &'static str {
         "vbmeta" => ["启动验证数据", "啟動驗證資料", "Verified boot data"],
         "vbmeta_system" => ["系统分区的验证数据", "系統分割區的驗證資料", "Verification data of the system partitions"],
         "vbmeta_vendor" => ["厂商分区的验证数据", "廠商分割區的驗證資料", "Verification data of the vendor partitions"],
+        "efisp" => ["EFI 系统分区", "EFI 系統分割區", "EFI system partition"],
         _ => ["分区", "分割區", "Partition"],
     })
 }
@@ -1964,6 +1972,10 @@ mod tests {
         assert_eq!(update_value(Lang::Vi, &Standing::None), "Không có");
         assert_eq!(erase_stop(Lang::Vi, &EraseStop::Failed(Part::Data, "x".into())).0, "Không xóa được phân vùng dữ liệu.");
         assert_eq!(erase_stop(Lang::Vi, &EraseStop::Failed(Part::Art, "x".into())).0, "Không xóa được bộ nhớ đệm ART.");
+        assert_eq!(erase_stop(Lang::Vi, &EraseStop::Failed(Part::Frp, "x".into())).0, "Không xóa được phân vùng FRP.");
+        assert_eq!(erase_stop(Lang::Vi, &EraseStop::Failed(Part::Efisp, "x".into())).0, "Không xóa được phân vùng EFISP.");
+        assert_eq!(image_kind(Lang::Vi, ImageKind::Efisp).0, "Ứng dụng EFI");
+        assert_eq!(partition_role(Lang::Vi, "efisp"), "Phân vùng hệ thống EFI");
         let repair = Verb::of(&PartKind::Repair);
         assert_eq!(
             [repair.going(Lang::Vi), repair.complete(Lang::Vi), repair.failed(Lang::Vi), repair.not_done(Lang::Vi)],

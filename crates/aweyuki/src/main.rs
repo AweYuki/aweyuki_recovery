@@ -100,6 +100,12 @@ enum Cmd {
     /// and verify every written byte.
     #[cfg(target_os = "android")]
     Efisp { file: PathBuf },
+    /// Zero-fill and verify the non-slotted efisp partition.
+    #[cfg(target_os = "android")]
+    EfispWipe,
+    /// Zero-fill and verify the Factory Reset Protection (frp) partition.
+    #[cfg(target_os = "android")]
+    FrpWipe,
     /// Inspect kernel KMI, installed root frameworks, and /data/adb/modules.
     Root,
     /// Enable, disable, or mark a root module for removal on next boot.
@@ -309,6 +315,18 @@ fn main() -> Result<()> {
         Cmd::Efisp { file } => {
             let bytes = aweyuki_install::efisp::flash(&file)?;
             println!("flashed {bytes} bytes to efisp and verified");
+            Ok(())
+        }
+        #[cfg(target_os = "android")]
+        Cmd::EfispWipe => {
+            let bytes = aweyuki_install::efisp::wipe()?;
+            println!("wiped {bytes} bytes of efisp and verified");
+            Ok(())
+        }
+        #[cfg(target_os = "android")]
+        Cmd::FrpWipe => {
+            let bytes = aweyuki_install::frp::wipe()?;
+            println!("wiped {bytes} bytes of frp and verified");
             Ok(())
         }
         Cmd::Root => {

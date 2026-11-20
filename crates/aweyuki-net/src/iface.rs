@@ -76,6 +76,22 @@ pub fn hardware_address(interface: &str) -> Result<[u8; 6]> {
     Ok(mac)
 }
 
+/// The interface's IPv4 address.
+pub fn ipv4_address(interface: &str) -> Result<Ipv4Addr> {
+    let fd = socket()?;
+    let mut r = request(interface)?;
+    ioctl(
+        &fd,
+        libc::SIOCGIFADDR as libc::c_int,
+        (&mut r as *mut libc::ifreq).cast(),
+        &format!("read the IPv4 address of {interface}"),
+    )?;
+    let addr = unsafe { r.ifr_ifru.ifru_addr };
+    let inet = unsafe { std::mem::transmute::<libc::sockaddr, libc::sockaddr_in>(addr) };
+    anyhow::ensure!(i32::from(inet.sin_family) == libc::AF_INET, "{interface} has no IPv4 address");
+    Ok(Ipv4Addr::from(inet.sin_addr.s_addr.to_ne_bytes()))
+}
+
 /// Bring the interface up, or take it down.
 pub fn set_up(interface: &str, up: bool) -> Result<()> {
     let fd = socket()?;

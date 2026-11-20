@@ -1,9 +1,9 @@
 use crate::app::{
     Action, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, Damage, Data, Dock, DownloadEnd, EraseStop, Field, FileKind,
-    FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, Pick, Place, Rows, Screen,
-    AweyukiCheck, AweyukiEnd, AweyukiJob, AweyukiStage, Slider, Source, State, Switch, SystemsWork, Target, UsbDrive, UsbLink, Wipe, ADDABLE,
-    BACKUP_PARTS, DATA_ERASED, DATA_PARTITION, DOWNLOADS, FASTBOOT_CHOICES, SCREEN_OFF, TARGETS, TIME_ZONES, USB_DRIVE_UNREADABLE,
-    USB_DRIVE_WANTED, WIPES, installs, starting,
+    FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, Pick, Place, PluginEnd,
+    Rows, Screen, ShareRoot, AweyukiCheck, AweyukiEnd, AweyukiJob, AweyukiStage, Slider, Source, State, Switch, SystemsWork, Target,
+    UsbDrive, UsbLink, Wipe, ADDABLE, BACKUP_PARTS, DATA_ERASED, DATA_PARTITION, DOWNLOADS, FASTBOOT_CHOICES, SCREEN_OFF, TARGETS,
+    TIME_ZONES, USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, WIPES, installs, starting,
 };
 use crate::canvas::Canvas;
 use crate::color::Rgba;
@@ -109,6 +109,11 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::WlanPassword => wlan_password(cx),
         Screen::WlanNetwork => wlan_network(cx),
         Screen::WlanAdd => wlan_add(cx),
+        Screen::Root => root(cx),
+        Screen::RootModule => root_module(cx),
+        Screen::Share => share(cx),
+        Screen::Plugins => plugins(cx),
+        Screen::PluginRun => plugin_run(cx),
     }
 }
 
@@ -1226,14 +1231,18 @@ pub fn installing(cx: &Ctx) -> Frame {
             let parts = widgets::list(&mut c, t, f, y, &rows);
             let choose: Vec<Action> = (0..choice.partitions.len()).map(Action::FlashPartition).collect();
             out.extend(hits(&parts.rows, &choose));
-            let y = widgets::section(&mut c, t, f, parts.bottom, l.pick(["槽位", "槽位", "Slot"]));
-            let titles = Pick::ALL.map(|p| pick_title(l, p, i.slot));
-            let rows: Vec<Row> =
-                Pick::ALL.iter().zip(&titles).map(|(p, title)| Row::new(title).trail(Trail::Check(*p == choice.pick))).collect();
-            let picks = widgets::list(&mut c, t, f, y, &rows);
-            out.extend(hits(&picks.rows, &Pick::ALL.map(Action::FlashSlots)));
+            let mut bottom = parts.bottom;
+            if choice.kind.slotted() {
+                let y = widgets::section(&mut c, t, f, bottom, l.pick(["槽位", "槽位", "Slot"]));
+                let titles = Pick::ALL.map(|p| pick_title(l, p, i.slot));
+                let rows: Vec<Row> =
+                    Pick::ALL.iter().zip(&titles).map(|(p, title)| Row::new(title).trail(Trail::Check(*p == choice.pick))).collect();
+                let picks = widgets::list(&mut c, t, f, y, &rows);
+                out.extend(hits(&picks.rows, &Pick::ALL.map(Action::FlashSlots)));
+                bottom = picks.bottom;
+            }
             let (label, danger) = confirm_label(Confirm::Flash, cx.state);
-            let track = widgets::confirm(&mut c, t, f, picks.bottom + t.m.dp(28.0), label, danger, s.confirm);
+            let track = widgets::confirm(&mut c, t, f, bottom + t.m.dp(28.0), label, danger, s.confirm);
             out.push(Hit { rect: track, action: Action::Confirm(Confirm::Flash) });
             let note = l.pick(match s.source {
                 Source::Computer => [
@@ -1252,7 +1261,22 @@ pub fn installing(cx: &Ctx) -> Frame {
                     "Flashing writes over what the partition holds. Going back cancels it.",
                 ],
             });
-            widgets::footnote(&mut c, t, f, track.y + track.h, note)
+            let y = widgets::footnote(&mut c, t, f, track.y + track.h, note);
+            if choice.kind.slotted() {
+                y
+            } else {
+                widgets::footnote(
+                    &mut c,
+                    t,
+                    f,
+                    y,
+                    l.pick([
+                        "非 A/B 分区：将直接写入并逐字节回读校验。",
+                        "非 A/B 分割區：將直接寫入並逐位元組回讀驗證。",
+                        "Non-slotted partition: writes directly and verifies every byte read back.",
+                    ]),
+                )
+            }
         }
         Install::Confirming { version, wipe } => {
             let (title, color, icon, detail, which) = if *wipe {
@@ -1504,8 +1528,12 @@ fn finished(
             afterwards_of(c, cx, y, true)
         }
         Outcome::Flashed { partition, slots } => {
-            let slots = fmt::slots(l, slots);
-            let detail = tr!(l, "{partition} 已刷入{slots}。", "{partition} 已刷入{slots}。", "Flashed to {partition} in {slots}.", "Đã flash vào {partition} ở {slots}.");
+            let detail = if slots.is_empty() {
+                tr!(l, "已刷入 {partition} 分区。", "已刷入 {partition} 分割區。", "Flashed to {partition}.", "Đã flash vào phân vùng {partition}.")
+            } else {
+                let slots = fmt::slots(l, slots);
+                tr!(l, "{partition} 已刷入{slots}。", "{partition} 已刷入{slots}。", "Flashed to {partition} in {slots}.", "Đã flash vào {partition} ở {slots}.")
+            };
             let y = widgets::list(c, t, f, top, &[standing(l.pick(["刷入成功", "刷入成功", "Flashed"]), GREEN, Icon::Install, &detail)]).bottom;
             let mut rows = vec![restart];
             let mut acts = vec![Action::RebootTo(Target::System)];
@@ -1625,9 +1653,10 @@ fn afterwards_of(c: &mut Canvas, cx: &Ctx, y: f32, installed: bool) -> f32 {
 
 /// What the wipe page lists of [`WIPES`] beyond everything, under the
 /// partition each is in.
-const WIPE_GROUPS: [(Text, &[Wipe]); 2] = [
+const WIPE_GROUPS: [(Text, &[Wipe]); 3] = [
     (DATA_PART, &[Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates]),
     (["cache 分区", "cache 分割區", "cache partition"], &[Wipe::Cache]),
+    (["其他分区", "其他分割區", "Other partitions"], &[Wipe::Frp, Wipe::Efisp]),
 ];
 
 /// What a factory reset erases, as the wipe page and an update that asks
@@ -1716,6 +1745,24 @@ fn wipe_row(w: Wipe, s: &State) -> (&'static str, String) {
             ["全部内容", "全部內容", "Everything"],
             l.pick(["格式化 cache 分区，保留 recovery 文件夹中的日志", "格式化 cache 分割區，保留 recovery 資料夾中的記錄", "Formats the cache partition, keeping the logs in its recovery folder"]).into(),
         ),
+        Wipe::Frp => (
+            ["FRP 分区", "FRP 分割區", "FRP partition"],
+            l.pick([
+                "清空重置保护分区（frp）并以零校验",
+                "清空重設保護分割區（frp）並以零驗證",
+                "Zero-fills and verifies the Factory Reset Protection partition (frp)",
+            ])
+            .into(),
+        ),
+        Wipe::Efisp => (
+            ["EFISP 分区", "EFISP 分割區", "EFISP partition"],
+            l.pick([
+                "清空 efisp 分区。警告：之后必须格式化 data 分区（将清除内部存储），Android 才能启动",
+                "清空 efisp 分割區。警告：之後必須格式化 data 分割區（將清除內部儲存空間），Android 才能啟動",
+                "Zero-fills efisp. Format Data is required afterwards before Android can boot, erasing internal storage",
+            ])
+            .into(),
+        ),
     };
     (l.pick(title), what)
 }
@@ -1740,7 +1787,16 @@ pub fn wipe(cx: &Ctx) -> Frame {
     ]);
     let mut y = widgets::footnote(&mut c, t, f, all.bottom, note);
     for (title, items) in WIPE_GROUPS {
-        let shown: Vec<Wipe> = items.iter().copied().filter(|&w| w != Wipe::Cache || s.cache_partition).collect();
+        let shown: Vec<Wipe> = items
+            .iter()
+            .copied()
+            .filter(|&w| match w {
+                Wipe::Cache => s.cache_partition,
+                Wipe::Frp => s.frp_partition,
+                Wipe::Efisp => s.efisp_partition,
+                _ => true,
+            })
+            .collect();
         if shown.is_empty() {
             continue;
         }
@@ -2213,11 +2269,16 @@ const RESTORE_COMPLETE: Text = ["恢复完成", "還原完成", "Restore complet
 const RESTORE_FAILED: Text = ["恢复失败", "還原失敗", "Restore failed"];
 const STOP: Text = ["停止", "停止", "Stop"];
 
+const ROOT: Text = ["Root 管理", "Root 管理", "Root manager"];
+const SHARE: Text = ["网络文件共享", "網路檔案共享", "Network file sharing"];
+const PLUGINS: Text = ["插件", "擴充功能", "Plugins"];
+
 /// Tools for the experienced.
 pub fn advanced(cx: &Ctx) -> Frame {
-    let (t, f, l) = (cx.t, cx.f, cx.state.lang);
-    let mut c = page(cx);
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
     let top = t.m.content_top;
+    let share_state = l.pick(if s.share.running { ["已开启", "已開啟", "On"] } else { ["已关闭", "已關閉", "Off"] });
     let tools = widgets::list(&mut c, t, f, top, &[
         Row::new(l.pick(FILES)).icon(BLUE, Icon::Folder),
         Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal),
@@ -2225,6 +2286,9 @@ pub fn advanced(cx: &Ctx) -> Frame {
         Row::new(l.pick(FILESYSTEMS)).icon(RED, Icon::Mount),
         Row::new(l.pick(LOGS)).icon(ORANGE, Icon::Log),
         Row::new(l.pick(UPDATE)).icon(GREEN, Icon::Layers).trail(Trail::Value(update_value(cx))),
+        Row::new(l.pick(ROOT)).icon(PURPLE, Icon::Shield),
+        Row::new(l.pick(SHARE)).icon(BLUE, Icon::Globe).trail(Trail::Value(share_state)),
+        Row::new(l.pick(PLUGINS)).icon(GREEN, Icon::More),
     ]);
     let out = hits(&tools.rows, &[
         Action::Open(Screen::Files),
@@ -2233,8 +2297,11 @@ pub fn advanced(cx: &Ctx) -> Frame {
         Action::Open(Screen::Filesystems),
         Action::Open(Screen::Logs),
         Action::Open(Screen::Update),
+        Action::Open(Screen::Root),
+        Action::Open(Screen::Share),
+        Action::Open(Screen::Plugins),
     ]);
-    Frame::new(t, c, out, l.pick(ADVANCED), top)
+    Frame::new(t, fit(c, t, tools.bottom), out, l.pick(ADVANCED), top)
 }
 
 const RELABEL: Text = ["修复 SELinux 上下文", "修復 SELinux 上下文", "Fix SELinux contexts"];
@@ -3193,6 +3260,10 @@ pub fn row(screen: Screen, cx: &Ctx, i: usize, c: &mut Canvas) {
             let work = cx.state.part_work.as_ref().expect("the page of partition work shows work");
             widgets::output_row(c, cx.t, cx.f, &work.output, i)
         }
+        Screen::PluginRun => {
+            let run = cx.state.plugin_run.as_ref().expect("the plugin output page shows a run");
+            widgets::output_row(c, cx.t, cx.f, &run.output, i)
+        }
         other => unreachable!("{other:?} draws no list row by row"),
     }
 }
@@ -3510,7 +3581,7 @@ pub fn time_zone(cx: &Ctx) -> Frame {
 /// Saving the logs, as a bug report asks for them.
 pub fn logs(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-    let mut c = page(cx);
+    let mut c = long_page(cx);
     let mut out = Vec::new();
     let top = t.m.content_top;
     let y = widgets::section_first(&mut c, t, f, top, l.pick(["日志内容", "記錄內容", "Logs"]));
@@ -3543,7 +3614,26 @@ pub fn logs(cx: &Ctx) -> Frame {
     let y = widgets::footnote(&mut c, t, f, places.bottom, note);
     let export = widgets::button(&mut c, t, f, y + t.m.dp(24.0), l.pick(["导出", "匯出", "Export"]));
     out.push(Hit { rect: export, action: Action::ExportLogs });
-    Frame::new(t, c, out, l.pick(LOGS), top)
+    let mut y = export.y + export.h;
+    if !s.history.is_empty() {
+        y = widgets::section(&mut c, t, f, y, l.pick(["操作历史", "操作記錄", "Recent history"]));
+        let entries: Vec<(String, String)> = s
+            .history
+            .iter()
+            .map(|e| {
+                let title = if e.target.is_empty() {
+                    e.action.clone()
+                } else {
+                    format!("{} · {}", e.action, e.target)
+                };
+                let when = fmt::datetime(l, e.timestamp, s.time_zone);
+                (title, format!("{when} · {}", e.outcome))
+            })
+            .collect();
+        let rows: Vec<Row> = entries.iter().map(|(title, sub)| Row::new(title).subtitle(sub).trail(Trail::None)).collect();
+        y = widgets::list(&mut c, t, f, y, &rows).bottom;
+    }
+    Frame::new(t, fit(c, t, y), out, l.pick(LOGS), top)
 }
 
 /// Aweyuki's licence, in Chinese, ahead of the words the licence gives for
@@ -4040,6 +4130,356 @@ pub fn unhandled(cx: &Ctx) -> Frame {
     let y = widgets::section(&mut c, t, f, y, l.pick(ACTIONS));
     afterwards(&mut c, t, f, l, y, true, &mut out);
     Frame { back: false, ..Frame::new(t, c, out, l.pick(["无法处理该请求", "無法處理這項要求", "Can't handle the request"]), top) }
+}
+
+/// Root Manager: kernel KMI, detected root providers, and installed modules.
+pub fn root(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+    let mut y = top;
+
+    if let Some(root) = &s.root {
+        y = widgets::section_first(&mut c, t, f, y, l.pick(["运行环境", "執行環境", "Environment"]));
+        let kernel = if root.kernel.is_empty() { l.pick(UNREADABLE).to_string() } else { root.kernel.clone() };
+        let kmi = root.kmi.clone().unwrap_or_else(|| l.pick(["未知", "未知", "Unknown"]).to_string());
+        let providers = if root.providers.is_empty() {
+            l.pick(["未检测到", "未偵測到", "None detected"]).to_string()
+        } else {
+            root.providers.iter().map(|p| p.name()).collect::<Vec<_>>().join(", ")
+        };
+        y = widgets::info_card(&mut c, t, f, y, &[
+            (l.pick(["内核版本", "核心版本", "Kernel"]), kernel),
+            ("KMI", kmi),
+            (l.pick(["Root 方案", "Root 方案", "Root framework"]), providers),
+        ]);
+
+        let (below, refresh_rect) = widgets::section_action(
+            &mut c,
+            t,
+            f,
+            y,
+            l.pick(["模块", "模組", "Modules"]),
+            l.pick(["刷新", "重新整理", "Refresh"]),
+        );
+        out.push(Hit { rect: refresh_rect, action: Action::RefreshRoot });
+        y = below;
+
+        match &root.modules {
+            Ok(mods) if !mods.is_empty() => {
+                let subs: Vec<String> = mods
+                    .iter()
+                    .map(|m| {
+                        if m.version.is_empty() {
+                            m.id.clone()
+                        } else {
+                            format!("{} · {}", m.id, m.version)
+                        }
+                    })
+                    .collect();
+                let states: Vec<&str> = mods
+                    .iter()
+                    .map(|m| {
+                        l.pick(if m.remove_pending {
+                            ["待卸载", "待移除", "Pending removal"]
+                        } else if m.enabled {
+                            ["已启用", "已啟用", "Enabled"]
+                        } else {
+                            ["已禁用", "已停用", "Disabled"]
+                        })
+                    })
+                    .collect();
+                let rows: Vec<Row> = mods
+                    .iter()
+                    .zip(&subs)
+                    .zip(&states)
+                    .map(|((m, sub), state)| Row::new(&m.name).subtitle(sub).trail(Trail::Value(state)))
+                    .collect();
+                let block = widgets::list(&mut c, t, f, y, &rows);
+                let acts: Vec<Action> = (0..mods.len()).map(Action::OpenRootModule).collect();
+                out.extend(hits(&block.rows, &acts));
+                y = block.bottom;
+            }
+            Ok(_) | Err(_) => {
+                if matches!(s.data, Data::Closed | Data::Opening | Data::Failed(_) | Data::Erased) {
+                    let row = widgets::list(
+                        &mut c,
+                        t,
+                        f,
+                        y,
+                        &[Row::new(l.pick(DECRYPT_NEEDED)).icon(ORANGE, Icon::Lock)],
+                    );
+                    out.extend(hits(&row.rows, &[Action::Open(Screen::Decrypt)]));
+                    y = row.bottom;
+                }
+                let msg = match &root.modules {
+                    Ok(_) => l.pick([
+                        "在 /data/adb/modules 中未找到任何模块。",
+                        "在 /data/adb/modules 中找不到任何模組。",
+                        "No modules found under /data/adb/modules.",
+                    ]),
+                    Err(why) => why.as_str(),
+                };
+                y = widgets::footnote(&mut c, t, f, y, msg);
+            }
+        }
+    } else {
+        y = widgets::footnote(&mut c, t, f, y, l.pick(["正在读取 Root 状态", "正在讀取 Root 狀態", "Reading root status"]));
+    }
+
+    Frame::new(t, fit(c, t, y), out, l.pick(ROOT), top)
+}
+
+/// Details and toggles for one installed `/data/adb/modules/<id>` module.
+pub fn root_module(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+
+    let selected = s
+        .root_module
+        .as_deref()
+        .and_then(|id| s.root.as_ref()?.modules.as_ref().ok()?.iter().find(|m| m.id == id));
+
+    let Some(m) = selected else {
+        let y = widgets::footnote(&mut c, t, f, top, l.pick(["未找到该模块。", "找不到這個模組。", "Module not found."]));
+        return Frame::new(t, fit(c, t, y), out, l.pick(ROOT), top);
+    };
+
+    let mut items = vec![("ID", m.id.clone())];
+    if !m.version.is_empty() {
+        items.push((l.pick(["版本", "版本", "Version"]), m.version.clone()));
+    }
+    if !m.author.is_empty() {
+        items.push((l.pick(["作者", "作者", "Author"]), m.author.clone()));
+    }
+    if !m.description.is_empty() {
+        items.push((l.pick(["说明", "說明", "Description"]), m.description.clone()));
+    }
+    let y = widgets::info_card(&mut c, t, f, top, &items);
+    let y = widgets::section(&mut c, t, f, y, l.pick(ACTIONS));
+    let rows = widgets::list(&mut c, t, f, y, &[
+        Row::new(l.pick(["启用模块", "啟用模組", "Enable module"])).trail(Trail::Switch(m.enabled)),
+        Row::new(l.pick(["下次启动时卸载", "下次啟動時移除", "Remove on next boot"]))
+            .subtitle(l.pick([
+                "将由 Root 框架在下次进入系统时删除",
+                "將由 Root 框架在下次進入系統時刪除",
+                "Removed by the root framework on the next Android boot",
+            ]))
+            .trail(Trail::Switch(m.remove_pending)),
+    ]);
+    out.extend(hits(&rows.rows, &[Action::RootToggleEnabled, Action::RootToggleRemove]));
+    let y = widgets::footnote(
+        &mut c,
+        t,
+        f,
+        rows.bottom,
+        l.pick([
+            "更改将在下次启动系统时生效。",
+            "變更將在下次啟動系統時生效。",
+            "Changes take effect on the next Android boot.",
+        ]),
+    );
+    Frame::new(t, fit(c, t, y), out, &m.name, top)
+}
+
+/// Network file sharing: HTTP/1.1 browser upload and download server.
+pub fn share(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+
+    let toggle = widgets::list(
+        &mut c,
+        t,
+        f,
+        top,
+        &[Row::new(l.pick(SHARE)).trail(Trail::Switch(s.share.running))],
+    );
+    out.extend(hits(&toggle.rows, &[Action::Toggle(Switch::Share)]));
+    let mut y = toggle.bottom;
+
+    let wlan_ip = s.wlan.as_ref().and_then(|w| w.joined.as_ref()).and_then(|j| match &j.stage {
+        Joining::Connected(link) => Some(link.address.to_string()),
+        _ => None,
+    });
+    let ip = wlan_ip.or_else(|| s.share.address.clone());
+
+    if s.share.running {
+        let host = ip.as_deref().unwrap_or("127.0.0.1");
+        let port = s.share.port;
+        let url = format!("http://{host}:{port}/");
+        y = widgets::section(&mut c, t, f, y, l.pick(["访问地址", "存取位址", "Address"]));
+        y = widgets::info_card(&mut c, t, f, y, &[("HTTP", url)]);
+    } else if let Some(err) = &s.share.error {
+        y = widgets::footnote(&mut c, t, f, y, err);
+    }
+
+    if s.wlan.is_some() && !s.online() {
+        let wifi = widgets::list(
+            &mut c,
+            t,
+            f,
+            y + t.m.card_gap,
+            &[Row::new(l.pick(["打开 Wi-Fi 设置", "開啟 Wi-Fi 設定", "Open Wi-Fi settings"])).icon(BLUE, Icon::Wlan)],
+        );
+        out.extend(hits(&wifi.rows, &[Action::Open(Screen::Wlan)]));
+        y = wifi.bottom;
+    }
+
+    y = widgets::section(&mut c, t, f, y, l.pick(["共享目录", "共享目錄", "Shared folder"]));
+    let storage_sub = match s.data.storage_open() {
+        true => "/sdcard",
+        false => l.pick(DECRYPT_NEEDED),
+    };
+    let roots = widgets::list(&mut c, t, f, y, &[
+        Row::new(place_name(l, Place::Storage))
+            .subtitle(storage_sub)
+            .trail(Trail::Check(s.share.root == ShareRoot::Storage)),
+        Row::new(l.pick(["根目录", "根目錄", "Root directory"]))
+            .subtitle("/")
+            .trail(Trail::Check(s.share.root == ShareRoot::Root)),
+    ]);
+    out.extend(hits(&roots.rows, &[Action::ShareRoot(ShareRoot::Storage), Action::ShareRoot(ShareRoot::Root)]));
+    let y = widgets::footnote(
+        &mut c,
+        t,
+        f,
+        roots.bottom,
+        l.pick([
+            "可在同网络电脑的浏览器中打开上述地址下载文件，或直接选择文件上传（也支持 curl -T）。",
+            "可在同網路電腦的瀏覽器中開啟上述位址下載檔案，或直接選擇檔案上傳（也支援 curl -T）。",
+            "Open the address above in a browser on the same network to download files, or upload from the page or via curl -T.",
+        ]),
+    );
+    Frame::new(t, fit(c, t, y), out, l.pick(SHARE), top)
+}
+
+/// Discovered runtime plugins under `/aweyuki/plugins` and `/sdcard/Aweyuki/plugins`.
+pub fn plugins(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+
+    let (mut y, refresh_rect) = widgets::section_action(
+        &mut c,
+        t,
+        f,
+        top,
+        l.pick(["可用插件", "可用擴充功能", "Available plugins"]),
+        l.pick(["刷新", "重新整理", "Refresh"]),
+    );
+    out.push(Hit { rect: refresh_rect, action: Action::RefreshPlugins });
+
+    match &s.plugins {
+        Some(list) if !list.is_empty() => {
+            let subs: Vec<String> = list
+                .iter()
+                .map(|p| match (p.version.is_empty(), p.description.is_empty()) {
+                    (false, false) => format!("v{} · {}", p.version, p.description),
+                    (false, true) => format!("v{}", p.version),
+                    (true, false) => p.description.clone(),
+                    (true, true) => p.id.clone(),
+                })
+                .collect();
+            let rows: Vec<Row> = list
+                .iter()
+                .zip(&subs)
+                .map(|(p, sub)| Row::new(&p.name).subtitle(sub).icon(GREEN, Icon::Terminal))
+                .collect();
+            let block = widgets::list(&mut c, t, f, y, &rows);
+            let acts: Vec<Action> = (0..list.len()).map(Action::RunPlugin).collect();
+            out.extend(hits(&block.rows, &acts));
+            y = block.bottom;
+        }
+        Some(_) => {
+            y = widgets::footnote(
+                &mut c,
+                t,
+                f,
+                y,
+                l.pick([
+                    "未找到插件。可将包含 plugin.toml 的插件目录放入 /aweyuki/plugins 或 /sdcard/Aweyuki/plugins。",
+                    "找不到擴充功能。可將包含 plugin.toml 的目錄放入 /aweyuki/plugins 或 /sdcard/Aweyuki/plugins。",
+                    "No plugins found. Place plugin folders with plugin.toml under /aweyuki/plugins or /sdcard/Aweyuki/plugins.",
+                ]),
+            );
+        }
+        None => {
+            y = widgets::footnote(&mut c, t, f, y, l.pick(["正在扫描插件", "正在掃描擴充功能", "Scanning for plugins"]));
+        }
+    }
+
+    Frame::new(t, fit(c, t, y), out, l.pick(PLUGINS), top)
+}
+
+/// Live stdout/stderr output of an active or completed runtime plugin.
+pub fn plugin_run(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let (mut out, mut rows) = (Vec::new(), None);
+    let top = t.m.content_top;
+
+    let Some(run) = &s.plugin_run else {
+        return Frame::new(t, fit(c, t, top), out, l.pick(PLUGINS), top);
+    };
+
+    let mut y = match &run.outcome {
+        None => {
+            let y = widgets::progress_card(
+                &mut c,
+                t,
+                f,
+                top,
+                &run.name,
+                l.pick(["正在运行插件", "正在執行擴充功能", "Running plugin"]),
+                None,
+            );
+            let label = l.pick(if run.stopping { STOPPING } else { STOP });
+            let stop = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(label).trail(Trail::None)]);
+            if !run.stopping {
+                out.extend(hits(&stop.rows, &[Action::StopPlugin]));
+            }
+            stop.bottom
+        }
+        Some(end) => {
+            let (title, color, detail): (Text, Rgba, String) = match end {
+                PluginEnd::Exited(0) => (
+                    ["运行完成", "執行完成", "Completed"],
+                    GREEN,
+                    l.pick(["插件已正常退出。", "擴充功能已正常結束。", "The plugin finished successfully."]).into(),
+                ),
+                PluginEnd::Exited(code) => (
+                    ["运行结束", "執行結束", "Exited"],
+                    ORANGE,
+                    tr!(l, "插件已退出，退出码 {code}。", "擴充功能已結束，結束代碼 {code}。", "The plugin exited with code {code}.", "Plugin đã thoát với mã {code}."),
+                ),
+                PluginEnd::Stopped => (
+                    STOPPED,
+                    SLATE,
+                    l.pick(["已停止运行该插件。", "已停止執行該擴充功能。", "The plugin was stopped."]).into(),
+                ),
+                PluginEnd::Failed(why) => (["运行失败", "執行失敗", "Failed"], RED, why.clone()),
+            };
+            let y = widgets::list(&mut c, t, f, top, &[standing(l.pick(title), color, Icon::Terminal, &detail)]).bottom;
+            let finish = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(DONE)).trail(Trail::None)]);
+            out.extend(hits(&finish.rows, &[Action::Back]));
+            finish.bottom
+        }
+    };
+
+    if !run.output.is_empty() {
+        let below = widgets::section(&mut c, t, f, y, l.pick(["插件输出", "擴充功能輸出", "Plugin output"]));
+        rows = Some(Rows { edges: widgets::output_edges(&c, t, f, below, &run.output), action: None });
+        y = below;
+    }
+
+    let back = run.outcome.is_some();
+    Frame { rows, back, ..Frame::new(t, fit(c, t, y), out, &run.name, top) }
 }
 
 #[cfg(test)]

@@ -780,7 +780,10 @@ fn lines(from: impl Read, mut each: impl FnMut(&str) -> io::Result<()>) -> io::R
 
 fn flash_image(ctx: &Context, kind: ImageKind, size: u64) -> Result<Done> {
     let dir = Path::new(aweyuki_block::BY_NAME);
-    let partitions = image::partitions(kind, dir)?;
+    let mut partitions = image::partitions(kind, dir)?;
+    if partitions.is_empty() && kind == ImageKind::Efisp && crate::efisp::discover_partition().is_ok() {
+        partitions.push("efisp");
+    }
     if partitions.is_empty() {
         return Ok(Done::Decided(Outcome::Refused(Refusal::NoPartition)));
     }
@@ -791,11 +794,17 @@ fn flash_image(ctx: &Context, kind: ImageKind, size: u64) -> Result<Done> {
         Ok(other) => bail!("an image waiting for its partition was told {other:?}"),
     };
     ensure!(partitions.contains(&partition), "{partition} is not among {partitions:?}");
-    ensure!(!slots.is_empty(), "no slot chosen for {partition}");
+    ensure!(!kind.slotted() || !slots.is_empty(), "no slot chosen for {partition}");
     if [aweyuki_systems::store::BOOT, aweyuki_systems::store::INIT_BOOT].contains(&partition) {
         installed_boot_set()?;
     }
-    let devices: Vec<_> = slots.iter().map(|&slot| image::device(dir, partition, slot)).collect();
+    let devices: Vec<_> = if kind.slotted() {
+        slots.iter().map(|&slot| image::device(dir, partition, slot)).collect()
+    } else if partition == "efisp" {
+        vec![crate::efisp::discover_partition()?.0]
+    } else {
+        vec![dir.join(partition)]
+    };
     let mut file = BufReader::with_capacity(1 << 20, File::open(fuse::PACKAGE).context("open the package")?);
     let mut told: Option<Instant> = None;
     image::flash(&mut file, size, &devices, &mut |done, total| {

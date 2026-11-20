@@ -48,6 +48,20 @@ impl App {
                 self.refresh();
                 return vec![Effect::Wlan(on)];
             }
+            Action::Toggle(Switch::Share) => {
+                if !self.state.share.running
+                    && self.state.share.root == ShareRoot::Storage
+                    && !self.state.data.storage_open()
+                {
+                    self.say(l.pick(DECRYPT_FIRST), now);
+                    return Vec::new();
+                }
+                return vec![Effect::Share {
+                    on: !self.state.share.running,
+                    root: self.state.share.root,
+                    port: self.state.share.port,
+                }];
+            }
             Action::Toggle(switch) => {
                 let on = match switch {
                     Switch::Vibrate => &mut self.state.vibrate,
@@ -57,7 +71,7 @@ impl App {
                     Switch::Signature => &mut self.state.check_signature,
                     Switch::KeepRecovery => &mut self.state.keep_recovery,
                     Switch::ShowPassword => &mut self.state.show_password,
-                    Switch::Wlan => unreachable!("the WLAN switch is turned above"),
+                    Switch::Wlan | Switch::Share => unreachable!("the WLAN and Share switches are handled above"),
                 };
                 *on = !*on;
                 let now_on = *on;
@@ -559,6 +573,57 @@ impl App {
                     job.stopping = true;
                     self.refresh();
                     return vec![Effect::StopAweyukiUpdate];
+                }
+            }
+            Action::RefreshRoot => return vec![Effect::ReadRoot],
+            Action::OpenRootModule(i) => {
+                if let Some(m) = self.state.root.as_ref().and_then(|r| r.modules.as_ref().ok()).and_then(|mods| mods.get(i)) {
+                    self.state.root_module = Some(m.id.clone());
+                    self.open(Screen::RootModule);
+                }
+            }
+            Action::RootToggleEnabled => {
+                if let Some(m) = self.selected_root_module() {
+                    return vec![Effect::RootSetEnabled { id: m.id.clone(), enabled: !m.enabled }];
+                }
+            }
+            Action::RootToggleRemove => {
+                if let Some(m) = self.selected_root_module() {
+                    return vec![Effect::RootSetRemove { id: m.id.clone(), remove: !m.remove_pending }];
+                }
+            }
+            Action::ShareRoot(root) => {
+                if self.state.share.root == root {
+                    return Vec::new();
+                }
+                if self.state.share.running && root == ShareRoot::Storage && !self.state.data.storage_open() {
+                    self.say(l.pick(DECRYPT_FIRST), now);
+                    return Vec::new();
+                }
+                self.state.share.root = root;
+                self.refresh();
+                if self.state.share.running {
+                    return vec![Effect::Share { on: true, root, port: self.state.share.port }];
+                }
+            }
+            Action::RefreshPlugins => return vec![Effect::ReadPlugins],
+            Action::RunPlugin(i) => {
+                if self.state.plugin_run.as_ref().is_some_and(|r| r.outcome.is_none()) {
+                    self.say(l.pick(["插件正在运行，请稍后再试", "擴充功能正在執行，請稍後再試", "A plugin is running. Wait for it to finish"]), now);
+                    return Vec::new();
+                }
+                if let Some(p) = self.state.plugins.as_ref().and_then(|list| list.get(i)) {
+                    return vec![Effect::RunPlugin(p.id.clone())];
+                }
+            }
+            Action::StopPlugin => {
+                if let Some(run) = self.state.plugin_run.as_mut()
+                    && run.outcome.is_none()
+                    && !run.stopping
+                {
+                    run.stopping = true;
+                    self.refresh();
+                    return vec![Effect::StopPlugin];
                 }
             }
             Action::Unavailable(text) => self.say(text, now),

@@ -5,8 +5,13 @@
 use anyhow::{bail, ensure, Context, Result};
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread;
+use std::time::Duration;
 
 pub const DEFAULT_PLUGIN_DIRS: &[&str] = &[
     "/aweyuki/plugins",
@@ -158,6 +163,66 @@ impl Plugin {
             .status()
             .with_context(|| format!("run {}", entry.display()))
     }
+
+    /// Execute the plugin while streaming stdout and stderr lines to `on_line`
+    /// and polling `cancel` so a user can terminate a running plugin cleanly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the process fails to spawn or wait.
+    pub fn run_streaming(
+        &self,
+        extra_args: &[&str],
+        cancel: &AtomicBool,
+        mut on_line: impl FnMut(String),
+    ) -> Result<ExitStatus> {
+        let entry = self.dir.join(&self.manifest.entry);
+        let mut child = Command::new(&entry)
+            .args(&self.manifest.args)
+            .args(extra_args)
+            .env("AWEYUKI_PLUGIN_DIR", &self.dir)
+            .env("AWEYUKI_PLUGIN_ID", &self.manifest.id)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("run {}", entry.display()))?;
+
+        let (tx, rx) = mpsc::channel();
+        let out_thread = child.stdout.take().map(|p| forward_lines(p, tx.clone()));
+        let err_thread = child.stderr.take().map(|p| forward_lines(p, tx.clone()));
+        drop(tx);
+
+        let mut killed = false;
+        loop {
+            if !killed && cancel.load(Ordering::Relaxed) {
+                let _ = child.kill();
+                killed = true;
+            }
+            match rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(line) => on_line(line),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        if let Some(handle) = out_thread {
+            let _ = handle.join();
+        }
+        if let Some(handle) = err_thread {
+            let _ = handle.join();
+        }
+        child.wait().with_context(|| format!("wait for {}", entry.display()))
+    }
+}
+
+fn forward_lines(pipe: impl Read + Send + 'static, tx: mpsc::Sender<String>) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    })
 }
 
 /// Discover all valid plugins across `dirs`, deduplicating by `id` (earlier
@@ -236,5 +301,40 @@ mod tests {
         fs::write(bad_id.join("run.sh"), "#!/bin/sh\n").unwrap();
         fs::write(bad_id.join("plugin.toml"), "id = \"bad/id\"\nname = \"Bad Id\"\nentry = \"run.sh\"\n").unwrap();
         assert!(Plugin::load(&bad_id).is_err());
+    }
+
+    #[test]
+    fn streaming_execution_captures_output_and_stops_on_cancel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("stream");
+        fs::create_dir_all(&dir).unwrap();
+        let sh = dir.join("stream.sh");
+        fs::write(&sh, "#!/bin/sh\necho stdout-line\necho stderr-line >&2\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&sh, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        fs::write(dir.join("plugin.toml"), "id = \"stream\"\nname = \"Stream\"\nentry = \"stream.sh\"\n").unwrap();
+        let plugin = Plugin::load(&dir).unwrap();
+        let cancel = AtomicBool::new(false);
+        let mut lines = Vec::new();
+        let status = plugin.run_streaming(&[], &cancel, |l| lines.push(l)).unwrap();
+        assert!(status.success());
+        assert!(lines.contains(&"stdout-line".to_string()), "{lines:?}");
+        assert!(lines.contains(&"stderr-line".to_string()), "{lines:?}");
+
+        let sleep_sh = dir.join("sleep.sh");
+        fs::write(&sleep_sh, "#!/bin/sh\nsleep 10\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&sleep_sh, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        fs::write(dir.join("plugin.toml"), "id = \"sleep\"\nname = \"Sleep\"\nentry = \"sleep.sh\"\n").unwrap();
+        let sleeper = Plugin::load(&dir).unwrap();
+        let cancel = AtomicBool::new(true);
+        let status = sleeper.run_streaming(&[], &cancel, |_| {}).unwrap();
+        assert!(!status.success());
     }
 }

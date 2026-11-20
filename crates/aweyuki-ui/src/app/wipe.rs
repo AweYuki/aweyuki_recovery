@@ -21,11 +21,26 @@ pub enum Wipe {
     Logs,
     /// The updates the system downloaded.
     Updates,
+    /// The Factory Reset Protection partition, on devices that expose it.
+    Frp,
+    /// The non-slotted `efisp` partition, on devices that expose it.
+    Efisp,
 }
 
 /// What the wipe page offers, in the order it lists them.
-pub const WIPES: [Wipe; 9] =
-    [Wipe::All, Wipe::AppData, Wipe::Media, Wipe::AppCaches, Wipe::SystemCaches, Wipe::Art, Wipe::Logs, Wipe::Updates, Wipe::Cache];
+pub const WIPES: [Wipe; 11] = [
+    Wipe::All,
+    Wipe::AppData,
+    Wipe::Media,
+    Wipe::AppCaches,
+    Wipe::SystemCaches,
+    Wipe::Art,
+    Wipe::Logs,
+    Wipe::Updates,
+    Wipe::Cache,
+    Wipe::Frp,
+    Wipe::Efisp,
+];
 
 /// A part of the phone that erasing goes through, in the order it does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,6 +58,8 @@ pub enum Part {
     Art,
     Logs,
     Updates,
+    Frp,
+    Efisp,
 }
 
 /// Erasing as its page shows it.
@@ -73,6 +90,10 @@ pub enum EraseStop {
     NotRebuilt,
     /// The phone has no cache partition.
     NoCache,
+    /// The phone has no FRP partition.
+    NoFrp,
+    /// The phone has no EFISP partition.
+    NoEfisp,
     /// The data partition is erased already, and holds nothing until the
     /// system makes it afresh.
     Erased,
@@ -266,5 +287,26 @@ mod tests {
         assert_eq!(tap_at(&mut app, &f, &i, Action::Dismiss, 1000), vec![Effect::Dismiss]);
         assert!(tap_at(&mut app, &f, &i, Action::Open(Screen::Decrypt), 1000).is_empty(), "nothing opens until the system makes it afresh");
         assert_eq!(app.screen(), Screen::Decrypt);
+    }
+
+    #[test]
+    fn frp_and_efisp_are_offered_only_when_present_and_excluded_from_all() {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Wipe, &f, &i);
+        let offered = |app: &mut App, w: Wipe| app.frame(&f, &i).hits.iter().any(|h| h.action == Action::WipeItem(w));
+        assert!(!offered(&mut app, Wipe::Frp));
+        assert!(!offered(&mut app, Wipe::Efisp));
+
+        app.state.frp_partition = true;
+        app.state.efisp_partition = true;
+        app.refresh();
+        assert!(offered(&mut app, Wipe::Frp));
+        assert!(offered(&mut app, Wipe::Efisp));
+
+        tap(&mut app, &f, &i, Action::WipeItem(Wipe::Frp));
+        tap(&mut app, &f, &i, Action::WipeItem(Wipe::Efisp));
+        assert_eq!(swipe(&mut app, &f, &i, Confirm::Wipe), vec![Effect::Wipe(vec![Wipe::Frp, Wipe::Efisp])]);
+        tap(&mut app, &f, &i, Action::WipeItem(Wipe::All));
+        assert_eq!(swipe(&mut app, &f, &i, Confirm::Wipe), vec![Effect::Wipe(vec![Wipe::All])]);
     }
 }

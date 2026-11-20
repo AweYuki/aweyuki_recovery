@@ -111,6 +111,10 @@ pub enum Step {
     Logs,
     /// The updates the system downloaded.
     Updates,
+    /// Factory Reset Protection partition.
+    Frp,
+    /// Non-slotted EFISP partition.
+    Efisp,
 }
 
 impl Step {
@@ -131,6 +135,10 @@ pub enum Refusal {
     NotRebuilt,
     /// The phone has no cache partition.
     NoCache,
+    /// The phone has no FRP partition.
+    NoFrp,
+    /// The phone has no EFISP partition.
+    NoEfisp,
 }
 
 /// How erasing stopped short.
@@ -274,6 +282,12 @@ pub fn parts(steps: Vec<Step>, logs: &[String], reformat: Option<String>) -> Res
         false => None,
         true => Some(cache().map_err(failed(Step::Cache))?.ok_or(Stop::Refused(Refusal::NoCache))?),
     };
+    if steps.contains(&Step::Frp) && aweyuki_install::frp::discover_partition().is_err() {
+        return Err(Stop::Refused(Refusal::NoFrp));
+    }
+    if steps.contains(&Step::Efisp) && aweyuki_install::efisp::discover_partition().is_err() {
+        return Err(Stop::Refused(Refusal::NoEfisp));
+    }
     Ok(Parts { steps, cache, logs: logs.iter().map(PathBuf::from).collect(), reformat })
 }
 
@@ -290,7 +304,7 @@ impl Parts {
     /// the parts found only by name in users' own files wait for every
     /// user's files to be open, and until they are, nothing is erased.
     pub fn carry_out(self, tell: &mut dyn FnMut(Event)) -> Result<(), Stop> {
-        let in_data = self.steps.iter().any(|&s| s != Step::Cache);
+        let in_data = self.steps.iter().any(|&s| !matches!(s, Step::Cache | Step::Frp | Step::Efisp));
         if in_data && !mount::is_mount_point(Path::new(DATA)).map_err(|e| Stop::Closed(format!("{e:#}")))? {
             let opening = crate::decrypt::with_key_service(data::open_without_credential).map_err(Stop::Closed)?;
             tell(Event::Opened(opening));
@@ -319,6 +333,8 @@ impl Parts {
                     let cache = self.cache.as_ref().expect("the cache partition was found as the parts were");
                     remake_cache(cache, self.reformat.as_deref().unwrap_or(&cache.filesystem))
                 }
+                Step::Frp => aweyuki_install::frp::wipe().map(|_| ()),
+                Step::Efisp => aweyuki_install::efisp::wipe().map(|_| ()),
                 Step::Data | Step::Metadata => unreachable!("only a factory reset erases {step:?}"),
             };
             erased.map_err(failed(step))?;

@@ -42,6 +42,8 @@ pub enum ImageKind {
     VendorBoot,
     Dtbo,
     Vbmeta,
+    /// An ARM64 PE32+ EFI application for the non-slotted `efisp` partition.
+    Efisp,
 }
 
 /// The ramdisk a boot image carries.
@@ -55,6 +57,11 @@ pub enum Ramdisk {
 }
 
 impl ImageKind {
+    /// Whether this image targets an A/B slotted partition.
+    pub fn slotted(self) -> bool {
+        !matches!(self, ImageKind::Efisp)
+    }
+
     /// The partitions an image of this kind can go to, the likeliest first.
     /// A recovery that brings its own kernel can also be the boot image of
     /// a phone whose recovery lives in boot; without one it needs boot's.
@@ -67,6 +74,7 @@ impl ImageKind {
             ImageKind::VendorBoot => &["vendor_boot"],
             ImageKind::Dtbo => &["dtbo"],
             ImageKind::Vbmeta => &["vbmeta", "vbmeta_system", "vbmeta_vendor"],
+            ImageKind::Efisp => &["efisp"],
         }
     }
 }
@@ -96,6 +104,12 @@ pub fn detect<R: Read + Seek>(file: &mut R, head: &[u8]) -> Result<Option<ImageK
     }
     if head.starts_with(VBMETA_MAGIC) {
         return Ok(Some(ImageKind::Vbmeta));
+    }
+    if head.starts_with(b"MZ") {
+        file.seek(SeekFrom::Start(0)).context("rewind the EFI image")?;
+        if crate::efisp::validate_arm64_efi(file, u64::MAX).is_ok() {
+            return Ok(Some(ImageKind::Efisp));
+        }
     }
     Ok(None)
 }
@@ -183,11 +197,17 @@ pub fn device(dir: &Path, name: &str, slot: Slot) -> PathBuf {
 pub fn partitions(kind: ImageKind, dir: &Path) -> Result<Vec<&'static str>> {
     let mut found = Vec::new();
     for name in kind.partitions() {
-        let mut has = true;
-        for slot in [Slot::A, Slot::B] {
-            let path = device(dir, name, slot);
-            has &= path.try_exists().with_context(|| format!("look for {}", path.display()))?;
-        }
+        let has = if kind.slotted() {
+            let mut both = true;
+            for slot in [Slot::A, Slot::B] {
+                let path = device(dir, name, slot);
+                both &= path.try_exists().with_context(|| format!("look for {}", path.display()))?;
+            }
+            both
+        } else {
+            let path = dir.join(name);
+            path.try_exists().with_context(|| format!("look for {}", path.display()))?
+        };
         if has {
             found.push(*name);
         }
@@ -484,5 +504,30 @@ mod tests {
         let err = flash_all(&[1u8; 4097], &slots).unwrap_err();
         assert!(err.to_string().contains("4097"), "{err}");
         assert!(std::fs::read(&slots[0]).unwrap().iter().all(|&b| b == 0xaa));
+    }
+
+    #[test]
+    fn arm64_efi_images_target_non_slotted_efisp() {
+        let mut efi = vec![0u8; 512];
+        efi[0..2].copy_from_slice(b"MZ");
+        efi[60..64].copy_from_slice(&64u32.to_le_bytes());
+        efi[64..68].copy_from_slice(b"PE\0\0");
+        efi[68..70].copy_from_slice(&0xaa64u16.to_le_bytes());
+        efi[70..72].copy_from_slice(&1u16.to_le_bytes());
+        efi[84..86].copy_from_slice(&112u16.to_le_bytes());
+        efi[88..90].copy_from_slice(&0x020bu16.to_le_bytes());
+        efi[88 + 68..88 + 70].copy_from_slice(&10u16.to_le_bytes());
+        efi[200 + 16..200 + 20].copy_from_slice(&128u32.to_le_bytes());
+        efi[200 + 20..200 + 24].copy_from_slice(&256u32.to_le_bytes());
+
+        assert_eq!(kind_of(&efi).unwrap(), Some(ImageKind::Efisp));
+        assert!(!ImageKind::Efisp.slotted());
+        assert_eq!(ImageKind::Efisp.partitions(), ["efisp"]);
+        assert_eq!(kind_of(b"MZnot-an-efi").unwrap(), None);
+
+        let dir = tempfile::tempdir().unwrap();
+        assert!(partitions(ImageKind::Efisp, dir.path()).unwrap().is_empty());
+        std::fs::File::create(dir.path().join("efisp")).unwrap();
+        assert_eq!(partitions(ImageKind::Efisp, dir.path()).unwrap(), ["efisp"]);
     }
 }

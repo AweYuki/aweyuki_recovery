@@ -693,6 +693,9 @@ mod tests {
             Screen::Erase,
             Screen::CantStart,
             Screen::Unhandled,
+            Screen::Root,
+            Screen::Share,
+            Screen::Plugins,
         ];
         for t in [Theme::light(W, H, PPD), Theme::dark(W, H, PPD).pressed()] {
             for screen in screens {

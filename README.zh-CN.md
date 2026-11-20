@@ -75,6 +75,9 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 
 - 重启到系统、recovery、fastboot、bootloader 和 EDL，切换启动槽位
 - 浅色和深色模式，简体中文、繁体中文、英文和越南文
+- 支持向非 A/B 的 `efisp` 分区直接刷入并校验 ARM64 `.efi` 镜像，以及对 `efisp` 和 `frp` 分区进行全零擦除与逐字节校验
+- Root 管理（识别内核 KMI、检测 Magisk/KernelSU/APatch 框架，并开关或标记卸载 `/data/adb/modules/*` 模块）
+- 基于 HTTP/1.1 的网络文件共享（支持浏览器上传/下载）、支持实时输出与中止的运行时插件，以及日志页中的近期刷写与擦除历史记录
 
 ### 没有系统时
 

@@ -27,6 +27,8 @@ pub enum Switch {
     /// over.
     KeepRecovery,
     Wlan,
+    /// HTTP/1.1 file-sharing server.
+    Share,
     /// Show the password typed rather than a dot for each character.
     ShowPassword,
 }
