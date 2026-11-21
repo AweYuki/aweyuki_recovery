@@ -65,7 +65,7 @@ pub struct State {
     pub mounts: Result<Vec<MountRow>, String>,
     pub mount_failure: Option<MountFailure>,
     /// Which of [`BACKUP_PARTS`] a backup takes.
-    pub backup: [bool; 4],
+    pub backup: [bool; 5],
     /// Where a backup goes.
     pub backup_to: Place,
     pub compress: bool,
@@ -74,7 +74,7 @@ pub struct State {
     pub backups: Vec<BackupEntry>,
     /// The backup the restore page shows, as it was found, and which of its
     /// parts to restore.
-    pub restore: Option<(BackupEntry, [bool; 4])>,
+    pub restore: Option<(BackupEntry, [bool; 5])>,
     /// Backing up or restoring under way, or how it last ended.
     pub backup_job: Option<BackupJob>,
     /// Which logs to export: the recovery's, the kernel's.
@@ -197,6 +197,12 @@ pub struct State {
     pub plugin_run: Option<PluginRun>,
     /// Recent flash/install/wipe history entries shown on the logs page.
     pub history: Vec<aweyuki_install::history::Entry>,
+    /// Pending pre-reboot ABL EFISP regression warning and requested target.
+    pub abl_warning: Option<(aweyuki_install::abl::AblWarning, Target)>,
+    /// OTA payload inspection and extraction state.
+    pub payload: Option<PayloadState>,
+    /// Batch image flash state.
+    pub batch: BatchState,
 }
 
 impl Default for State {
@@ -230,7 +236,7 @@ impl Default for State {
             reflash: None,
             mounts: Ok(Vec::new()),
             mount_failure: None,
-            backup: [true, true, false, true],
+            backup: [true, true, false, true, false],
             backup_to: Place::Storage,
             compress: false,
             verify: true,
@@ -290,6 +296,9 @@ impl Default for State {
             plugins: None,
             plugin_run: None,
             history: Vec::new(),
+            abl_warning: None,
+            payload: None,
+            batch: BatchState::default(),
         }
     }
 }

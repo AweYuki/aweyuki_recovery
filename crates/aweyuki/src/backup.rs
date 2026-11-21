@@ -40,7 +40,7 @@ const BOOT: [&str; 8] = ["boot", "init_boot", "vendor_boot", "dtbo", "vbmeta", "
 /// The order a restore writes the parts in: what starts the phone and what
 /// it starts, then the baseband's, then the data partition's files, which
 /// take longest.
-const RESTORE_ORDER: [Part; 4] = [Part::Boot, Part::System, Part::Efs, Part::Data];
+const RESTORE_ORDER: [Part; 5] = [Part::Boot, Part::System, Part::Efs, Part::Efisp, Part::Data];
 
 /// What a backup of the data partition leaves out on every phone, and a
 /// restore leaves as it is: internal storage, which is the user's own; the
@@ -81,7 +81,7 @@ pub fn data_skipped(phone: &[String]) -> Vec<String> {
 
 pub struct BackupTask {
     /// Which of [`Part::ALL`] to take.
-    pub parts: [bool; 4],
+    pub parts: [bool; 5],
     /// The folder of backups at the place chosen; this one goes into a
     /// folder of its own there, called `stamp`.
     pub into: PathBuf,
@@ -106,7 +106,7 @@ pub struct BackupTask {
 pub struct RestoreTask {
     pub folder: PathBuf,
     /// Which of [`Part::ALL`] to restore.
-    pub parts: [bool; 4],
+    pub parts: [bool; 5],
     pub device: String,
     pub skipped: Vec<String>,
     /// What has to happen before the slot's partitions in super are written
@@ -314,7 +314,7 @@ fn no_update() -> Result<()> {
 
 fn backup(t: BackupTask, tell: &dyn Fn(Event), cancel: &AtomicBool) -> Result<PathBuf> {
     let slot = aweyuki_vab::current_slot()?.context("not an A/B phone")?;
-    let [boot, system, data, efs] = t.parts;
+    let [boot, system, data, efs, efisp] = t.parts;
     if system {
         no_update()?;
     }
@@ -353,6 +353,10 @@ fn backup(t: BackupTask, tell: &dyn Fn(Event), cancel: &AtomicBool) -> Result<Pa
             let size = aweyuki_block::size_bytes(&device)?;
             plan.push((Part::Efs, name.clone(), Source::Block(device), size));
         }
+    }
+    if efisp {
+        let (device, size) = aweyuki_install::efisp::discover_partition()?;
+        plan.push((Part::Efisp, "efisp".into(), Source::Block(device), size));
     }
     // Compressed, what the files take is not known until they are written.
     needed += plan.iter().map(|p| p.3).sum::<u64>();
@@ -476,8 +480,8 @@ fn restore(t: RestoreTask, tell: &dyn Fn(Event), cancel: &AtomicBool) -> Result<
     let sizes = if system { aweyuki_vab::slot_sizes(slot)? } else { Vec::new() };
     for item in &items {
         match item.part {
-            Part::Boot | Part::Efs => {
-                let device = target(item, slot);
+            Part::Boot | Part::Efs | Part::Efisp => {
+                let device = target(item, slot)?;
                 ensure!(device.exists(), "the phone has no partition {}", device.display());
                 let size = aweyuki_block::size_bytes(&device)?;
                 ensure!(size == item.stored.size, "{} holds {size} bytes, and its backup {}", device.display(), item.stored.size);
@@ -501,8 +505,8 @@ fn restore(t: RestoreTask, tell: &dyn Fn(Event), cancel: &AtomicBool) -> Result<
         let mut telling = Telling::new(tell, k, item.stored.size, true);
         check(&t.folder, &item.stored, cancel, &mut telling).with_context(|| format!("check {}", item.name))?;
     }
-    for item in items.iter().filter(|i| matches!(i.part, Part::Boot | Part::Efs)) {
-        let device = target(item, slot);
+    for item in items.iter().filter(|i| matches!(i.part, Part::Boot | Part::Efs | Part::Efisp)) {
+        let device = target(item, slot)?;
         for point in mount::points_of(aweyuki_block::devnum(&device)?)? {
             mount::umount(&point).with_context(|| format!("{} is in use at {}", device.display(), point.display()))?;
         }
@@ -522,9 +526,9 @@ fn restore(t: RestoreTask, tell: &dyn Fn(Event), cancel: &AtomicBool) -> Result<
     let mut unmade = Vec::new();
     for (k, item) in items.iter().enumerate() {
         match item.part {
-            Part::Boot | Part::Efs => {
+            Part::Boot | Part::Efs | Part::Efisp => {
                 let mut telling = Telling::new(tell, k, item.stored.size * 2, false);
-                write_image(&target(item, slot), &t.folder, &item.stored, &mut telling)?;
+                write_image(&target(item, slot)?, &t.folder, &item.stored, &mut telling)?;
             }
             Part::System => {
                 let mut telling = Telling::new(tell, k, item.stored.size * 2, false);
@@ -552,10 +556,11 @@ fn restore(t: RestoreTask, tell: &dyn Fn(Event), cancel: &AtomicBool) -> Result<
 }
 
 /// The partition a part of a backup goes back to.
-fn target(item: &Item, slot: Slot) -> PathBuf {
+fn target(item: &Item, slot: Slot) -> Result<PathBuf> {
     match item.part {
-        Part::Efs => partition(&item.name),
-        _ => partition(&format!("{}{}", item.name, slot.suffix())),
+        Part::Efisp => Ok(aweyuki_install::efisp::discover_partition()?.0),
+        Part::Efs => Ok(partition(&item.name)),
+        _ => Ok(partition(&format!("{}{}", item.name, slot.suffix()))),
     }
 }
 

@@ -34,10 +34,12 @@ pub enum Part {
     /// The baseband's settings with the phone's own identity, and the
     /// sensors' calibration.
     Efs,
+    /// Non-slotted EFI system partition, backed up as a raw image.
+    Efisp,
 }
 
 impl Part {
-    pub const ALL: [Part; 4] = [Part::Boot, Part::System, Part::Data, Part::Efs];
+    pub const ALL: [Part; 5] = [Part::Boot, Part::System, Part::Data, Part::Efs, Part::Efisp];
 }
 
 /// What a backup holds.
@@ -90,7 +92,7 @@ impl Manifest {
     }
 
     /// Which of [`Part::ALL`] it holds.
-    pub fn parts(&self) -> [bool; 4] {
+    pub fn parts(&self) -> [bool; 5] {
         Part::ALL.map(|p| self.items.iter().any(|i| i.part == p))
     }
 
@@ -120,12 +122,13 @@ mod tests {
             items: vec![
                 Item { part: Part::Boot, name: "boot".into(), stored: stored("boot", 201_326_592) },
                 Item { part: Part::Data, name: "data".into(), stored: stored("data", 9_000_000_000) },
+                Item { part: Part::Efisp, name: "efisp".into(), stored: stored("efisp", 67_108_864) },
             ],
         };
         m.write(&at, Ownership::Kept).unwrap();
         assert_eq!(Manifest::read(&at).unwrap(), m);
-        assert_eq!(m.parts(), [true, false, true, false]);
-        assert_eq!(m.size(), 100_663_296 + 4_500_000_000);
+        assert_eq!(m.parts(), [true, false, true, false, true]);
+        assert_eq!(m.size(), 100_663_296 + 4_500_000_000 + 33_554_432);
         std::fs::remove_dir_all(&at).unwrap();
     }
 }

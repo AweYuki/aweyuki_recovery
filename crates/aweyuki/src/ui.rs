@@ -35,8 +35,8 @@ use aweyuki_sys::sleep::{Sleeper, Slept};
 use aweyuki_sys::uevent;
 use aweyuki_systems::Who;
 use aweyuki_ui::app::{
-    App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ClashChoice, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp,
-    FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place,
+    App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, BatchSource, ClashChoice, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp,
+    FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Pick, Place,
     PluginEnd, RenameRefused, RootOverview, Screen, ShareRoot, Shot, Source, AweyukiEnd, AweyukiStage, Target, UsbDrive, UsbLink, Wipe,
     DATA_OPENING, DATA_PARTITION, DOWNLOADS, INSTALL_UNFINISHED, USB_DRIVE,
 };
@@ -742,6 +742,17 @@ fn discover_plugins() -> Vec<aweyuki_install::plugins::Plugin> {
     aweyuki_install::plugins::discover(&dirs)
 }
 
+enum PayloadEvent {
+    Inspected(Result<aweyuki_install::payload::PayloadReport, String>),
+    Progress(u64, u64),
+    Extracted(Result<String, String>),
+}
+
+enum BatchEvent {
+    Progress { index: usize, partition: String, done: u64, total: u64 },
+    Ended(Result<Vec<String>, String>),
+}
+
 fn install_history(outcome: &aweyuki_install::Outcome) -> Option<(String, String, String)> {
     use aweyuki_install::Outcome;
     match outcome {
@@ -1330,6 +1341,14 @@ struct Pages<'a> {
     share_server: Option<aweyuki_net::share::Server>,
     /// Streaming worker for an active runtime plugin.
     plugin_worker: Option<PluginWorker>,
+    /// Boot-time read-only ABL assessments when EFISP is exposed, and last
+    /// acknowledged warning fingerprint.
+    abl_boot: Vec<aweyuki_install::abl::SlotAssessment>,
+    abl_ack: Option<String>,
+    /// Worker inspecting or extracting an OTA payload.
+    payload_worker: Option<aweyuki_sys::worker::Worker<PayloadEvent>>,
+    /// Worker flashing a validated batch of partition images.
+    batch_worker: Option<aweyuki_sys::worker::Worker<BatchEvent>>,
     /// The USB drive plugged in, looked for each second.
     plugged: Option<Plugged>,
     seen: Option<String>,
@@ -1451,6 +1470,11 @@ impl<'a> Pages<'a> {
         app.state.phone_logs = cfg.wipe.logs.len();
         app.state.frp_partition = aweyuki_install::frp::discover_partition().is_ok();
         app.state.efisp_partition = aweyuki_install::efisp::discover_partition().is_ok();
+        let abl_boot = if app.state.efisp_partition {
+            aweyuki_install::abl::assess_device()
+        } else {
+            Vec::new()
+        };
         // Aweyuki lives in a recovery partition of each slot where the phone
         // has them, and the install page then offers to keep it there. Such a
         // phone holds a second system where it also has boot and init_boot
@@ -1541,6 +1565,10 @@ impl<'a> Pages<'a> {
             shell: None,
             share_server: None,
             plugin_worker: None,
+            abl_boot,
+            abl_ack: None,
+            payload_worker: None,
+            batch_worker: None,
             plugged: None,
             seen: None,
             drive_at: Instant::now(),
@@ -1727,6 +1755,8 @@ impl<'a> Pages<'a> {
         self.decrypt_told(now)?;
         self.shell_told()?;
         self.plugin_told(now);
+        self.payload_told(now);
+        self.batch_told(now);
         self.take_in(drive_told, now)?;
         self.offer_storage(now)
     }
@@ -1925,6 +1955,12 @@ impl<'a> Pages<'a> {
         if let Some(p) = &self.plugin_worker {
             fds.push(p.fd());
         }
+        if let Some(p) = &self.payload_worker {
+            fds.push(p.fd());
+        }
+        if let Some(b) = &self.batch_worker {
+            fds.push(b.fd());
+        }
         fds.push(self.readings.fd());
         wait(&fds, timeout)
     }
@@ -1950,6 +1986,8 @@ impl<'a> Pages<'a> {
             || self.aweyuki_updater.is_some()
             || self.share_server.is_some()
             || self.plugin_worker.is_some()
+            || self.payload_worker.is_some()
+            || self.batch_worker.is_some()
             || systems_busy;
         let joining = self.app.state.wlan.as_ref().and_then(|w| w.joined.as_ref()).is_some_and(|j| matches!(j.stage, Joining::Joining | Joining::Addressing));
         let running = match &self.shell {
@@ -2216,6 +2254,46 @@ impl Pages<'_> {
             && let Some(handle) = worker.thread.take()
         {
             let _ = handle.join();
+        }
+    }
+
+    fn payload_told(&mut self, now: u64) {
+        let events = self.payload_worker.as_ref().map(aweyuki_sys::worker::Worker::events).unwrap_or_default();
+        let mut done = false;
+        for ev in events {
+            match ev {
+                PayloadEvent::Inspected(res) => {
+                    self.app.set_payload(res);
+                    done = true;
+                }
+                PayloadEvent::Progress(d, t) => self.app.payload_progress(d, t),
+                PayloadEvent::Extracted(res) => {
+                    self.app.payload_extracted(res, now);
+                    done = true;
+                }
+            }
+        }
+        if done {
+            self.payload_worker = None;
+        }
+    }
+
+    fn batch_told(&mut self, now: u64) {
+        let events = self.batch_worker.as_ref().map(aweyuki_sys::worker::Worker::events).unwrap_or_default();
+        let mut ended = None;
+        for ev in events {
+            match ev {
+                BatchEvent::Progress { index, partition, done, total } => self.app.batch_progress(index, partition, done, total),
+                BatchEvent::Ended(res) => ended = Some(res),
+            }
+        }
+        if let Some(res) = ended {
+            self.batch_worker = None;
+            match &res {
+                Ok(parts) => self.record_history("batch-flash".into(), parts.join(", "), "ok".into()),
+                Err(why) => self.record_history("batch-flash".into(), "batch".into(), format!("failed: {why}")),
+            }
+            self.app.batch_ended(res, now);
         }
     }
 
@@ -2695,6 +2773,20 @@ impl Pages<'_> {
             // Leaving is the user's answer to whatever the request
             // still kept in misc asked.
             Effect::Reboot(target) => {
+                if self.app.state.efisp_partition && !self.abl_boot.is_empty() {
+                    let current = aweyuki_install::abl::assess_device();
+                    if let Some(warn) = aweyuki_install::abl::check_regression(&self.abl_boot, &current)
+                        && self.abl_ack.as_deref() != Some(warn.fingerprint.as_str())
+                    {
+                        self.app.set_abl_warning(Some((warn, target)));
+                        return Ok(Vec::new());
+                    }
+                }
+                self.done_with_request()?;
+                power(target)?
+            }
+            Effect::RebootConfirmed { target, fingerprint } => {
+                self.abl_ack = Some(fingerprint);
                 self.done_with_request()?;
                 power(target)?
             }
@@ -2978,6 +3070,86 @@ impl Pages<'_> {
                 }
             }
             Effect::ReadHistory => self.app.set_history(self.read_history()),
+            Effect::InspectPayload(path) => {
+                ensure!(self.payload_worker.is_none(), "a payload task is already running");
+                let dev_ts = aweyuki_sys::prop("ro.build.date.utc").and_then(|s| s.trim().parse::<i64>().ok());
+                let dev_patch = aweyuki_sys::prop("ro.build.version.security_patch");
+                self.payload_worker = Some(aweyuki_sys::worker::Worker::start("payload-inspect", move |teller| {
+                    let res = aweyuki_install::payload::inspect_path(&path, dev_ts, dev_patch.as_deref()).map_err(|e| format!("{e:#}"));
+                    teller.tell(PayloadEvent::Inspected(res));
+                })?);
+            }
+            Effect::ExtractPayloadPart { path, partition } => {
+                ensure!(self.payload_worker.is_none(), "a payload task is already running");
+                let out_dir = if path.starts_with(USB_DRIVE) || !self.app.state.data.storage_open() {
+                    if self.app.state.data.storage_open() {
+                        Path::new(aweyuki_crypto::data::SDCARD).join("Aweyuki/extracted")
+                    } else {
+                        PathBuf::from("/aweyuki/run/extracted")
+                    }
+                } else {
+                    path.parent().map_or_else(|| PathBuf::from(aweyuki_crypto::data::SDCARD), Path::to_path_buf)
+                };
+                let out_path = out_dir.join(format!("{partition}.img"));
+                self.payload_worker = Some(aweyuki_sys::worker::Worker::start("payload-extract", move |teller| {
+                    let t = teller.clone();
+                    let mut last = Instant::now();
+                    let res = aweyuki_install::payload::extract_partition(&path, &partition, &out_path, move |done, total| {
+                        if done == total || last.elapsed() >= Duration::from_millis(80) {
+                            last = Instant::now();
+                            t.tell(PayloadEvent::Progress(done, total));
+                        }
+                    })
+                    .map(|_| out_path.display().to_string())
+                    .map_err(|e| format!("{e:#}"));
+                    teller.tell(PayloadEvent::Extracted(res));
+                })?);
+            }
+            Effect::ReadBatch(src) => {
+                let dir = match src {
+                    BatchSource::Downloads => Path::new(aweyuki_crypto::data::SDCARD).join(DOWNLOADS),
+                    BatchSource::Storage => PathBuf::from(aweyuki_crypto::data::SDCARD),
+                    BatchSource::UsbDrive => PathBuf::from(USB_DRIVE),
+                };
+                let slot = aweyuki_vab::current_slot().ok().flatten();
+                let by_name = Path::new(aweyuki_block::BY_NAME);
+                let res = aweyuki_install::batch::plan_directory(&dir, by_name, slot).map_err(|e| format!("{e:#}"));
+                self.app.set_batch(res);
+            }
+            Effect::RunBatch { items, pick } => {
+                ensure!(self.batch_worker.is_none(), "a batch flash is already running");
+                if self.installer.is_some() {
+                    self.app.batch_ended(Err(self.app.state.lang.pick(INSTALL_UNFINISHED).into()), now);
+                    return Ok(Vec::new());
+                }
+                if !withhold(&mut self.transfer, &mut self.app, now)? {
+                    self.app.batch_ended(Err("storage is held by USB file transfer".into()), now);
+                    return Ok(Vec::new());
+                }
+                let slots = if items.iter().any(|(_, _, slotted)| *slotted) {
+                    let slot = aweyuki_vab::current_slot()?.context("not an A/B phone")?;
+                    pick.slots(slot)
+                } else {
+                    Vec::new()
+                };
+                self.batch_worker = Some(aweyuki_sys::worker::Worker::start("batch-flash", move |teller| {
+                    let t = teller.clone();
+                    let mut last = Instant::now();
+                    let res = aweyuki_install::batch::execute_batch(&items, &slots, move |index, partition, done, total| {
+                        if done == 0 || done == total || last.elapsed() >= Duration::from_millis(80) {
+                            last = Instant::now();
+                            t.tell(BatchEvent::Progress {
+                                index,
+                                partition: partition.to_string(),
+                                done,
+                                total,
+                            });
+                        }
+                    })
+                    .map_err(|e| format!("{e:#}"));
+                    teller.tell(BatchEvent::Ended(res));
+                })?);
+            }
         }
         Ok(Vec::new())
     }
@@ -3173,7 +3345,7 @@ impl Pages<'_> {
 
     /// Back the parts chosen up into `place`. An install still stopping may
     /// yet write; a backup waits for it.
-    fn back_up(&mut self, parts: [bool; 4], place: Place, compress: bool, verify: bool, now: u64) -> Result<()> {
+    fn back_up(&mut self, parts: [bool; 5], place: Place, compress: bool, verify: bool, now: u64) -> Result<()> {
         ensure!(self.backuper.is_none(), "a backup or restore is under way already");
         if self.installer.is_some() {
             self.app.report(self.app.state.lang.pick(INSTALL_UNFINISHED), now);
@@ -3210,7 +3382,7 @@ impl Pages<'_> {
 
     /// Restore the parts chosen of the backup `name` in `place`. An install
     /// still stopping may yet write; a restore waits for it.
-    fn restore(&mut self, place: Place, name: &str, parts: [bool; 4], now: u64) -> Result<()> {
+    fn restore(&mut self, place: Place, name: &str, parts: [bool; 5], now: u64) -> Result<()> {
         ensure!(self.backuper.is_none(), "a backup or restore is under way already");
         if self.installer.is_some() {
             self.app.report(self.app.state.lang.pick(INSTALL_UNFINISHED), now);

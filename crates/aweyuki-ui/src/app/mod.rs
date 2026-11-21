@@ -65,6 +65,7 @@ mod wipe;
 mod wlan;
 
 pub use backup::*;
+pub use batch::*;
 pub use decrypt::*;
 pub use entry::*;
 pub use filesystem::*;
@@ -72,6 +73,7 @@ pub use frame::*;
 pub use install::*;
 pub use manager::*;
 pub use mount::*;
+pub use payload::*;
 pub use plugins::*;
 pub use prefs::*;
 pub use reboot::*;
@@ -202,11 +204,17 @@ pub enum Screen {
     Plugins,
     /// Live stdout/stderr output of a running or finished plugin.
     PluginRun,
+    /// OTA `payload.bin` / `.zip` inspector, ARB checker, and partition extractor.
+    Payload,
+    /// Multi-image batch flasher with geometry pre-validation.
+    BatchFlash,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Confirm {
     Reboot,
+    /// Confirm rebooting even though an `abl` slot lost its EFISP loader.
+    RebootAnyway,
     Wipe,
     Flash,
     Backup,
@@ -414,6 +422,20 @@ pub enum Action {
     RunPlugin(usize),
     /// Stop the active runtime plugin process.
     StopPlugin,
+    /// Dismiss a pre-reboot ABL EFISP regression warning.
+    DismissAblWarning,
+    /// Inspect an OTA `.zip` or `payload.bin` opened on [`Screen::FileInfo`].
+    InspectPayload,
+    /// Extract partition `i` from the inspected payload.
+    ExtractPayloadPart(usize),
+    /// Select batch source directory (0: Downloads, 1: Storage, 2: UsbDrive).
+    BatchPlace(usize),
+    /// Refresh the scanned batch folder.
+    RefreshBatch,
+    /// Toggle inclusion of scanned batch item `i`.
+    BatchToggle(usize),
+    /// Pick target slots for slotted images in batch flash.
+    BatchSlot(Pick),
     /// A control whose work is not wired up yet; touching it says so.
     Unavailable(&'static str),
 }
@@ -583,10 +605,10 @@ pub enum Effect {
     /// a folder of their own in `place`, telling how it goes with
     /// [`App::backup_started`], [`App::backup_plan`], [`App::backup_at`]
     /// and [`App::backup_ended`].
-    Backup { parts: [bool; 4], place: Place, compress: bool, verify: bool },
+    Backup { parts: [bool; 5], place: Place, compress: bool, verify: bool },
     /// Restore the parts ticked of the backup in the folder `name` of
     /// `place`, telling how it goes as a backup does.
-    Restore { place: Place, name: String, parts: [bool; 4] },
+    Restore { place: Place, name: String, parts: [bool; 5] },
     /// Look for backups in the places that can be read, telling what is
     /// found with [`App::set_backups`].
     FindBackups { storage: bool, usb: bool },
@@ -638,6 +660,18 @@ pub enum Effect {
     StopPlugin,
     /// Read persistent and session flash/wipe history, replying via [`App::set_history`].
     ReadHistory,
+    /// Proceed with reboot after acknowledging an ABL EFISP regression warning.
+    RebootConfirmed { target: Target, fingerprint: String },
+    /// Inspect an OTA payload file, replying via [`App::set_payload`].
+    InspectPayload(std::path::PathBuf),
+    /// Extract `partition` from `path`, reporting via [`App::payload_progress`]
+    /// and [`App::payload_extracted`].
+    ExtractPayloadPart { path: std::path::PathBuf, partition: String },
+    /// Scan a batch folder for `.img` and `.efi` files, replying via [`App::set_batch`].
+    ReadBatch(BatchSource),
+    /// Execute a verified batch flash, reporting via [`App::batch_progress`]
+    /// and [`App::batch_ended`].
+    RunBatch { items: Vec<(std::path::PathBuf, String, bool)>, pick: Pick },
 }
 
 enum Drag {

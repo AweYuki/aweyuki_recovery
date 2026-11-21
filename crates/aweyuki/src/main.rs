@@ -133,6 +133,24 @@ enum Cmd {
         id: String,
         args: Vec<String>,
     },
+    /// Read-only ABL inspection for EFISP chainloader presence.
+    #[cfg(target_os = "android")]
+    Abl,
+    /// Inspect an OTA payload.bin/zip (including ARB checks) or extract one partition.
+    Payload {
+        file: PathBuf,
+        #[arg(long)]
+        extract: Option<String>,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Batch-flash images with partition inference and geometry validation.
+    #[cfg(target_os = "android")]
+    BatchFlash {
+        #[arg(long, default_value = "current")]
+        slot: String,
+        files: Vec<PathBuf>,
+    },
     /// Discard all a block device holds and write zeros over its start, as
     /// a factory reset erases the data partition.
     #[cfg(target_os = "android")]
@@ -386,6 +404,68 @@ fn main() -> Result<()> {
             if !status.success() {
                 std::process::exit(status.code().unwrap_or(1));
             }
+            Ok(())
+        }
+        #[cfg(target_os = "android")]
+        Cmd::Abl => {
+            for a in aweyuki_install::abl::assess_device() {
+                println!("slot={} bytes={} state={:?} sha256={}", a.slot, a.elf_bytes, a.state, a.sha256);
+            }
+            Ok(())
+        }
+        Cmd::Payload { file, extract, out } => {
+            #[cfg(target_os = "android")]
+            let dev_ts = aweyuki_sys::prop("ro.build.date.utc").and_then(|s| s.trim().parse::<i64>().ok());
+            #[cfg(not(target_os = "android"))]
+            let dev_ts = None;
+            #[cfg(target_os = "android")]
+            let dev_patch = aweyuki_sys::prop("ro.build.version.security_patch");
+            #[cfg(not(target_os = "android"))]
+            let dev_patch: Option<String> = None;
+
+            if let Some(part) = extract {
+                let target = out.unwrap_or_else(|| PathBuf::from(format!("{part}.img")));
+                let bytes = aweyuki_install::payload::extract_partition(&file, &part, &target, |_, _| {})?;
+                println!("extracted {part} ({bytes} bytes) -> {}", target.display());
+            } else {
+                let rep = aweyuki_install::payload::inspect_path(&file, dev_ts, dev_patch.as_deref())?;
+                println!("block_size={} minor={} downgrade={}", rep.block_size, rep.minor_version, rep.arb.downgrade);
+                if let Some(patch) = &rep.security_patch {
+                    println!("security_patch={patch}");
+                }
+                for p in &rep.partitions {
+                    println!("  {:<16} {:>12} bytes extractable={} unsupported={:?}", p.name, p.size, p.extractable, p.unsupported_codecs);
+                }
+            }
+            Ok(())
+        }
+        #[cfg(target_os = "android")]
+        Cmd::BatchFlash { slot, files } => {
+            anyhow::ensure!(!files.is_empty(), "pass at least one image file");
+            let current = booted_slot()?;
+            let slots = match slot.as_str() {
+                "current" => vec![current],
+                "other" => vec![current.other()],
+                "both" => vec![aweyuki_vab::Slot::A, aweyuki_vab::Slot::B],
+                "a" | "_a" => vec![aweyuki_vab::Slot::A],
+                "b" | "_b" => vec![aweyuki_vab::Slot::B],
+                other => anyhow::bail!("unknown slot specifier {other:?}"),
+            };
+            let by_name = Path::new(aweyuki_block::BY_NAME);
+            let mut items = Vec::with_capacity(files.len());
+            for path in files {
+                let item = aweyuki_install::batch::inspect_file(&path, by_name, Some(slots[0]))?;
+                let part = item.partition.clone().with_context(|| format!("unrecognized partition for {}", path.display()))?;
+                anyhow::ensure!(
+                    matches!(item.geometry, aweyuki_install::batch::GeometryCheck::Ok { .. }),
+                    "geometry check failed for {}: {:?}",
+                    path.display(),
+                    item.geometry
+                );
+                items.push((item.path, part, item.slotted));
+            }
+            let flashed = aweyuki_install::batch::execute_batch(&items, &slots, |_, _, _, _| {})?;
+            println!("flashed {} partitions: {}", flashed.len(), flashed.join(", "));
             Ok(())
         }
         Cmd::Mount => {

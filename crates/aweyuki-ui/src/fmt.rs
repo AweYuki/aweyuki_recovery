@@ -925,7 +925,7 @@ pub fn file_line(l: Lang, f: &FileRow, now: i64, zone: usize) -> String {
 }
 
 /// The parts a backup holds: `启动分区、系统分区`.
-pub fn parts(l: Lang, held: &[bool; 4]) -> String {
+pub fn parts(l: Lang, held: &[bool; 5]) -> String {
     list(l, BACKUP_PARTS.iter().zip(held).filter(|&(_, &on)| on).map(|(name, _)| l.pick(*name)))
 }
 
@@ -1764,9 +1764,10 @@ mod tests {
 
     #[test]
     fn a_backup_lists_its_parts() {
-        assert_eq!(parts(HANS, &[true, true, false, true]), "启动分区、系统分区、基带与 EFS");
-        assert_eq!(parts(Lang::Hant, &[true, true, false, true]), "啟動分割區、系統分割區、基頻與 EFS");
-        assert_eq!(parts(Lang::En, &[true, true, true, true]), "Boot partitions, system partitions, data partition, modem and EFS");
+        assert_eq!(parts(HANS, &[true, true, false, true, false]), "启动分区、系统分区、基带与 EFS");
+        assert_eq!(parts(Lang::Hant, &[true, true, false, true, false]), "啟動分割區、系統分割區、基頻與 EFS");
+        assert_eq!(parts(Lang::En, &[true, true, true, true, false]), "Boot partitions, system partitions, data partition, modem and EFS");
+        assert_eq!(parts(Lang::En, &[false, false, false, false, true]), "EFISP partition");
     }
 
     #[test]
@@ -1966,7 +1967,8 @@ mod tests {
         assert_eq!(datetime(Lang::Vi, 1_792_348_260, 0), "19 tháng 10, 2026, 02:31");
         assert_eq!(slots(Lang::Vi, &[Slot::B]), "khe B");
         assert_eq!(slots(Lang::Vi, &[Slot::A, Slot::B]), "khe A và B");
-        assert_eq!(parts(Lang::Vi, &[true, true, true, true]), "Phân vùng khởi động, phân vùng hệ thống, phân vùng dữ liệu, modem và EFS");
+        assert_eq!(parts(Lang::Vi, &[true, true, true, true, false]), "Phân vùng khởi động, phân vùng hệ thống, phân vùng dữ liệu, modem và EFS");
+        assert_eq!(parts(Lang::Vi, &[false, false, false, false, true]), "Phân vùng EFISP");
         assert_eq!(data(Lang::Vi, &Data::Locked { user: 0, keys: crate::app::Keys::Digits, checking: false }), "Chưa giải mã");
         assert_eq!(security(Lang::Vi, Security::Open), "Không");
         assert_eq!(update_value(Lang::Vi, &Standing::None), "Không có");

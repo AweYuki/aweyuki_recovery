@@ -696,6 +696,8 @@ mod tests {
             Screen::Root,
             Screen::Share,
             Screen::Plugins,
+            Screen::Payload,
+            Screen::BatchFlash,
         ];
         for t in [Theme::light(W, H, PPD), Theme::dark(W, H, PPD).pressed()] {
             for screen in screens {

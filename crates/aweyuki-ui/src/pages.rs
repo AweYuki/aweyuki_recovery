@@ -1,6 +1,6 @@
 use crate::app::{
-    Action, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, Damage, Data, Dock, DownloadEnd, EraseStop, Field, FileKind,
-    FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, Pick, Place, PluginEnd,
+    Action, BackupAt, BackupEnd, BackupJob, BatchSource, Check, ClashChoice, Confirm, Damage, Data, Dock, DownloadEnd, EraseStop, Field, FileKind,
+    FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, PayloadState, Pick, Place, PluginEnd,
     Rows, Screen, ShareRoot, AweyukiCheck, AweyukiEnd, AweyukiJob, AweyukiStage, Slider, Source, State, Switch, SystemsWork, Target,
     UsbDrive, UsbLink, Wipe, ADDABLE, BACKUP_PARTS, DATA_ERASED, DATA_PARTITION, DOWNLOADS, FASTBOOT_CHOICES, SCREEN_OFF, TARGETS,
     TIME_ZONES, USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, WIPES, installs, starting,
@@ -114,6 +114,8 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::Share => sharing(cx),
         Screen::Plugins => plugins(cx),
         Screen::PluginRun => plugin_run(cx),
+        Screen::Payload => payload(cx),
+        Screen::BatchFlash => batch_flash(cx),
     }
 }
 
@@ -127,8 +129,9 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
             FsAction::Remake(_) => (["滑动以更换", "滑動以更換", "Slide to change"], true),
         },
         Confirm::Reboot => (["滑动以重启", "滑動以重新啟動", "Slide to reboot"], false),
+        Confirm::RebootAnyway => (["滑动以仍要重启", "滑動以仍要重新啟動", "Slide to reboot anyway"], true),
         Confirm::Wipe => (["滑动以清除", "滑動以清除", "Slide to wipe"], true),
-        Confirm::Flash => (["滑动以刷入", "滑動以刷入", "Slide to flash"], true),
+        Confirm::Flash | Confirm::BatchFlash => (["滑动以刷入", "滑動以刷入", "Slide to flash"], true),
         Confirm::Backup => (["滑动以备份", "滑動以備份", "Slide to back up"], false),
         Confirm::Restore => (["滑动以恢复", "滑動以還原", "Slide to restore"], true),
         Confirm::Slot => (["滑动以切换", "滑動以切換", "Slide to switch"], true),
@@ -820,10 +823,37 @@ const UNREADABLE: Text = ["无法读取", "無法讀取", "Unreadable"];
 /// Reboot target picker with a swipe-to-confirm control.
 pub fn reboot(cx: &Ctx) -> Frame {
     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-    let mut c = page(cx);
+    let mut c = long_page(cx);
     let mut out = Vec::new();
     let top = t.m.content_top;
-    let mut y = widgets::section_first(&mut c, t, f, top, l.pick(["重启到", "重新啟動到", "Reboot to"]));
+    let mut y = top;
+    if let Some((warn, _)) = &s.abl_warning {
+        let slot = warn.slot.as_str();
+        let detail = warn.detail.as_str();
+        let title = tr!(
+            l,
+            "ABL EFISP 警告（槽位 {slot}）",
+            "ABL EFISP 警告（槽位 {slot}）",
+            "ABL EFISP warning (slot {slot})",
+            "Cảnh báo ABL EFISP (khe {slot})",
+        );
+        let msg = tr!(
+            l,
+            "启动后该槽位的 ABL 已不再包含 EFISP 加载器，重启后可能无法启动：{detail}",
+            "開機後該槽位的 ABL 已不再包含 EFISP 載入器，重新啟動後可能無法啟動：{detail}",
+            "This slot's ABL no longer contains the EFISP loader seen at boot. Rebooting may fail: {detail}",
+            "ABL ở khe này không còn bộ nạp EFISP như lúc khởi động. Khởi động lại có thể lỗi: {detail}",
+        );
+        y = widgets::list(&mut c, t, f, y, &[standing(&title, RED, Icon::Shield, &msg)]).bottom;
+        let cancel = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(CANCEL)).trail(Trail::None)]);
+        out.extend(hits(&cancel.rows, &[Action::DismissAblWarning]));
+        let (label, danger) = confirm_label(Confirm::RebootAnyway, cx.state);
+        let track = widgets::confirm(&mut c, t, f, cancel.bottom + t.m.dp(24.0), label, danger, s.confirm);
+        out.push(Hit { rect: track, action: Action::Confirm(Confirm::RebootAnyway) });
+        y = widgets::section(&mut c, t, f, track.y + track.h, l.pick(["重启到", "重新啟動到", "Reboot to"]));
+    } else {
+        y = widgets::section_first(&mut c, t, f, y, l.pick(["重启到", "重新啟動到", "Reboot to"]));
+    }
     let rows: Vec<Row> = REBOOT_TARGETS
         .iter()
         .enumerate()
@@ -857,7 +887,7 @@ pub fn reboot(cx: &Ctx) -> Frame {
     let (label, danger) = confirm_label(Confirm::Reboot, cx.state);
     let track = widgets::confirm(&mut c, t, f, y + t.m.dp(28.0), label, danger, s.confirm);
     out.push(Hit { rect: track, action: Action::Confirm(Confirm::Reboot) });
-    Frame::new(t, c, out, l.pick(REBOOT), top)
+    Frame::new(t, fit(c, t, track.y + track.h), out, l.pick(REBOOT), top)
 }
 
 /// Installing, opened from the home page: the system on the phone now, and
@@ -1890,15 +1920,16 @@ pub fn backup(cx: &Ctx) -> Frame {
     });
     let boot = l.pick(["boot、init_boot、vendor_boot、dtbo、vbmeta 和 recovery", "boot、init_boot、vendor_boot、dtbo、vbmeta 和 recovery", "boot, init_boot, vendor_boot, dtbo, vbmeta and recovery"]);
     let modem = l.pick(["IMEI、基带设置和传感器校准数据", "IMEI、基頻設定和感應器校正資料", "IMEI, modem settings and sensor calibration"]);
-    let subs = [boot, system, data, modem];
-    let rows: Vec<Row> = BACKUP_PARTS
+    let efisp = l.pick(["非 A/B EFI 系统分区（原始镜像）", "非 A/B EFI 系統分割區（原始映像檔）", "Non-slotted EFI system partition (raw image)"]);
+    let subs = [boot, system, data, modem, efisp];
+    let shown: Vec<usize> = (0..4).chain(s.efisp_partition.then_some(4)).collect();
+    let rows: Vec<Row> = shown
         .iter()
-        .zip(subs)
-        .enumerate()
-        .map(|(k, (name, sub))| Row::new(l.pick(*name)).subtitle(sub).trail(Trail::Check(s.backup[k])))
+        .map(|&k| Row::new(l.pick(BACKUP_PARTS[k])).subtitle(subs[k]).trail(Trail::Check(s.backup[k])))
         .collect();
     let parts = widgets::list(&mut c, t, f, y, &rows);
-    out.extend(hits(&parts.rows, &[0, 1, 2, 3].map(Action::BackupPart)));
+    let acts: Vec<Action> = shown.iter().map(|&k| Action::BackupPart(k)).collect();
+    out.extend(hits(&parts.rows, &acts));
     let y = widgets::section(&mut c, t, f, parts.bottom, l.pick(["存放位置", "存放位置", "Save to"]));
     let storage = match (s.data.storage_open(), i.storage.free.map(fmt::gb)) {
         (true, Some(free)) => tr!(l, "剩余 {free}", "剩餘 {free}", "{free} free", "Còn trống {free}"),
@@ -2272,6 +2303,8 @@ const STOP: Text = ["停止", "停止", "Stop"];
 const ROOT: Text = ["Root 管理", "Root 管理", "Root manager"];
 const SHARE: Text = ["网络文件共享", "網路檔案共享", "Network file sharing"];
 const PLUGINS: Text = ["插件", "擴充功能", "Plugins"];
+const PAYLOAD: Text = ["OTA Payload 检查", "OTA Payload 檢查", "OTA payload"];
+const BATCH_FLASH: Text = ["批量刷入镜像", "批次刷入映像檔", "Batch flash"];
 
 /// Tools for the experienced.
 pub fn advanced(cx: &Ctx) -> Frame {
@@ -2286,6 +2319,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
         Row::new(l.pick(FILESYSTEMS)).icon(RED, Icon::Mount),
         Row::new(l.pick(LOGS)).icon(ORANGE, Icon::Log),
         Row::new(l.pick(UPDATE)).icon(GREEN, Icon::Layers).trail(Trail::Value(update_value(cx))),
+        Row::new(l.pick(BATCH_FLASH)).icon(ORANGE, Icon::Install),
         Row::new(l.pick(ROOT)).icon(PURPLE, Icon::Shield),
         Row::new(l.pick(SHARE)).icon(BLUE, Icon::Globe).trail(Trail::Value(share_state)),
         Row::new(l.pick(PLUGINS)).icon(GREEN, Icon::More),
@@ -2297,6 +2331,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
         Action::Open(Screen::Filesystems),
         Action::Open(Screen::Logs),
         Action::Open(Screen::Update),
+        Action::Open(Screen::BatchFlash),
         Action::Open(Screen::Root),
         Action::Open(Screen::Share),
         Action::Open(Screen::Plugins),
@@ -3310,6 +3345,14 @@ pub fn file_info(cx: &Ctx) -> Frame {
         acts.push(Action::InstallEntry);
     }
     if e.kind == FileKind::File {
+        if Path::new(&e.name)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip") || ext.eq_ignore_ascii_case("bin"))
+        {
+            rows.push(Row::new(l.pick(["检查 OTA Payload", "檢查 OTA Payload", "Inspect OTA payload"])));
+            acts.push(Action::InspectPayload);
+        }
         rows.push(Row::new(l.pick(["编辑", "編輯", "Edit"])));
         acts.push(Action::EditEntry);
     }
@@ -4481,6 +4524,298 @@ pub fn plugin_run(cx: &Ctx) -> Frame {
 
     let back = run.outcome.is_some();
     Frame { rows, back, ..Frame::new(t, fit(c, t, y), out, l.pick(PLUGINS), top) }
+}
+
+/// OTA `payload.bin` / `.zip` metadata, ARB status, and per-partition extraction.
+pub fn payload(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+    let mut y = top;
+
+    let Some(st): Option<&PayloadState> = s.payload.as_ref() else {
+        y = widgets::footnote(&mut c, t, f, y, l.pick(["未选择 Payload 文件。", "未選擇 Payload 檔案。", "No payload selected."]));
+        return Frame::new(t, fit(c, t, y), out, l.pick(PAYLOAD), top);
+    };
+
+    let name = st
+        .path
+        .file_name()
+        .map_or_else(|| st.path.to_string_lossy().into_owned(), |n| n.to_string_lossy().into_owned());
+    let mut file_facts = vec![(l.pick(NAME), name)];
+    if let Some(Ok(saved)) = &st.last_extracted {
+        file_facts.push((l.pick(["最近提取", "最近提取", "Last extracted"]), saved.clone()));
+    }
+    y = widgets::info_card(&mut c, t, f, y, &file_facts);
+
+    if let Some((part_name, done, of)) = &st.extracting {
+        let frac = (*of > 0).then(|| share(*done, *of));
+        let status = match (*of > 0, frac) {
+            (true, Some(p)) => {
+                let pct = percent(p);
+                tr!(l, "正在提取 {part_name} ({pct}%)", "正在提取 {part_name} ({pct}%)", "Extracting {part_name} ({pct}%)", "Đang trích xuất {part_name} ({pct}%)")
+            }
+            _ => tr!(l, "正在提取 {part_name}", "正在提取 {part_name}", "Extracting {part_name}", "Đang trích xuất {part_name}"),
+        };
+        y = widgets::progress_card(&mut c, t, f, y + t.m.card_gap, l.pick(PAYLOAD), &status, frac);
+        return Frame { back: false, ..Frame::new(t, fit(c, t, y), out, l.pick(PAYLOAD), top) };
+    }
+
+    match &st.report {
+        None => {
+            y = widgets::footnote(&mut c, t, f, y, l.pick(["正在解析 OTA Payload", "正在解析 OTA Payload", "Reading OTA payload"]));
+        }
+        Some(Err(why)) => {
+            y = widgets::list(
+                &mut c,
+                t,
+                f,
+                y + t.m.card_gap,
+                &[standing(l.pick(["读取失败", "讀取失敗", "Couldn't read payload"]), RED, Icon::Install, why)],
+            )
+            .bottom;
+        }
+        Some(Ok(rep)) => {
+            let kind_str = if rep.minor_version == 0 {
+                l.pick(["完整包", "完整包", "Full OTA"])
+            } else {
+                l.pick(["增量包", "增量包", "Delta OTA"])
+            };
+            let mut info = vec![
+                (l.pick(["类型", "類型", "Type"]), kind_str.to_string()),
+                (l.pick(["块大小", "區塊大小", "Block size"]), format!("{} B", rep.block_size)),
+            ];
+            if let Some(patch) = &rep.security_patch {
+                info.push((l.pick(["安全补丁", "安全性更新", "Security patch"]), patch.clone()));
+            }
+            if let Some(dev) = &rep.pre_device {
+                info.push((l.pick(["目标设备", "目標裝置", "Device"]), dev.clone()));
+            }
+            y = widgets::section(&mut c, t, f, y, l.pick(["包信息", "套件資訊", "Package info"]));
+            y = widgets::info_card(&mut c, t, f, y, &info);
+
+            if rep.arb.downgrade {
+                let pkg = rep.arb.package_patch.as_deref().unwrap_or("-");
+                let dev = rep.arb.device_patch.as_deref().unwrap_or("-");
+                let warn = tr!(
+                    l,
+                    "防回滚警告：该 OTA 包（{pkg}）早于本机当前版本（{dev}），刷入可能触发 ARB 变砖。",
+                    "防回滾警告：此 OTA 套件（{pkg}）早於本機目前版本（{dev}），刷入可能觸發 ARB 無法開機。",
+                    "Anti-Rollback warning: package ({pkg}) is older than this phone ({dev}). Flashing may trigger ARB.",
+                    "Cảnh báo chống hạ cấp: gói ({pkg}) cũ hơn bản trên máy ({dev}), flash có thể dính ARB.",
+                );
+                y = widgets::list(
+                    &mut c,
+                    t,
+                    f,
+                    y + t.m.card_gap,
+                    &[standing(l.pick(["防回滚警告", "防回滾警告", "Rollback warning"]), RED, Icon::Shield, &warn)],
+                )
+                .bottom;
+            }
+
+            y = widgets::section(&mut c, t, f, y, l.pick(["包含分区", "包含分割區", "Partitions"]));
+            let subs: Vec<String> = rep
+                .partitions
+                .iter()
+                .map(|p| {
+                    let sz = fmt::file_size(p.size);
+                    if p.extractable {
+                        tr!(l, "{sz} · 点击提取", "{sz} · 點擊提取", "{sz} · Tap to extract", "{sz} · Chạm để trích xuất")
+                    } else {
+                        let codecs = p.unsupported_codecs.join(", ");
+                        tr!(l, "{sz} · 不支持提取（{codecs}）", "{sz} · 不支援提取（{codecs}）", "{sz} · Extract unsupported ({codecs})", "{sz} · Không hỗ trợ trích xuất ({codecs})")
+                    }
+                })
+                .collect();
+            let rows: Vec<Row> = rep
+                .partitions
+                .iter()
+                .zip(&subs)
+                .map(|(p, sub)| Row::new(&p.name).subtitle(sub))
+                .collect();
+            let block = widgets::list(&mut c, t, f, y, &rows);
+            let acts: Vec<Action> = (0..rep.partitions.len()).map(Action::ExtractPayloadPart).collect();
+            out.extend(hits(&block.rows, &acts));
+            y = block.bottom;
+        }
+    }
+
+    Frame::new(t, fit(c, t, y), out, l.pick(PAYLOAD), top)
+}
+
+/// Batch flash multiple `.img` / `.efi` images with partition & geometry checks.
+pub fn batch_flash(cx: &Ctx) -> Frame {
+    use aweyuki_install::batch::GeometryCheck;
+
+    let (t, f, s, i, l) = (cx.t, cx.f, cx.state, cx.info, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+
+    if let Some(job) = &s.batch.job {
+        if let Some(outcome) = &job.outcome {
+            let (title, color, detail): (Text, Rgba, String) = match outcome {
+                Ok(flashed) => {
+                    let count = flashed.len();
+                    let names = flashed.join(", ");
+                    (
+                        ["刷入成功", "刷入成功", "Flashed"],
+                        GREEN,
+                        tr!(l, "已刷入 {count} 个分区：{names}。", "已刷入 {count} 個分割區：{names}。", "Flashed {count} partition(s): {names}.", "Đã flash {count} phân vùng: {names}."),
+                    )
+                }
+                Err(why) => (["刷入失败", "刷入失敗", "Flash failed"], RED, why.clone()),
+            };
+            let y = widgets::list(&mut c, t, f, top, &[standing(l.pick(title), color, Icon::Install, &detail)]).bottom;
+            let done = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(DONE)).trail(Trail::None)]);
+            out.extend(hits(&done.rows, &[Action::RefreshBatch]));
+            return Frame::new(t, fit(c, t, done.bottom), out, l.pick(BATCH_FLASH), top);
+        }
+
+        let frac = (job.of > 0).then(|| share(job.done, job.of));
+        let (num, tot, part) = (job.index + 1, job.total, job.partition.as_str());
+        let status = tr!(
+            l,
+            "第 {num}/{tot} 项：正在刷入 {part}",
+            "第 {num}/{tot} 項：正在刷入 {part}",
+            "Item {num} of {tot}: flashing {part}",
+            "Mục {num}/{tot}: đang flash {part}",
+        );
+        let y = widgets::progress_card(&mut c, t, f, top, l.pick(BATCH_FLASH), &status, frac);
+        return Frame { back: false, ..Frame::new(t, fit(c, t, y), out, l.pick(BATCH_FLASH), top) };
+    }
+
+    let y = widgets::section_first(&mut c, t, f, top, l.pick(["镜像目录", "映像檔目錄", "Image folder"]));
+    let storage_sub = match s.data.storage_open() {
+        true => "/sdcard",
+        false => l.pick(DECRYPT_NEEDED),
+    };
+    let dl_sub = match s.data.storage_open() {
+        true => "/sdcard/downloaded_rom",
+        false => l.pick(DECRYPT_NEEDED),
+    };
+    let usb_sub = l.pick(match &s.usb_drive {
+        Some(UsbDrive::Shown) => ["已连接", "已連接", "Connected"],
+        Some(UsbDrive::Unreadable(_)) => USB_DRIVE_UNREADABLE,
+        None => USB_DRIVE_WANTED,
+    });
+    let places = widgets::list(&mut c, t, f, y, &[
+        Row::new(l.pick(["已下载的更新", "已下載的更新", "Downloads"]))
+            .subtitle(dl_sub)
+            .trail(Trail::Check(s.batch.source == BatchSource::Downloads)),
+        Row::new(place_name(l, Place::Storage))
+            .subtitle(storage_sub)
+            .trail(Trail::Check(s.batch.source == BatchSource::Storage)),
+        Row::new(place_name(l, Place::UsbDrive))
+            .subtitle(usb_sub)
+            .trail(Trail::Check(s.batch.source == BatchSource::UsbDrive)),
+    ]);
+    out.extend(hits(&places.rows, &[Action::BatchPlace(0), Action::BatchPlace(1), Action::BatchPlace(2)]));
+
+    let (mut y, refresh_rect) = widgets::section_action(
+        &mut c,
+        t,
+        f,
+        places.bottom,
+        l.pick(["镜像列表", "映像檔清單", "Images"]),
+        l.pick(["刷新", "重新整理", "Refresh"]),
+    );
+    out.push(Hit { rect: refresh_rect, action: Action::RefreshBatch });
+
+    if !s.batch_source_open() {
+        let msg = match (s.batch.source, &s.usb_drive) {
+            (BatchSource::UsbDrive, Some(UsbDrive::Unreadable(why))) => why.as_str(),
+            (BatchSource::UsbDrive, None) => l.pick(USB_DRIVE_WANTED),
+            _ => l.pick(DECRYPT_NEEDED),
+        };
+        y = widgets::footnote(&mut c, t, f, y, msg);
+        return Frame::new(t, fit(c, t, y), out, l.pick(BATCH_FLASH), top);
+    }
+
+    match &s.batch.items {
+        None => {
+            y = widgets::footnote(&mut c, t, f, y, l.pick(["正在扫描镜像", "正在掃描映像檔", "Scanning images"]));
+        }
+        Some(Err(why)) => {
+            y = widgets::footnote(&mut c, t, f, y, why);
+        }
+        Some(Ok(list)) if list.is_empty() => {
+            y = widgets::footnote(
+                &mut c,
+                t,
+                f,
+                y,
+                l.pick([
+                    "该目录中没有找到 .img 或 .efi 文件。",
+                    "此目錄中找不到 .img 或 .efi 檔案。",
+                    "No .img or .efi files found in this folder.",
+                ]),
+            );
+        }
+        Some(Ok(list)) => {
+            let subs: Vec<String> = list
+                .iter()
+                .map(|(it, _)| {
+                    let sz = fmt::file_size(it.size);
+                    let target = it.partition.as_deref().unwrap_or("?");
+                    match &it.geometry {
+                        GeometryCheck::Ok { partition_bytes } => {
+                            let max = fmt::file_size(*partition_bytes);
+                            format!("{sz} / {max} -> {target}")
+                        }
+                        GeometryCheck::TooLarge { partition_bytes, .. } => {
+                            let max = fmt::file_size(*partition_bytes);
+                            tr!(l, "过大（{sz} > {max}，{target}）", "過大（{sz} > {max}，{target}）", "Too large ({sz} > {max} for {target})", "Quá lớn ({sz} > {max}, {target})")
+                        }
+                        GeometryCheck::MissingPartition => {
+                            tr!(l, "未找到目标分区 {target}", "找不到目標分割區 {target}", "Partition not found: {target}", "Không thấy phân vùng {target}")
+                        }
+                        GeometryCheck::Unrecognized => l.pick(["无法识别目标分区", "無法辨識目標分割區", "Unrecognized target partition"]).into(),
+                    }
+                })
+                .collect();
+            let rows: Vec<Row> = list
+                .iter()
+                .zip(&subs)
+                .map(|((it, on), sub)| {
+                    let r = Row::new(&it.file_name).subtitle(sub);
+                    if matches!(it.geometry, GeometryCheck::Ok { .. }) {
+                        r.trail(Trail::Check(*on))
+                    } else {
+                        r.tint(t.pal.danger).trail(Trail::None)
+                    }
+                })
+                .collect();
+            let block = widgets::list(&mut c, t, f, y, &rows);
+            let acts: Vec<Action> = (0..list.len()).map(Action::BatchToggle).collect();
+            out.extend(hits(&block.rows, &acts));
+            y = block.bottom;
+
+            if s.batch.any_slotted_selected() {
+                let sec = widgets::section(&mut c, t, f, y, l.pick(["槽位", "槽位", "Slot"]));
+                let titles = Pick::ALL.map(|p| pick_title(l, p, i.slot));
+                let slot_rows: Vec<Row> = Pick::ALL
+                    .iter()
+                    .zip(&titles)
+                    .map(|(p, title)| Row::new(title).trail(Trail::Check(*p == s.batch.pick)))
+                    .collect();
+                let picks = widgets::list(&mut c, t, f, sec, &slot_rows);
+                out.extend(hits(&picks.rows, &Pick::ALL.map(Action::BatchSlot)));
+                y = picks.bottom;
+            }
+
+            if !s.batch.selected_payload().is_empty() {
+                let (label, danger) = confirm_label(Confirm::BatchFlash, cx.state);
+                let track = widgets::confirm(&mut c, t, f, y + t.m.dp(24.0), label, danger, s.confirm);
+                out.push(Hit { rect: track, action: Action::Confirm(Confirm::BatchFlash) });
+                y = track.y + track.h;
+            }
+        }
+    }
+
+    Frame::new(t, fit(c, t, y), out, l.pick(BATCH_FLASH), top)
 }
 
 #[cfg(test)]

@@ -209,6 +209,21 @@ impl App {
                 }
                 self.state.plugin_run = None;
             }
+            Screen::Payload => {
+                if self.state.payload.as_ref().is_some_and(|p| p.extracting.is_some()) {
+                    self.say(l.pick(["正在提取，请等待完成", "正在提取，請等待完成", "Extracting. Wait for it to finish"]), now);
+                    return fx;
+                }
+                self.state.payload = None;
+            }
+            Screen::BatchFlash => {
+                if self.state.batch.job.as_ref().is_some_and(|j| j.outcome.is_none()) {
+                    self.say(l.pick(["正在刷入，请等待刷入完成", "正在刷入，請等待刷入完成", "Flashing. Wait for it to finish"]), now);
+                    return fx;
+                }
+                self.state.batch.job = None;
+            }
+            Screen::Reboot => self.state.abl_warning = None,
             _ => {}
         }
         if self.screen() == Screen::Installing {
@@ -333,6 +348,13 @@ impl App {
             Screen::Root => vec![Effect::ReadRoot],
             Screen::Plugins => vec![Effect::ReadPlugins],
             Screen::Logs => vec![Effect::ReadHistory],
+            Screen::BatchFlash => {
+                if self.state.batch.job.is_none() && self.state.batch_source_open() {
+                    vec![Effect::ReadBatch(self.state.batch.source)]
+                } else {
+                    Vec::new()
+                }
+            }
             _ => Vec::new(),
         }
     }
@@ -457,7 +479,7 @@ mod tests {
     #[test]
     fn every_unfinished_entry_now_opens_its_page() {
         let (f, i) = (fonts(), DeviceInfo { slot: Some(Slot::B), ..info() });
-        let routes: [(Screen, Screen); 16] = [
+        let routes: [(Screen, Screen); 17] = [
             (Screen::Home, Screen::Search),
             (Screen::Home, Screen::Backup),
             (Screen::Home, Screen::Restore),
@@ -468,6 +490,7 @@ mod tests {
             (Screen::Advanced, Screen::Root),
             (Screen::Advanced, Screen::Share),
             (Screen::Advanced, Screen::Plugins),
+            (Screen::Advanced, Screen::BatchFlash),
             (Screen::Settings, Screen::Language),
             (Screen::Settings, Screen::TimeZone),
             (Screen::Settings, Screen::Terminal),

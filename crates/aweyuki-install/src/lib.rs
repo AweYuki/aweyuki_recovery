@@ -3,8 +3,10 @@
 //! update_engine applies, zips that install themselves by running the
 //! script inside them, and partition images, which are written here.
 
+pub mod abl;
 pub mod adb;
 pub mod asked;
+pub mod batch;
 pub mod blockmap;
 pub mod commands;
 pub mod efisp;
@@ -15,6 +17,7 @@ pub mod image;
 pub mod keep;
 pub mod ota;
 pub mod package;
+pub mod payload;
 pub mod plugins;
 pub mod root;
 pub mod script;

@@ -115,6 +115,12 @@ pub const ENTRIES: &[Entry] = &[
         Screen::Plugins,
         &["chajian", "cj", "plugins", "plugin", "tien ich mo rong"],
     ),
+    entry(
+        ["批量刷入镜像", "批次刷入映像檔", "Batch flash"],
+        ADVANCED,
+        Screen::BatchFlash,
+        &["piliangshuaru", "plsr", "batch", "flash", "geometry", "flash hang loat", "hang loat"],
+    ),
     entry(SETTINGS, HOME, Screen::Settings, &["shezhi", "sz", "settings", "thiet lap", "tl", "cai dat"]),
     entry(["深色模式", "深色模式", "Dark mode"], SETTINGS, Screen::Settings, &["shensemoshi", "ssms", "dark", "theme", "che do toi", "cdt", "giao dien toi"]),
     entry(["屏幕亮度", "螢幕亮度", "Screen brightness"], SETTINGS, Screen::Settings, &["pingmuliangdu", "pmld", "liangdu", "ld", "brightness", "do sang man hinh", "do sang", "ds"]),

@@ -273,7 +273,7 @@ impl App {
             // All a backup holds is ticked to restore at first.
             Action::OpenBackup(i) => {
                 let entry = self.state.backups[i].clone();
-                let parts = entry.held.as_ref().map_or([false; 4], |h| h.parts);
+                let parts = entry.held.as_ref().map_or([false; 5], |h| h.parts);
                 self.state.restore = Some((entry, parts));
                 self.state.asking_delete = false;
                 self.open(Screen::RestoreBackup);
@@ -626,6 +626,89 @@ impl App {
                     return vec![Effect::StopPlugin];
                 }
             }
+            Action::DismissAblWarning => {
+                self.state.abl_warning = None;
+                self.refresh();
+            }
+            Action::InspectPayload => {
+                let path = std::path::PathBuf::from(self.entry_path());
+                self.state.payload = Some(PayloadState {
+                    path: path.clone(),
+                    report: None,
+                    extracting: None,
+                    last_extracted: None,
+                });
+                self.open(Screen::Payload);
+                return vec![Effect::InspectPayload(path)];
+            }
+            Action::ExtractPayloadPart(i) => {
+                let Some(st) = self.state.payload.as_ref() else {
+                    return Vec::new();
+                };
+                if st.extracting.is_some() {
+                    self.say(l.pick(["正在提取，请等待完成", "正在提取，請等待完成", "Extracting. Wait for it to finish"]), now);
+                    return Vec::new();
+                }
+                let Some(Ok(report)) = &st.report else {
+                    return Vec::new();
+                };
+                let Some(part) = report.partitions.get(i) else {
+                    return Vec::new();
+                };
+                if !part.extractable {
+                    self.say(l.pick(["该分区不支持直接提取", "該分割區不支援直接提取", "This partition cannot be extracted directly"]), now);
+                    return Vec::new();
+                }
+                let path = st.path.clone();
+                let partition = part.name.clone();
+                let size = part.size;
+                if let Some(mut_st) = self.state.payload.as_mut() {
+                    mut_st.extracting = Some((partition.clone(), 0, size));
+                }
+                self.refresh();
+                return vec![Effect::ExtractPayloadPart { path, partition }];
+            }
+            Action::BatchPlace(k) => {
+                if let Some(&src) = BatchSource::ALL.get(k)
+                    && self.state.batch.job.is_none()
+                {
+                    self.state.batch.source = src;
+                    self.state.batch.items = None;
+                    self.refresh();
+                    if self.state.batch_source_open() {
+                        return vec![Effect::ReadBatch(src)];
+                    }
+                }
+            }
+            Action::RefreshBatch => {
+                if self.state.batch.job.as_ref().is_some_and(|j| j.outcome.is_some()) {
+                    self.state.batch.job = None;
+                }
+                if self.state.batch.job.is_none() {
+                    if self.state.batch_source_open() {
+                        self.state.batch.items = None;
+                        self.refresh();
+                        return vec![Effect::ReadBatch(self.state.batch.source)];
+                    }
+                    self.refresh();
+                }
+            }
+            Action::BatchToggle(i) => {
+                if self.state.batch.job.is_none()
+                    && let Some(Ok(items)) = self.state.batch.items.as_mut()
+                    && let Some((item, on)) = items.get_mut(i)
+                    && matches!(item.geometry, aweyuki_install::batch::GeometryCheck::Ok { .. })
+                {
+                    *on = !*on;
+                    self.refresh();
+                }
+            }
+            Action::BatchSlot(pick) => {
+                if self.state.batch.job.is_none() {
+                    self.state.batch.pick = pick;
+                    self.refresh();
+                }
+            }
             Action::Unavailable(text) => self.say(text, now),
         }
         Vec::new()
@@ -767,6 +850,15 @@ impl App {
         let (l, mut fx) = (self.state.lang, Vec::new());
         match which {
             Confirm::Reboot => fx.push(Effect::Reboot(TARGETS[self.state.reboot])),
+            Confirm::RebootAnyway => {
+                if let Some((warn, target)) = self.state.abl_warning.take() {
+                    fx.push(Effect::RebootConfirmed {
+                        target,
+                        fingerprint: warn.fingerprint,
+                    });
+                    self.refresh();
+                }
+            }
             Confirm::Wipe => {
                 let chosen: Vec<Wipe> = WIPES.iter().zip(self.state.wipe).filter(|(_, on)| *on).map(|(&w, _)| w).collect();
                 match chosen.is_empty() {
@@ -790,9 +882,11 @@ impl App {
             }
             Confirm::Backup => {
                 let s = &self.state;
-                let refused = if !s.backup.contains(&true) {
+                let mut parts = s.backup;
+                parts[4] &= s.efisp_partition;
+                let refused = if !parts.contains(&true) {
                     Some(["请选择要备份的内容", "請選擇要備份的內容", "Choose what to back up"])
-                } else if s.backup[2] && s.data != Data::Open {
+                } else if parts[2] && s.data != Data::Open {
                     Some(["备份 data 分区需先完成「解密」", "備份 data 分割區需先完成「解密」", "Decrypt before backing up the data partition"])
                 } else if s.place_open(s.backup_to) {
                     None
@@ -804,7 +898,7 @@ impl App {
                         (Place::UsbDrive, _) => USB_DRIVE_WANTED,
                     })
                 };
-                let backup = Effect::Backup { parts: s.backup, place: s.backup_to, compress: s.compress, verify: s.verify };
+                let backup = Effect::Backup { parts, place: s.backup_to, compress: s.compress, verify: s.verify };
                 match refused {
                     Some(why) => self.say(l.pick(why), now),
                     None => fx.push(backup),
@@ -894,6 +988,24 @@ impl App {
                     fx.push(Effect::InstallSystem { size: choice.sizes[choice.size] });
                     self.state.install = Install::Systeming { name: choice.name.clone(), stage: None };
                     self.refresh();
+                }
+            }
+            Confirm::BatchFlash => {
+                let selected = self.state.batch.selected_payload();
+                if selected.is_empty() {
+                    self.say(l.pick(["请先选择有效的镜像", "請先選擇有效的映像檔", "Select at least one valid image"]), now);
+                } else {
+                    let pick = self.state.batch.pick;
+                    self.state.batch.job = Some(BatchJob {
+                        total: selected.len(),
+                        index: 0,
+                        partition: selected[0].1.clone(),
+                        done: 0,
+                        of: 0,
+                        outcome: None,
+                    });
+                    self.refresh();
+                    fx.push(Effect::RunBatch { items: selected, pick });
                 }
             }
         }

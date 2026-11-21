@@ -62,6 +62,16 @@ impl App {
         self.settle_page();
         self.refresh();
     }
+
+    /// Show or clear a pre-reboot ABL EFISP regression warning on [`Screen::Reboot`].
+    pub fn set_abl_warning(&mut self, warning: Option<(aweyuki_install::abl::AblWarning, Target)>) {
+        self.state.abl_warning = warning;
+        if self.state.abl_warning.is_some() && self.screen() != Screen::Reboot {
+            self.open(Screen::Reboot);
+        } else {
+            self.refresh();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -139,5 +149,38 @@ mod tests {
         app.touch(Touch::Up, &f, 0);
         assert_eq!(press(&mut app, Key::Power, 0), vec![Effect::Ticks]);
         assert!(!app.display_on(), "with the light put out, power turns the panel off");
+    }
+
+    #[test]
+    fn abl_warning_blocks_immediate_reboot_until_confirmed_or_dismissed() {
+        let (f, i) = (fonts(), info());
+        let mut app = opened(Screen::Reboot, &f, &i);
+        app.set_abl_warning(Some((
+            aweyuki_install::abl::AblWarning {
+                slot: "a".into(),
+                detail: "EFISP chainloader marker is no longer present".into(),
+                fingerprint: "a=deadbeef".into(),
+            },
+            Target::System,
+        )));
+        assert_eq!(
+            swipe(&mut app, &f, &i, Confirm::RebootAnyway),
+            vec![Effect::RebootConfirmed {
+                target: Target::System,
+                fingerprint: "a=deadbeef".into(),
+            }]
+        );
+        assert!(app.state.abl_warning.is_none());
+
+        app.set_abl_warning(Some((
+            aweyuki_install::abl::AblWarning {
+                slot: "b".into(),
+                detail: "missing".into(),
+                fingerprint: "b=0".into(),
+            },
+            Target::Recovery,
+        )));
+        tap(&mut app, &f, &i, Action::DismissAblWarning);
+        assert!(app.state.abl_warning.is_none());
     }
 }
