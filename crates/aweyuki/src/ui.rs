@@ -743,7 +743,7 @@ fn discover_plugins() -> Vec<aweyuki_install::plugins::Plugin> {
 }
 
 enum PayloadEvent {
-    Inspected(Result<aweyuki_install::payload::PayloadReport, String>),
+    Inspected(Box<Result<aweyuki_install::payload::PayloadReport, String>>),
     Progress(u64, u64),
     Extracted(Result<String, String>),
 }
@@ -2263,7 +2263,7 @@ impl Pages<'_> {
         for ev in events {
             match ev {
                 PayloadEvent::Inspected(res) => {
-                    self.app.set_payload(res);
+                    self.app.set_payload(*res);
                     done = true;
                 }
                 PayloadEvent::Progress(d, t) => self.app.payload_progress(d, t),
@@ -3076,7 +3076,7 @@ impl Pages<'_> {
                 let dev_patch = aweyuki_sys::prop("ro.build.version.security_patch");
                 self.payload_worker = Some(aweyuki_sys::worker::Worker::start("payload-inspect", move |teller| {
                     let res = aweyuki_install::payload::inspect_path(&path, dev_ts, dev_patch.as_deref()).map_err(|e| format!("{e:#}"));
-                    teller.tell(PayloadEvent::Inspected(res));
+                    teller.tell(PayloadEvent::Inspected(Box::new(res)));
                 })?);
             }
             Effect::ExtractPayloadPart { path, partition } => {
