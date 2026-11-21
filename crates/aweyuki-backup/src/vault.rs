@@ -239,15 +239,19 @@ impl<W: Write> Write for HashWriter<W> {
     }
 }
 
+struct PackCtx<'a> {
+    done: u64,
+    total: u64,
+    cancel: &'a AtomicBool,
+    progress: &'a mut dyn FnMut(u64, u64),
+}
+
 fn pack_tree<W: Write>(
     builder: &mut Builder<W>,
     src_root: &Path,
     archive_prefix: &Path,
     skip_top_caches: bool,
-    done: &mut u64,
-    total: u64,
-    cancel: &AtomicBool,
-    progress: &mut dyn FnMut(u64, u64),
+    ctx: &mut PackCtx<'_>,
 ) -> Result<()> {
     fn walk<W: Write>(
         builder: &mut Builder<W>,
@@ -255,12 +259,9 @@ fn pack_tree<W: Write>(
         rel_dir: &Path,
         depth: usize,
         skip_top_caches: bool,
-        done: &mut u64,
-        total: u64,
-        cancel: &AtomicBool,
-        progress: &mut dyn FnMut(u64, u64),
+        ctx: &mut PackCtx<'_>,
     ) -> Result<()> {
-        if cancel.load(Ordering::Relaxed) {
+        if ctx.cancel.load(Ordering::Relaxed) {
             return Err(Cancelled.into());
         }
         let mut entries: Vec<_> = fs::read_dir(dir)
@@ -270,7 +271,7 @@ fn pack_tree<W: Write>(
         entries.sort_by_key(fs::DirEntry::file_name);
 
         for entry in entries {
-            if cancel.load(Ordering::Relaxed) {
+            if ctx.cancel.load(Ordering::Relaxed) {
                 return Err(Cancelled.into());
             }
             let name = entry.file_name();
@@ -295,7 +296,7 @@ fn pack_tree<W: Write>(
                 hdr.set_entry_type(EntryType::Directory);
                 hdr.set_size(0);
                 builder.append_data(&mut hdr, &rel, io::empty())?;
-                walk(builder, &src, &rel, depth + 1, skip_top_caches, done, total, cancel, progress)?;
+                walk(builder, &src, &rel, depth + 1, skip_top_caches, ctx)?;
             } else if ft.is_symlink() {
                 let target = fs::read_link(&src).with_context(|| format!("readlink {}", src.display()))?;
                 hdr.set_entry_type(EntryType::Symlink);
@@ -305,29 +306,22 @@ fn pack_tree<W: Write>(
                 hdr.set_entry_type(EntryType::Regular);
                 hdr.set_size(meta.len());
                 let file = File::open(&src).with_context(|| format!("open {}", src.display()))?;
-                struct Reader<'a> {
+                struct Reader<'r, 'p> {
                     file: File,
-                    done: &'a mut u64,
-                    total: u64,
-                    cancel: &'a AtomicBool,
-                    progress: &'a mut dyn FnMut(u64, u64),
+                    ctx: &'r mut PackCtx<'p>,
                 }
-                impl Read for Reader<'_> {
+                impl Read for Reader<'_, '_> {
                     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-                        if self.cancel.load(Ordering::Relaxed) {
+                        if self.ctx.cancel.load(Ordering::Relaxed) {
                             return Err(io::Error::other(Cancelled));
                         }
                         let n = self.file.read(buf)?;
-                        *self.done += n as u64;
-                        (self.progress)(*self.done, self.total);
+                        self.ctx.done += n as u64;
+                        (self.ctx.progress)(self.ctx.done, self.ctx.total);
                         Ok(n)
                     }
                 }
-                builder.append_data(
-                    &mut hdr,
-                    &rel,
-                    Reader { file, done, total, cancel, progress },
-                )?;
+                builder.append_data(&mut hdr, &rel, Reader { file, ctx })?;
             }
         }
         Ok(())
@@ -338,7 +332,7 @@ fn pack_tree<W: Write>(
     root_hdr.set_mode(0o755);
     root_hdr.set_size(0);
     builder.append_data(&mut root_hdr, archive_prefix, io::empty())?;
-    walk(builder, src_root, archive_prefix, 0, skip_top_caches, done, total, cancel, progress)
+    walk(builder, src_root, archive_prefix, 0, skip_top_caches, ctx)
 }
 
 fn apk_relative_dir(entry: &AppEntry) -> String {
@@ -387,7 +381,6 @@ pub fn backup_app(
     let _ = fs::remove_file(&part_path);
 
     let total = entry.apk_bytes.saturating_add(entry.data_bytes).max(1);
-    let mut done = 0u64;
     progress(0, total);
 
     let pack_res = (|| -> Result<(u64, String)> {
@@ -400,28 +393,16 @@ pub fn backup_app(
         let frame = FrameInfo::new().block_size(BlockSize::Max4MB).content_checksum(true);
         let enc = FrameEncoder::with_frame_info(frame, hw);
         let mut tar = Builder::new(enc);
-
-        pack_tree(
-            &mut tar,
-            &entry.apk_dir,
-            Path::new("apk"),
-            false,
-            &mut done,
+        let mut ctx = PackCtx {
+            done: 0,
             total,
             cancel,
-            progress,
-        )?;
+            progress: &mut *progress,
+        };
+
+        pack_tree(&mut tar, &entry.apk_dir, Path::new("apk"), false, &mut ctx)?;
         if let Some(data_dir) = entry.data_dir.as_deref().filter(|p| p.is_dir()) {
-            pack_tree(
-                &mut tar,
-                data_dir,
-                Path::new("data"),
-                true,
-                &mut done,
-                total,
-                cancel,
-                progress,
-            )?;
+            pack_tree(&mut tar, data_dir, Path::new("data"), true, &mut ctx)?;
         }
 
         let enc = tar.into_inner().context("finish tar archive")?;

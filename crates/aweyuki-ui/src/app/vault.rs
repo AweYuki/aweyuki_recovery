@@ -109,20 +109,23 @@ mod tests {
         app.data_waiting(None);
         assert_eq!(tap(&mut app, &f, &i, Action::RefreshVault), vec![Effect::ReadVault]);
 
-        app.set_vault(
-            Ok(vec![VaultAppRow {
-                package: "com.example.demo".into(),
-                apk_bytes: 2048,
-                data_bytes: 4096,
-            }]),
-            Ok(vec![VaultBackupRow {
-                package: "com.example.demo".into(),
-                made: 1_792_600_000,
-                archive_file: "com.example.demo-1792600000.tar.lz4".into(),
-                archive_bytes: 1500,
-                has_data: true,
-            }]),
-        );
+        let populate = |app: &mut App| {
+            app.set_vault(
+                Ok(vec![VaultAppRow {
+                    package: "com.example.demo".into(),
+                    apk_bytes: 2048,
+                    data_bytes: 4096,
+                }]),
+                Ok(vec![VaultBackupRow {
+                    package: "com.example.demo".into(),
+                    made: 1_792_600_000,
+                    archive_file: "com.example.demo-1792600000.tar.lz4".into(),
+                    archive_bytes: 1500,
+                    has_data: true,
+                }]),
+            );
+        };
+        populate(&mut app);
 
         assert_eq!(
             tap(&mut app, &f, &i, Action::VaultBackupApp(0)),
@@ -132,19 +135,22 @@ mod tests {
         assert!(!app.frame(&f, &i).back);
         app.vault_ended(Ok("com.example.demo-1792600000.tar.lz4".into()), 100);
         assert!(app.frame(&f, &i).back);
-        tap(&mut app, &f, &i, Action::RefreshVault);
+        assert_eq!(tap_at(&mut app, &f, &i, Action::RefreshVault, 2000), vec![Effect::ReadVault]);
+        populate(&mut app);
 
-        tap(&mut app, &f, &i, Action::VaultTab(VaultTab::Saved));
+        tap_at(&mut app, &f, &i, Action::VaultTab(VaultTab::Saved), 2100);
         assert_eq!(
-            tap(&mut app, &f, &i, Action::VaultRestoreSaved(0)),
+            tap_at(&mut app, &f, &i, Action::VaultRestoreSaved(0), 2200),
             vec![Effect::VaultRestore("com.example.demo-1792600000.tar.lz4".into())]
         );
-        app.vault_ended(Ok("com.example.demo".into()), 200);
-        tap(&mut app, &f, &i, Action::RefreshVault);
+        app.vault_ended(Ok("com.example.demo".into()), 2300);
+        assert_eq!(tap_at(&mut app, &f, &i, Action::RefreshVault, 4000), vec![Effect::ReadVault]);
+        populate(&mut app);
 
         assert_eq!(
-            tap(&mut app, &f, &i, Action::VaultDeleteSaved(0)),
+            tap_at(&mut app, &f, &i, Action::VaultDeleteSaved(0), 4100),
             vec![Effect::VaultDelete("com.example.demo-1792600000.tar.lz4".into())]
         );
+        assert_eq!(app.vault_deleted(Ok(()), 4200), vec![Effect::ReadVault]);
     }
 }

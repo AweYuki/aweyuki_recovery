@@ -4979,21 +4979,20 @@ pub fn developer(cx: &Ctx) -> Frame {
     out.push(Hit { rect: refresh_rect, action: Action::RefreshDev });
 
     if let Some(info) = &s.dev.info {
-        let mut items = vec![
-            ("SELinux".into(), info.selinux.clone()),
-            ("USB / ADB".into(), info.adb_config.clone()),
+        let mut items: Vec<(&str, String)> = vec![
+            ("SELinux", info.selinux.clone()),
+            ("USB / ADB", info.adb_config.clone()),
         ];
         if let Some(lvl) = info.printk_level {
-            items.push((l.pick(["日志级别 (printk)", "記錄層級 (printk)", "printk level"]).into(), lvl.to_string()));
+            items.push((l.pick(["日志级别 (printk)", "記錄層級 (printk)", "printk level"]), lvl.to_string()));
         }
         if let Some(gov) = &info.cpu_governor {
-            items.push((l.pick(["CPU 调速器", "CPU 調速器", "CPU governor"]).into(), gov.clone()));
+            items.push((l.pick(["CPU 调速器", "CPU 調速器", "CPU governor"]), gov.clone()));
         }
         if !info.cmdline.is_empty() {
-            items.push(("cmdline".into(), info.cmdline.clone()));
+            items.push(("cmdline", info.cmdline.clone()));
         }
-        let pairs: Vec<(&str, String)> = items.iter().map(|(k, v)| (k.as_ref(), v.clone())).collect();
-        y = widgets::info_card(&mut c, t, f, y, &pairs);
+        y = widgets::info_card(&mut c, t, f, y, &items);
 
         y = widgets::section(&mut c, t, f, y, l.pick(["控制台 printk 级别", "主控台 printk 層級", "Console printk level"]));
         let cur = info.printk_level.unwrap_or(4);

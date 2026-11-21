@@ -3182,12 +3182,19 @@ impl Pages<'_> {
                     };
                     let addr = SocketAddr::from(([0, 0, 0, 0], port));
                     let (teller, told) = aweyuki_sys::worker::telling::<Event>()?;
+                    let teller = Mutex::new(teller);
                     let (w, h) = (self.screen.w, self.screen.h);
                     let buf = self.mirror_png.clone();
                     let hooks = aweyuki_net::share::MirrorHooks {
                         size: (w, h),
-                        frame_png: Arc::new(move || buf.lock().ok().filter(|b| !b.is_empty()).cloned()),
+                        frame_png: Arc::new(move || {
+                            let guard = buf.lock().ok()?;
+                            (!guard.is_empty()).then(|| guard.clone())
+                        }),
                         on_input: Arc::new(move |ev: aweyuki_net::share::RemoteInput| {
+                            let Ok(teller) = teller.lock() else {
+                                return;
+                            };
                             let t0 = monotonic_ms();
                             let to_px = |nx: f32, ny: f32| {
                                 (
