@@ -36,7 +36,7 @@ use aweyuki_sys::uevent;
 use aweyuki_systems::Who;
 use aweyuki_ui::app::{
     App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, BatchSource, ClashChoice, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp,
-    FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Pick, Place,
+    FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place,
     PluginEnd, RenameRefused, RootOverview, Screen, ShareRoot, Shot, Source, AweyukiEnd, AweyukiStage, Target, UsbDrive, UsbLink, Wipe,
     DATA_OPENING, DATA_PARTITION, DOWNLOADS, INSTALL_UNFINISHED, USB_DRIVE,
 };

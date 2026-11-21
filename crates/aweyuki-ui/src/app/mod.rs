@@ -35,6 +35,7 @@ use aweyuki_vab::{BootSlots, Hold, Slot, SnapshotState, Standing};
 
 mod act;
 mod backup;
+mod batch;
 mod decrypt;
 mod draw;
 mod entry;
@@ -46,6 +47,7 @@ mod keys;
 mod manager;
 mod mount;
 mod nav;
+mod payload;
 mod plugins;
 mod power;
 mod prefs;
@@ -217,6 +219,7 @@ pub enum Confirm {
     RebootAnyway,
     Wipe,
     Flash,
+    BatchFlash,
     Backup,
     Restore,
     /// Start next from the slot chosen on the slot page.

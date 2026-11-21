@@ -388,8 +388,8 @@ mod tests {
         let absent = assess_reader("a", &mut Cursor::new(synthetic_elf64(b"stock"))).unwrap();
         let unknown = assess_reader("a", &mut Cursor::new(synthetic_elf64(b"_FVH"))).unwrap();
 
-        assert_eq!(check_regression(&[present.clone()], &[present.clone()]), None);
-        let warn_absent = check_regression(&[present.clone()], &[absent]).unwrap();
+        assert_eq!(check_regression(std::slice::from_ref(&present), std::slice::from_ref(&present)), None);
+        let warn_absent = check_regression(std::slice::from_ref(&present), &[absent]).unwrap();
         assert_eq!(warn_absent.slot, "a");
         assert!(!warn_absent.fingerprint.is_empty());
 

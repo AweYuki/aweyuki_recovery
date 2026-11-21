@@ -310,7 +310,7 @@ mod tests {
             file_transfer: false,
             check_signature: true,
             keep_recovery: false,
-            backup: [false, true, true, false],
+            backup: [false, true, true, false, false],
             backup_to: Place::UsbDrive,
             compress: true,
             verify: false,
