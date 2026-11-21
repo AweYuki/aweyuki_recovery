@@ -709,6 +709,173 @@ impl App {
                     self.refresh();
                 }
             }
+            Action::LockNow => self.lock_now(),
+            Action::LockStartSet => {
+                self.state.lock_input.clear();
+                self.state.lock_setup = LockSetupState {
+                    stage: LockSetupStage::EnterNew,
+                    first_pin: String::new(),
+                    removing: false,
+                };
+                self.refresh();
+            }
+            Action::LockStartChange => {
+                self.state.lock_input.clear();
+                self.state.lock_setup = LockSetupState {
+                    stage: LockSetupStage::VerifyCurrent,
+                    first_pin: String::new(),
+                    removing: false,
+                };
+                self.refresh();
+            }
+            Action::LockStartRemove => {
+                self.state.lock_input.clear();
+                self.state.lock_setup = LockSetupState {
+                    stage: LockSetupStage::VerifyCurrent,
+                    first_pin: String::new(),
+                    removing: true,
+                };
+                self.refresh();
+            }
+            Action::RefreshDev => {
+                if self.state.dev.bench.as_ref().is_some_and(|j| j.outcome.is_some()) {
+                    self.state.dev.bench = None;
+                }
+                if self.state.dev.bench.is_none() {
+                    self.refresh();
+                    return vec![Effect::ReadDev];
+                }
+            }
+            Action::SetPrintk(level) => {
+                if self.state.dev.bench.is_none() {
+                    return vec![Effect::SetPrintk(level)];
+                }
+            }
+            Action::ToggleAdb => {
+                if self.state.dev.bench.is_none() {
+                    let adb_on = self
+                        .state
+                        .dev
+                        .info
+                        .as_ref()
+                        .is_some_and(|d| d.adb_config.split(',').any(|tok| tok == "adb"));
+                    return vec![Effect::SetAdb(!adb_on)];
+                }
+            }
+            Action::RunBench(target) => {
+                if self.state.dev.bench.as_ref().is_some_and(|j| j.outcome.is_none()) {
+                    return Vec::new();
+                }
+                let ready = match target {
+                    BenchTarget::Storage => {
+                        if !self.state.data.storage_open() {
+                            self.say(l.pick(DECRYPT_FIRST), now);
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                    BenchTarget::UsbDrive => {
+                        if self.state.usb_drive != Some(UsbDrive::Shown) {
+                            self.say(l.pick(USB_DRIVE_WANTED), now);
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                };
+                if ready {
+                    self.state.dev.bench = Some(BenchJob {
+                        target,
+                        done: 0,
+                        total: 100,
+                        outcome: None,
+                    });
+                    self.refresh();
+                    return vec![Effect::RunBench(target)];
+                }
+            }
+            Action::VaultTab(tab) => {
+                if self.state.vault.job.is_none() && self.state.vault.tab != tab {
+                    self.state.vault.tab = tab;
+                    self.refresh();
+                }
+            }
+            Action::RefreshVault => {
+                if self.state.vault.job.as_ref().is_some_and(|j| j.outcome.is_some()) {
+                    self.state.vault.job = None;
+                }
+                if self.state.vault.job.is_none() {
+                    if self.state.data.storage_open() {
+                        self.state.vault.apps = None;
+                        self.state.vault.saved = None;
+                        self.refresh();
+                        return vec![Effect::ReadVault];
+                    }
+                    self.refresh();
+                }
+            }
+            Action::VaultBackupApp(i) => {
+                if self.state.vault.job.is_some() {
+                    return Vec::new();
+                }
+                if !self.state.data.storage_open() {
+                    self.say(l.pick(DECRYPT_FIRST), now);
+                    return Vec::new();
+                }
+                if let Some(Ok(apps)) = &self.state.vault.apps
+                    && let Some(app) = apps.get(i)
+                {
+                    let package = app.package.clone();
+                    let total = app.apk_bytes.saturating_add(app.data_bytes).max(1);
+                    self.state.vault.job = Some(VaultJob {
+                        label: package.clone(),
+                        restore: false,
+                        done: 0,
+                        total,
+                        outcome: None,
+                    });
+                    self.refresh();
+                    return vec![Effect::VaultBackup(package)];
+                }
+            }
+            Action::VaultRestoreSaved(i) => {
+                if self.state.vault.job.is_some() {
+                    return Vec::new();
+                }
+                if !self.state.data.storage_open() {
+                    self.say(l.pick(DECRYPT_FIRST), now);
+                    return Vec::new();
+                }
+                if let Some(Ok(saved)) = &self.state.vault.saved
+                    && let Some(backup) = saved.get(i)
+                {
+                    let archive = backup.archive_file.clone();
+                    self.state.vault.job = Some(VaultJob {
+                        label: backup.package.clone(),
+                        restore: true,
+                        done: 0,
+                        total: backup.archive_bytes.max(1),
+                        outcome: None,
+                    });
+                    self.refresh();
+                    return vec![Effect::VaultRestore(archive)];
+                }
+            }
+            Action::VaultDeleteSaved(i) => {
+                if self.state.vault.job.is_some() {
+                    return Vec::new();
+                }
+                if !self.state.data.storage_open() {
+                    self.say(l.pick(DECRYPT_FIRST), now);
+                    return Vec::new();
+                }
+                if let Some(Ok(saved)) = &self.state.vault.saved
+                    && let Some(backup) = saved.get(i)
+                {
+                    return vec![Effect::VaultDelete(backup.archive_file.clone())];
+                }
+            }
             Action::Unavailable(text) => self.say(text, now),
         }
         Vec::new()
@@ -719,6 +886,7 @@ impl App {
         match self.screen() {
             Screen::Search => &mut self.state.search,
             Screen::Decrypt => &mut self.state.code,
+            Screen::Lock | Screen::LockSetup => &mut self.state.lock_input,
             Screen::Rename => &mut self.state.new_name,
             Screen::WlanPassword => &mut self.state.password,
             Screen::WlanAdd => {
@@ -767,6 +935,11 @@ impl App {
                 Screen::Decrypt => {
                     let code = std::mem::take(&mut self.state.code);
                     return self.unlock(code);
+                }
+                Screen::Lock => return self.submit_lock_pin(now),
+                Screen::LockSetup => {
+                    self.submit_lock_setup(now);
+                    return Vec::new();
                 }
                 // A name the folder cannot take is turned down here, in
                 // the user's words; an unchanged one leaves the page.
@@ -838,7 +1011,12 @@ impl App {
         // while its keys do.
         if matches!(cap, Cap::Char(_) | Cap::Space | Cap::Backspace) && self.state.layer == layer {
             let t = self.theme();
-            self.refresh_rows(0, (t.m.h as f32 - widgets::keyboard_height(&t)).floor() as u32);
+            let panel_h = if matches!(self.screen(), Screen::Lock | Screen::LockSetup) {
+                widgets::keypad_height(&t)
+            } else {
+                widgets::keyboard_height(&t)
+            };
+            self.refresh_rows(0, (t.m.h as f32 - panel_h).floor() as u32);
         } else {
             self.refresh();
         }

@@ -1,9 +1,9 @@
 use crate::app::{
-    Action, BackupAt, BackupEnd, BackupJob, BatchSource, Check, ClashChoice, Confirm, Damage, Data, Dock, DownloadEnd, EraseStop, Field, FileKind,
-    FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, PayloadState, Pick, Place, PluginEnd,
-    Rows, Screen, ShareRoot, AweyukiCheck, AweyukiEnd, AweyukiJob, AweyukiStage, Slider, Source, State, Switch, SystemsWork, Target,
-    UsbDrive, UsbLink, Wipe, ADDABLE, BACKUP_PARTS, DATA_ERASED, DATA_PARTITION, DOWNLOADS, FASTBOOT_CHOICES, SCREEN_OFF, TARGETS,
-    TIME_ZONES, USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, WIPES, installs, starting,
+    Action, BackupAt, BackupEnd, BackupJob, BatchSource, BenchTarget, Check, ClashChoice, Confirm, Damage, Data, Dock, DownloadEnd, EraseStop,
+    Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, LockSetupStage,
+    PayloadState, Pick, Place, PluginEnd, Rows, Screen, ShareRoot, AweyukiCheck, AweyukiEnd, AweyukiJob, AweyukiStage, Slider, Source, State,
+    Switch, SystemsWork, Target, UsbDrive, UsbLink, VaultTab, Wipe, ADDABLE, BACKUP_PARTS, DATA_ERASED, DATA_PARTITION, DOWNLOADS,
+    FASTBOOT_CHOICES, SCREEN_OFF, TARGETS, TIME_ZONES, USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, WIPES, installs, starting,
 };
 use crate::canvas::Canvas;
 use crate::color::Rgba;
@@ -116,6 +116,10 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::PluginRun => plugin_run(cx),
         Screen::Payload => payload(cx),
         Screen::BatchFlash => batch_flash(cx),
+        Screen::Lock => lock(cx),
+        Screen::LockSetup => lock_setup(cx),
+        Screen::Developer => developer(cx),
+        Screen::AppVault => app_vault(cx),
     }
 }
 
@@ -379,11 +383,13 @@ pub fn settings(cx: &Ctx) -> Frame {
         out.push(Hit { rect: r, action: Action::Toggle(Switch::Vibrate) });
     }
     y = widgets::section(&mut c, t, f, vibration.bottom, l.pick(["通用", "一般", "General"]));
+    let lock_val = l.pick(if s.recovery_lock.is_some() { ["已开启", "已開啟", "On"] } else { ["已关闭", "已關閉", "Off"] });
     let general = widgets::list(&mut c, t, f, y, &[
         Row::new(l.pick(LANGUAGE)).icon(BLUE, Icon::Globe).trail(Trail::Value(l.name())),
         Row::new(l.pick(TIME_ZONE)).icon(ORANGE, Icon::Clock).trail(Trail::Value(l.pick(TIME_ZONES[s.time_zone].0))),
+        Row::new(l.pick(LOCK_SETUP)).icon(PURPLE, Icon::Lock).trail(Trail::Value(lock_val)),
     ]);
-    out.extend(hits(&general.rows, &[Action::Open(Screen::Language), Action::Open(Screen::TimeZone)]));
+    out.extend(hits(&general.rows, &[Action::Open(Screen::Language), Action::Open(Screen::TimeZone), Action::Open(Screen::LockSetup)]));
     y = widgets::section(&mut c, t, f, general.bottom, "USB");
     let usb = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["文件传输", "檔案傳輸", "File transfer"])).icon(BLUE, Icon::Usb).trail(Trail::Switch(s.file_transfer))]);
     out.extend(hits(&usb.rows, &[Action::Toggle(Switch::FileTransfer)]));
@@ -2305,6 +2311,9 @@ const SHARE: Text = ["网络文件共享", "網路檔案共享", "Network file s
 const PLUGINS: Text = ["插件", "擴充功能", "Plugins"];
 const PAYLOAD: Text = ["OTA Payload 检查", "OTA Payload 檢查", "OTA payload"];
 const BATCH_FLASH: Text = ["批量刷入镜像", "批次刷入映像檔", "Batch flash"];
+const LOCK_SETUP: Text = ["恢复模式 PIN 锁", "復原模式 PIN 鎖", "Recovery PIN lock"];
+const DEVELOPER: Text = ["开发者与基准测试", "開發者與效能測試", "Developer & benchmark"];
+const APP_VAULT: Text = ["应用保险库", "應用程式保險庫", "App vault"];
 
 /// Tools for the experienced.
 pub fn advanced(cx: &Ctx) -> Frame {
@@ -2320,9 +2329,11 @@ pub fn advanced(cx: &Ctx) -> Frame {
         Row::new(l.pick(LOGS)).icon(ORANGE, Icon::Log),
         Row::new(l.pick(UPDATE)).icon(GREEN, Icon::Layers).trail(Trail::Value(update_value(cx))),
         Row::new(l.pick(BATCH_FLASH)).icon(ORANGE, Icon::Install),
+        Row::new(l.pick(APP_VAULT)).icon(BLUE, Icon::Backup),
         Row::new(l.pick(ROOT)).icon(PURPLE, Icon::Shield),
         Row::new(l.pick(SHARE)).icon(BLUE, Icon::Globe).trail(Trail::Value(share_state)),
         Row::new(l.pick(PLUGINS)).icon(GREEN, Icon::More),
+        Row::new(l.pick(DEVELOPER)).icon(SLATE, Icon::Terminal),
     ]);
     let out = hits(&tools.rows, &[
         Action::Open(Screen::Files),
@@ -2332,9 +2343,11 @@ pub fn advanced(cx: &Ctx) -> Frame {
         Action::Open(Screen::Logs),
         Action::Open(Screen::Update),
         Action::Open(Screen::BatchFlash),
+        Action::Open(Screen::AppVault),
         Action::Open(Screen::Root),
         Action::Open(Screen::Share),
         Action::Open(Screen::Plugins),
+        Action::Open(Screen::Developer),
     ]);
     Frame::new(t, fit(c, t, tools.bottom), out, l.pick(ADVANCED), top)
 }
@@ -4355,8 +4368,9 @@ pub fn sharing(cx: &Ctx) -> Frame {
         let host = ip.as_deref().unwrap_or("127.0.0.1");
         let port = s.share.port;
         let url = format!("http://{host}:{port}/");
+        let mirror = format!("http://{host}:{port}/mirror");
         y = widgets::section(&mut c, t, f, y, l.pick(["访问地址", "存取位址", "Address"]));
-        y = widgets::info_card(&mut c, t, f, y, &[("HTTP", url)]);
+        y = widgets::info_card(&mut c, t, f, y, &[("HTTP", url), ("Mirror", mirror)]);
     } else if let Some(err) = &s.share.error {
         y = widgets::footnote(&mut c, t, f, y, err);
     }
@@ -4816,6 +4830,368 @@ pub fn batch_flash(cx: &Ctx) -> Frame {
     }
 
     Frame::new(t, fit(c, t, y), out, l.pick(BATCH_FLASH), top)
+}
+
+/// Full-screen PIN lock gate shown on boot or when manually locked.
+pub fn lock(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = page(cx);
+    let m = &t.m;
+    let x = m.w as f32 / 2.0;
+    let sign_cy = m.dp(150.0);
+    c.fill_circle(x, sign_cy, m.dp(30.0), t.pal.card);
+    icons::glyph(&mut c, Icon::Lock, x, sign_cy, m.dp(40.0), t.pal.accent);
+    c.text_center(&f.heading, l.pick(["恢复模式已锁定", "復原模式已鎖定", "Recovery locked"]), x, sign_cy + m.dp(64.0), m.dp(24.0), t.pal.text);
+    c.text_center(&f.body, l.pick(["输入 PIN 码以解锁", "輸入 PIN 碼以解鎖", "Enter PIN to unlock"]), x, sign_cy + m.dp(98.0), m.sub_px, t.pal.subtitle);
+
+    let top = m.h as f32 - widgets::keypad_height(t);
+    widgets::code_dots(&mut c, t, x, top - m.dp(56.0), s.lock_input.chars().count());
+    let caps = widgets::keypad_with(&mut c, t, f, l, top, s.key_held(), l.pick(["解锁", "解鎖", "Unlock"]));
+    let out: Vec<Hit> = caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect();
+    Frame { header: false, back: false, ..Frame::new(t, c, out, l.pick(LOCK_SETUP), 0.0) }
+}
+
+/// Recovery PIN configuration page (menu + multi-step keypad entry).
+pub fn lock_setup(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = page(cx);
+    let m = &t.m;
+    let top = m.content_top;
+
+    if s.lock_setup.stage == LockSetupStage::Menu {
+        let mut out = Vec::new();
+        let enabled = s.recovery_lock.is_some();
+        let state_str = l.pick(if enabled { ["已开启", "已開啟", "On"] } else { ["已关闭", "已關閉", "Off"] });
+        let y = widgets::info_card(
+            &mut c,
+            t,
+            f,
+            top,
+            &[(l.pick(["PIN 锁状态", "PIN 鎖狀態", "PIN status"]), state_str.to_string())],
+        );
+        let y = widgets::section(&mut c, t, f, y, l.pick(ACTIONS));
+        let mut rows = Vec::new();
+        let mut acts = Vec::new();
+        if enabled {
+            rows.push(Row::new(l.pick(["立即锁定", "立即鎖定", "Lock now"])).icon(PURPLE, Icon::Lock));
+            acts.push(Action::LockNow);
+            rows.push(Row::new(l.pick(["更改 PIN 码", "變更 PIN 碼", "Change PIN"])).icon(BLUE, Icon::Gear));
+            acts.push(Action::LockStartChange);
+            rows.push(Row::new(l.pick(["移除 PIN 锁", "移除 PIN 鎖", "Remove PIN"])).icon(RED, Icon::Wipe).tint(t.pal.danger));
+            acts.push(Action::LockStartRemove);
+        } else {
+            rows.push(Row::new(l.pick(["设置 PIN 码", "設定 PIN 碼", "Set PIN"])).icon(PURPLE, Icon::Lock));
+            acts.push(Action::LockStartSet);
+        }
+        let block = widgets::list(&mut c, t, f, y, &rows);
+        out.extend(hits(&block.rows, &acts));
+        let _ = widgets::footnote(
+            &mut c,
+            t,
+            f,
+            block.bottom,
+            l.pick([
+                "开启后，每次进入恢复模式（fastboot 与系统自动任务除外）都将要求输入 PIN 码。PIN 以加盐 SHA-256 哈希保存在设置中。",
+                "開啟後，每次進入復原模式（fastboot 與系統自動任務除外）都將要求輸入 PIN 碼。PIN 以加鹽 SHA-256 雜湊儲存在設定中。",
+                "When enabled, entering recovery (except fastboot or system tasks) asks for this PIN. Stored as a salted iterated SHA-256 hash.",
+            ]),
+        );
+        return Frame::new(t, c, out, l.pick(LOCK_SETUP), top);
+    }
+
+    let x = m.w as f32 / 2.0;
+    let prompt = l.pick(match s.lock_setup.stage {
+        LockSetupStage::VerifyCurrent => ["输入当前 PIN 码", "輸入目前 PIN 碼", "Enter current PIN"],
+        LockSetupStage::EnterNew => ["输入新 PIN 码", "輸入新 PIN 碼", "Enter new PIN"],
+        LockSetupStage::ConfirmNew => ["再次输入新 PIN 码", "再次輸入新 PIN 碼", "Confirm new PIN"],
+        LockSetupStage::Menu => unreachable!(),
+    });
+    c.text_center(&f.heading, prompt, x, m.dp(156.0), m.dp(24.0), t.pal.text);
+    c.text_center(
+        &f.body,
+        l.pick(["长度 4 到 32 位数字", "長度 4 到 32 位數字", "4 to 32 digits"]),
+        x,
+        m.dp(194.0),
+        m.sub_px,
+        t.pal.subtitle,
+    );
+    let ktop = m.h as f32 - widgets::keypad_height(t);
+    widgets::code_dots(&mut c, t, x, ktop - m.dp(56.0), s.lock_input.chars().count());
+    let caps = widgets::keypad_with(&mut c, t, f, l, ktop, s.key_held(), l.pick(["确认", "確認", "Confirm"]));
+    let out: Vec<Hit> = caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }).collect();
+    Frame::new(t, c, out, l.pick(LOCK_SETUP), top)
+}
+
+/// Developer / kernel sysfs controls and sequential storage throughput benchmark.
+pub fn developer(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+
+    if let Some(job) = &s.dev.bench {
+        if let Some(outcome) = &job.outcome {
+            let (title, color, detail): (Text, Rgba, String) = match outcome {
+                Ok(res) => {
+                    let mb = res.bytes as f64 / (1024.0 * 1024.0);
+                    let (target, w, r) = (res.target_label.as_str(), res.write_mb_s, res.read_mb_s);
+                    (
+                        ["基准测试完成", "效能測試完成", "Benchmark complete"],
+                        GREEN,
+                        tr!(
+                            l,
+                            "{target}（{mb:.0} MiB）：顺序写入 {w:.1} MB/s · 顺序读取 {r:.1} MB/s",
+                            "{target}（{mb:.0} MiB）：循序寫入 {w:.1} MB/s · 循序讀取 {r:.1} MB/s",
+                            "{target} ({mb:.0} MiB): Write {w:.1} MB/s · Read {r:.1} MB/s",
+                            "{target} ({mb:.0} MiB): Ghi {w:.1} MB/s · Đọc {r:.1} MB/s",
+                        ),
+                    )
+                }
+                Err(why) => (["基准测试失败", "效能測試失敗", "Benchmark failed"], RED, why.clone()),
+            };
+            let y = widgets::list(&mut c, t, f, top, &[standing(l.pick(title), color, Icon::Terminal, &detail)]).bottom;
+            let done = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(DONE)).trail(Trail::None)]);
+            out.extend(hits(&done.rows, &[Action::RefreshDev]));
+            return Frame::new(t, fit(c, t, done.bottom), out, l.pick(DEVELOPER), top);
+        }
+
+        let frac = (job.total > 0).then(|| share(job.done, job.total));
+        let y = widgets::progress_card(
+            &mut c,
+            t,
+            f,
+            top,
+            l.pick(DEVELOPER),
+            l.pick(["正在测试顺序读写速度", "正在測試循序讀寫速度", "Benchmarking sequential I/O"]),
+            frac,
+        );
+        return Frame { back: false, ..Frame::new(t, fit(c, t, y), out, l.pick(DEVELOPER), top) };
+    }
+
+    let (mut y, refresh_rect) = widgets::section_action(
+        &mut c,
+        t,
+        f,
+        top,
+        l.pick(["内核状态", "核心狀態", "Kernel status"]),
+        l.pick(["刷新", "重新整理", "Refresh"]),
+    );
+    out.push(Hit { rect: refresh_rect, action: Action::RefreshDev });
+
+    if let Some(info) = &s.dev.info {
+        let mut items = vec![
+            ("SELinux".into(), info.selinux.clone()),
+            ("USB / ADB".into(), info.adb_config.clone()),
+        ];
+        if let Some(lvl) = info.printk_level {
+            items.push((l.pick(["日志级别 (printk)", "記錄層級 (printk)", "printk level"]).into(), lvl.to_string()));
+        }
+        if let Some(gov) = &info.cpu_governor {
+            items.push((l.pick(["CPU 调速器", "CPU 調速器", "CPU governor"]).into(), gov.clone()));
+        }
+        if !info.cmdline.is_empty() {
+            items.push(("cmdline".into(), info.cmdline.clone()));
+        }
+        let pairs: Vec<(&str, String)> = items.iter().map(|(k, v)| (k.as_ref(), v.clone())).collect();
+        y = widgets::info_card(&mut c, t, f, y, &pairs);
+
+        y = widgets::section(&mut c, t, f, y, l.pick(["控制台 printk 级别", "主控台 printk 層級", "Console printk level"]));
+        let cur = info.printk_level.unwrap_or(4);
+        let levels = widgets::list(&mut c, t, f, y, &[
+            Row::new(l.pick(["1 · 安静", "1 · 安靜", "1 · Quiet"])).trail(Trail::Check(cur <= 2)),
+            Row::new(l.pick(["4 · 标准", "4 · 標準", "4 · Normal"])).trail(Trail::Check((3..=5).contains(&cur))),
+            Row::new(l.pick(["7 · 详细", "7 · 詳細", "7 · Verbose"])).trail(Trail::Check(cur >= 6)),
+        ]);
+        out.extend(hits(&levels.rows, &[Action::SetPrintk(1), Action::SetPrintk(4), Action::SetPrintk(7)]));
+        y = levels.bottom;
+
+        y = widgets::section(&mut c, t, f, y, "ADB");
+        let adb_on = info.adb_config.split(',').any(|tok| tok == "adb");
+        let adb_row = widgets::list(
+            &mut c,
+            t,
+            f,
+            y,
+            &[Row::new(l.pick(["USB ADB 调试", "USB ADB 除錯", "USB ADB debugging"])).icon(BLUE, Icon::Usb).trail(Trail::Switch(adb_on))],
+        );
+        out.extend(hits(&adb_row.rows, &[Action::ToggleAdb]));
+        y = adb_row.bottom;
+    } else {
+        y = widgets::footnote(&mut c, t, f, y, l.pick(["正在读取内核信息", "正在讀取核心資訊", "Reading kernel info"]));
+    }
+
+    y = widgets::section(&mut c, t, f, y, l.pick(["存储基准测试", "儲存效能測試", "Storage benchmark"]));
+    let sd_sub = if s.data.storage_open() { "/sdcard (64 MiB)" } else { l.pick(DECRYPT_NEEDED) };
+    let usb_sub = match &s.usb_drive {
+        Some(UsbDrive::Shown) => l.pick(["已连接 (64 MiB)", "已連接 (64 MiB)", "Connected (64 MiB)"]),
+        Some(UsbDrive::Unreadable(_)) => l.pick(USB_DRIVE_UNREADABLE),
+        None => l.pick(USB_DRIVE_WANTED),
+    };
+    let benches = widgets::list(&mut c, t, f, y, &[
+        Row::new(place_name(l, Place::Storage)).icon(BLUE, Icon::Folder).subtitle(sd_sub),
+        Row::new(place_name(l, Place::UsbDrive)).icon(ORANGE, Icon::UsbDrive).subtitle(usb_sub),
+    ]);
+    out.extend(hits(&benches.rows, &[Action::RunBench(BenchTarget::Storage), Action::RunBench(BenchTarget::UsbDrive)]));
+    let y = widgets::footnote(
+        &mut c,
+        t,
+        f,
+        benches.bottom,
+        l.pick([
+            "写入 64 MiB 测试文件并同步刷盘，清除页缓存后顺序读取以测量吞吐率（完成后自动删除临时文件）。",
+            "寫入 64 MiB 測試檔案並同步寫盤，清除頁快取後循序讀取以量測吞吐率（完成後自動刪除暫存檔）。",
+            "Writes a synced 64 MiB test file, drops kernel page cache, and reads sequentially to measure throughput.",
+        ]),
+    );
+    Frame::new(t, fit(c, t, y), out, l.pick(DEVELOPER), top)
+}
+
+/// Per-app `.tar.lz4` backup and restore vault (`/sdcard/Aweyuki/app-vault`).
+pub fn app_vault(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let mut c = long_page(cx);
+    let mut out = Vec::new();
+    let top = t.m.content_top;
+
+    if let Some(job) = &s.vault.job {
+        if let Some(outcome) = &job.outcome {
+            let (title, color, detail): (Text, Rgba, String) = match outcome {
+                Ok(msg) if job.restore => (["应用恢复完成", "應用程式還原完成", "App restore complete"], GREEN, msg.clone()),
+                Ok(msg) => (["应用保险库备份完成", "應用程式保險庫備份完成", "App backup complete"], GREEN, msg.clone()),
+                Err(why) => (["应用操作失败", "應用程式操作失敗", "App vault failed"], RED, why.clone()),
+            };
+            let y = widgets::list(&mut c, t, f, top, &[standing(l.pick(title), color, Icon::Backup, &detail)]).bottom;
+            let done = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(DONE)).trail(Trail::None)]);
+            out.extend(hits(&done.rows, &[Action::RefreshVault]));
+            return Frame::new(t, fit(c, t, done.bottom), out, l.pick(APP_VAULT), top);
+        }
+
+        let frac = (job.total > 0).then(|| share(job.done, job.total));
+        let pkg = job.label.as_str();
+        let status = if job.restore {
+            tr!(l, "正在恢复 {pkg}", "正在還原 {pkg}", "Restoring {pkg}", "Đang khôi phục {pkg}")
+        } else {
+            tr!(l, "正在备份 {pkg}", "正在備份 {pkg}", "Backing up {pkg}", "Đang sao lưu {pkg}")
+        };
+        let y = widgets::progress_card(&mut c, t, f, top, l.pick(APP_VAULT), &status, frac);
+        return Frame { back: false, ..Frame::new(t, fit(c, t, y), out, l.pick(APP_VAULT), top) };
+    }
+
+    if !s.data.storage_open() {
+        let row = widgets::list(&mut c, t, f, top, &[Row::new(l.pick(DECRYPT_NEEDED)).icon(ORANGE, Icon::Lock)]);
+        out.extend(hits(&row.rows, &[Action::Open(Screen::Decrypt)]));
+        let y = widgets::footnote(
+            &mut c,
+            t,
+            f,
+            row.bottom,
+            l.pick([
+                "需先在「解密」中打开 data 分区，才能扫描已安装应用或读写保险库归档。",
+                "需先在「解密」中開啟 data 分割區，才能掃描已安裝應用程式或讀寫保險庫封存檔。",
+                "Decrypt the data partition first to discover installed apps and access /sdcard/Aweyuki/app-vault.",
+            ]),
+        );
+        return Frame::new(t, fit(c, t, y), out, l.pick(APP_VAULT), top);
+    }
+
+    let tabs = widgets::list(&mut c, t, f, top, &[
+        Row::new(l.pick(["已安装应用", "已安裝應用程式", "Installed apps"])).trail(Trail::Check(s.vault.tab == VaultTab::Apps)),
+        Row::new(l.pick(["已保存归档", "已儲存封存檔", "Saved archives"])).trail(Trail::Check(s.vault.tab == VaultTab::Saved)),
+    ]);
+    out.extend(hits(&tabs.rows, &[Action::VaultTab(VaultTab::Apps), Action::VaultTab(VaultTab::Saved)]));
+
+    let (mut y, refresh_rect) = widgets::section_action(
+        &mut c,
+        t,
+        f,
+        tabs.bottom,
+        l.pick(if s.vault.tab == VaultTab::Apps {
+            ["用户应用", "使用者應用程式", "User apps"]
+        } else {
+            ["恢复归档", "還原封存檔", "Restore archive"]
+        }),
+        l.pick(["刷新", "重新整理", "Refresh"]),
+    );
+    out.push(Hit { rect: refresh_rect, action: Action::RefreshVault });
+
+    match s.vault.tab {
+        VaultTab::Apps => match &s.vault.apps {
+            None => {
+                y = widgets::footnote(&mut c, t, f, y, l.pick(["正在扫描应用与归档", "正在掃描應用程式與封存檔", "Scanning apps and archives"]));
+            }
+            Some(Err(why)) => {
+                y = widgets::footnote(&mut c, t, f, y, why);
+            }
+            Some(Ok(apps)) if apps.is_empty() => {
+                y = widgets::footnote(&mut c, t, f, y, l.pick(["未在 /data/app 中发现用户应用。", "在 /data/app 中找不到使用者應用程式。", "No user apps found under /data/app."]));
+            }
+            Some(Ok(apps)) => {
+                let subs: Vec<String> = apps
+                    .iter()
+                    .map(|a| {
+                        let apk = fmt::file_size(a.apk_bytes);
+                        let data = fmt::file_size(a.data_bytes);
+                        tr!(l, "APK {apk} · 数据 {data} · 点击打包", "APK {apk} · 資料 {data} · 點擊打包", "APK {apk} · Data {data} · Tap to archive", "APK {apk} · Dữ liệu {data} · Chạm để lưu")
+                    })
+                    .collect();
+                let rows: Vec<Row> = apps.iter().zip(&subs).map(|(a, sub)| Row::new(&a.package).subtitle(sub)).collect();
+                let block = widgets::list(&mut c, t, f, y, &rows);
+                let acts: Vec<Action> = (0..apps.len()).map(Action::VaultBackupApp).collect();
+                out.extend(hits(&block.rows, &acts));
+                y = block.bottom;
+            }
+        },
+        VaultTab::Saved => match &s.vault.saved {
+            None => {
+                y = widgets::footnote(&mut c, t, f, y, l.pick(["正在扫描应用与归档", "正在掃描應用程式與封存檔", "Scanning apps and archives"]));
+            }
+            Some(Err(why)) => {
+                y = widgets::footnote(&mut c, t, f, y, why);
+            }
+            Some(Ok(saved)) if saved.is_empty() => {
+                y = widgets::footnote(
+                    &mut c,
+                    t,
+                    f,
+                    y,
+                    l.pick(["/sdcard/Aweyuki/app-vault 中暂无归档。", "/sdcard/Aweyuki/app-vault 中尚無封存檔。", "No archives found in /sdcard/Aweyuki/app-vault."]),
+                );
+            }
+            Some(Ok(saved)) => {
+                let subs: Vec<String> = saved
+                    .iter()
+                    .map(|b| {
+                        let sz = fmt::file_size(b.archive_bytes);
+                        tr!(l, "{sz} · 点击恢复", "{sz} · 點擊還原", "{sz} · Tap to restore", "{sz} · Chạm để khôi phục")
+                    })
+                    .collect();
+                let rows: Vec<Row> = saved.iter().zip(&subs).map(|(b, sub)| Row::new(&b.package).subtitle(sub)).collect();
+                let block = widgets::list(&mut c, t, f, y, &rows);
+                let acts: Vec<Action> = (0..saved.len()).map(Action::VaultRestoreSaved).collect();
+                out.extend(hits(&block.rows, &acts));
+
+                y = widgets::section(&mut c, t, f, block.bottom, l.pick(["删除归档", "刪除封存檔", "Delete archive"]));
+                let del_subs: Vec<String> = saved
+                    .iter()
+                    .map(|b| {
+                        let sz = fmt::file_size(b.archive_bytes);
+                        tr!(l, "{sz} · 点击永久删除", "{sz} · 點擊永久刪除", "{sz} · Tap to delete archive", "{sz} · Chạm để xóa vĩnh viễn")
+                    })
+                    .collect();
+                let del_rows: Vec<Row> = saved
+                    .iter()
+                    .zip(&del_subs)
+                    .map(|(b, sub)| Row::new(&b.package).subtitle(sub).tint(t.pal.danger).trail(Trail::None))
+                    .collect();
+                let del_block = widgets::list(&mut c, t, f, y, &del_rows);
+                let del_acts: Vec<Action> = (0..saved.len()).map(Action::VaultDeleteSaved).collect();
+                out.extend(hits(&del_block.rows, &del_acts));
+                y = del_block.bottom;
+            }
+        },
+    }
+
+    Frame::new(t, fit(c, t, y), out, l.pick(APP_VAULT), top)
 }
 
 #[cfg(test)]

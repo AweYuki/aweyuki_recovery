@@ -203,6 +203,20 @@ pub struct State {
     pub payload: Option<PayloadState>,
     /// Batch image flash state.
     pub batch: BatchState,
+    /// Optional salted iterated SHA-256 recovery PIN lock configuration.
+    pub recovery_lock: Option<crate::settings::RecoveryLock>,
+    /// Whether the UI is currently locked behind [`Screen::Lock`].
+    pub locked: bool,
+    /// Digits currently entered on [`Screen::Lock`] or [`Screen::LockSetup`].
+    pub lock_input: String,
+    /// Setup wizard state for [`Screen::LockSetup`].
+    pub lock_setup: LockSetupState,
+    /// Page to reveal once [`Screen::Lock`] unlocks.
+    pub lock_after: Screen,
+    /// Developer / kernel inspection and storage benchmark state.
+    pub dev: DevState,
+    /// App Backup Vault state.
+    pub vault: VaultState,
 }
 
 impl Default for State {
@@ -299,6 +313,13 @@ impl Default for State {
             abl_warning: None,
             payload: None,
             batch: BatchState::default(),
+            recovery_lock: None,
+            locked: false,
+            lock_input: String::new(),
+            lock_setup: LockSetupState::default(),
+            lock_after: Screen::Home,
+            dev: DevState::default(),
+            vault: VaultState::default(),
         }
     }
 }

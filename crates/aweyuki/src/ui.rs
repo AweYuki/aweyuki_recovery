@@ -35,10 +35,10 @@ use aweyuki_sys::sleep::{Sleeper, Slept};
 use aweyuki_sys::uevent;
 use aweyuki_systems::Who;
 use aweyuki_ui::app::{
-    App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, BatchSource, ClashChoice, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp,
-    FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place,
-    PluginEnd, RenameRefused, RootOverview, Screen, ShareRoot, Shot, Source, AweyukiEnd, AweyukiStage, Target, UsbDrive, UsbLink, Wipe,
-    DATA_OPENING, DATA_PARTITION, DOWNLOADS, INSTALL_UNFINISHED, USB_DRIVE,
+    App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, BatchSource, BenchTarget, ClashChoice, Data, DownloadEnd, Effect, EraseStop,
+    FileKind, FileOp, FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Key, Keys, MountFailure, Part, PartKind,
+    PartStop, Place, PluginEnd, RenameRefused, RootOverview, Screen, ShareRoot, Shot, Source, AweyukiEnd, AweyukiStage, Target, Touch, UsbDrive,
+    UsbLink, VaultAppRow, VaultBackupRow, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS, INSTALL_UNFINISHED, USB_DRIVE,
 };
 use aweyuki_ui::settings::Keeper;
 use aweyuki_ui::surface::kms::KmsSurface;
@@ -753,6 +753,18 @@ enum BatchEvent {
     Ended(Result<Vec<String>, String>),
 }
 
+enum DevEvent {
+    Progress(u64, u64),
+    Ended(Box<Result<aweyuki_install::dev::BenchResult, String>>),
+}
+
+enum VaultEvent {
+    Listed(Box<Result<Vec<VaultAppRow>, String>>, Box<Result<Vec<VaultBackupRow>, String>>),
+    Progress(u64, u64),
+    Ended(Result<String, String>),
+    Deleted(Result<(), String>),
+}
+
 fn install_history(outcome: &aweyuki_install::Outcome) -> Option<(String, String, String)> {
     use aweyuki_install::Outcome;
     match outcome {
@@ -1339,6 +1351,10 @@ struct Pages<'a> {
     shell: Option<pty::Shell>,
     /// Background HTTP/1.1 file-sharing server while Share is turned on.
     share_server: Option<aweyuki_net::share::Server>,
+    /// Latest PNG-encoded framebuffer for `/screen.png`, updated only while Share runs.
+    mirror_png: Arc<Mutex<Vec<u8>>>,
+    /// Wakeable channel receiving tap/swipe/key events from `/input`.
+    mirror_rx: Option<aweyuki_sys::worker::Told<Event>>,
     /// Streaming worker for an active runtime plugin.
     plugin_worker: Option<PluginWorker>,
     /// Boot-time read-only ABL assessments when EFISP is exposed, and last
@@ -1349,6 +1365,10 @@ struct Pages<'a> {
     payload_worker: Option<aweyuki_sys::worker::Worker<PayloadEvent>>,
     /// Worker flashing a validated batch of partition images.
     batch_worker: Option<aweyuki_sys::worker::Worker<BatchEvent>>,
+    /// Worker running sequential storage benchmarks on [`Screen::Developer`].
+    dev_worker: Option<aweyuki_sys::worker::Worker<DevEvent>>,
+    /// Worker scanning, packing, or restoring [`Screen::AppVault`] archives.
+    vault_worker: Option<aweyuki_sys::worker::Worker<VaultEvent>>,
     /// The USB drive plugged in, looked for each second.
     plugged: Option<Plugged>,
     seen: Option<String>,
@@ -1438,6 +1458,12 @@ impl<'a> Pages<'a> {
         let readings = Readings::start(cfg)?;
         let read_at = Instant::now();
         let fastboot = first == Screen::Fastboot;
+        if !fastboot
+            && matches!(request.work, Work::Menu | Work::Exit)
+            && app.state.recovery_lock.is_some()
+        {
+            app.engage_boot_lock(first);
+        }
         let port_at = Instant::now();
         let mut transfer: Option<Transfer> = None;
         if app.state.file_transfer {
@@ -1564,11 +1590,15 @@ impl<'a> Pages<'a> {
             aweyuki_updater: None,
             shell: None,
             share_server: None,
+            mirror_png: Arc::new(Mutex::new(Vec::new())),
+            mirror_rx: None,
             plugin_worker: None,
             abl_boot,
             abl_ack: None,
             payload_worker: None,
             batch_worker: None,
+            dev_worker: None,
+            vault_worker: None,
             plugged: None,
             seen: None,
             drive_at: Instant::now(),
@@ -1757,6 +1787,8 @@ impl<'a> Pages<'a> {
         self.plugin_told(now);
         self.payload_told(now);
         self.batch_told(now);
+        self.dev_told(now);
+        self.vault_told(now)?;
         self.take_in(drive_told, now)?;
         self.offer_storage(now)
     }
@@ -1845,6 +1877,9 @@ impl<'a> Pages<'a> {
                 let t0 = Instant::now();
                 self.app.compose(&mut self.screen, &self.fonts, &self.info, &self.shown_clock, now);
                 self.surface.present(&self.screen)?;
+                if self.share_server.is_some() {
+                    self.update_mirror_png();
+                }
                 eprintln!("frame {:?} in {} ms", self.app.screen(), t0.elapsed().as_millis());
                 if let Some(path) = self.dump {
                     fs::write(path, &self.screen.data).with_context(|| format!("write {}", path.display()))?;
@@ -1961,6 +1996,15 @@ impl<'a> Pages<'a> {
         if let Some(b) = &self.batch_worker {
             fds.push(b.fd());
         }
+        if let Some(d) = &self.dev_worker {
+            fds.push(d.fd());
+        }
+        if let Some(v) = &self.vault_worker {
+            fds.push(v.fd());
+        }
+        if let Some(m) = &self.mirror_rx {
+            fds.push(m.fd());
+        }
         fds.push(self.readings.fd());
         wait(&fds, timeout)
     }
@@ -1988,6 +2032,8 @@ impl<'a> Pages<'a> {
             || self.plugin_worker.is_some()
             || self.payload_worker.is_some()
             || self.batch_worker.is_some()
+            || self.dev_worker.is_some()
+            || self.vault_worker.is_some()
             || systems_busy;
         let joining = self.app.state.wlan.as_ref().and_then(|w| w.joined.as_ref()).is_some_and(|j| matches!(j.stage, Joining::Joining | Joining::Addressing));
         let running = match &self.shell {
@@ -2295,6 +2341,101 @@ impl Pages<'_> {
             }
             self.app.batch_ended(res, now);
         }
+    }
+
+    fn update_mirror_png(&self) {
+        if !self.screen.whole() {
+            return;
+        }
+        let mut buf = Vec::new();
+        if self.screen.write_png(&mut buf).is_ok()
+            && let Ok(mut guard) = self.mirror_png.lock()
+        {
+            *guard = buf;
+        }
+    }
+
+    fn dev_told(&mut self, now: u64) {
+        let events = self.dev_worker.as_ref().map(aweyuki_sys::worker::Worker::events).unwrap_or_default();
+        let mut ended = None;
+        for ev in events {
+            match ev {
+                DevEvent::Progress(d, t) => self.app.dev_bench_progress(d, t),
+                DevEvent::Ended(res) => ended = Some(*res),
+            }
+        }
+        if let Some(res) = ended {
+            self.dev_worker = None;
+            self.app.dev_bench_ended(res, now);
+        }
+    }
+
+    fn start_read_vault(&mut self) -> Result<()> {
+        ensure!(self.vault_worker.is_none(), "a vault task is already running");
+        let vault_dir = Path::new(aweyuki_crypto::data::SDCARD).join(aweyuki_backup::vault::VAULT_FOLDER);
+        let data_root = PathBuf::from(aweyuki_crypto::data::MOUNT);
+        self.vault_worker = Some(aweyuki_sys::worker::Worker::start("vault-list", move |teller| {
+            let apps = aweyuki_backup::vault::discover_apps(&data_root)
+                .map(|list| {
+                    list.into_iter()
+                        .map(|a| VaultAppRow {
+                            package: a.package,
+                            apk_bytes: a.apk_bytes,
+                            data_bytes: a.data_bytes,
+                        })
+                        .collect()
+                })
+                .map_err(|e| format!("{e:#}"));
+            let saved = aweyuki_backup::vault::list_vault(&vault_dir)
+                .map(|list| {
+                    list.into_iter()
+                        .map(|m| VaultBackupRow {
+                            package: m.package,
+                            made: m.made,
+                            archive_file: m.archive_file,
+                            archive_bytes: m.archive_bytes,
+                            has_data: m.has_data,
+                        })
+                        .collect()
+                })
+                .map_err(|e| format!("{e:#}"));
+            teller.tell(VaultEvent::Listed(Box::new(apps), Box::new(saved)));
+        })?);
+        Ok(())
+    }
+
+    fn vault_told(&mut self, now: u64) -> Result<()> {
+        let events = self.vault_worker.as_ref().map(aweyuki_sys::worker::Worker::events).unwrap_or_default();
+        let mut done = false;
+        let mut refresh_needed = false;
+        for ev in events {
+            match ev {
+                VaultEvent::Listed(apps, saved) => {
+                    self.app.set_vault(*apps, *saved);
+                    done = true;
+                }
+                VaultEvent::Progress(d, t) => self.app.vault_progress(d, t),
+                VaultEvent::Ended(res) => {
+                    done = true;
+                    match &res {
+                        Ok(item) => self.record_history("app-vault".into(), item.clone(), "ok".into()),
+                        Err(why) => self.record_history("app-vault".into(), "vault".into(), format!("failed: {why}")),
+                    }
+                    self.app.vault_ended(res, now);
+                }
+                VaultEvent::Deleted(res) => {
+                    done = true;
+                    refresh_needed = !self.app.vault_deleted(res, now).is_empty();
+                }
+            }
+        }
+        if done {
+            self.vault_worker = None;
+        }
+        if refresh_needed {
+            self.start_read_vault()?;
+        }
+        Ok(())
     }
 
     /// What copying, moving or deleting told; once it has ended, the
@@ -2735,13 +2876,21 @@ impl Pages<'_> {
             Some(c) => c.requests()?,
             None => Vec::new(),
         };
+        let remote_inputs = self
+            .mirror_rx
+            .as_ref()
+            .map(aweyuki_sys::worker::Told::take)
+            .unwrap_or_default()
+            .into_iter()
+            .map(Incoming::Input);
         let incoming = self
             .arriving
             .take()
             .into_iter()
             .chain(drive_told.map(Incoming::Drive))
             .chain(requests.into_iter().map(Incoming::Asked))
-            .chain(self.inputs.read()?.into_iter().map(Incoming::Input));
+            .chain(self.inputs.read()?.into_iter().map(Incoming::Input))
+            .chain(remote_inputs);
         for came in incoming {
             let effects = match came {
                 Incoming::Arrived => self.app.arrive(),
@@ -3024,15 +3173,64 @@ impl Pages<'_> {
                 if let Some(s) = self.share_server.take() {
                     s.stop();
                 }
+                self.mirror_rx = None;
                 if on {
+                    self.update_mirror_png();
                     let dir = match root {
                         ShareRoot::Storage => PathBuf::from(aweyuki_crypto::data::SDCARD),
                         ShareRoot::Root => PathBuf::from("/"),
                     };
                     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-                    match aweyuki_net::share::Server::start(dir, addr) {
+                    let (teller, told) = aweyuki_sys::worker::telling::<Event>()?;
+                    let (w, h) = (self.screen.w, self.screen.h);
+                    let buf = self.mirror_png.clone();
+                    let hooks = aweyuki_net::share::MirrorHooks {
+                        size: (w, h),
+                        frame_png: Arc::new(move || buf.lock().ok().filter(|b| !b.is_empty()).cloned()),
+                        on_input: Arc::new(move |ev: aweyuki_net::share::RemoteInput| {
+                            let t0 = monotonic_ms();
+                            let to_px = |nx: f32, ny: f32| {
+                                (
+                                    (nx.clamp(0.0, 1.0) * w as f32).clamp(0.0, w.saturating_sub(1) as f32),
+                                    (ny.clamp(0.0, 1.0) * h as f32).clamp(0.0, h.saturating_sub(1) as f32),
+                                )
+                            };
+                            match ev {
+                                aweyuki_net::share::RemoteInput::Tap { x, y } => {
+                                    let (px, py) = to_px(x, y);
+                                    let _ = teller.tell(Event::Touch(Touch::Down(px, py), t0));
+                                    let _ = teller.tell(Event::Touch(Touch::Up, t0 + 30));
+                                }
+                                aweyuki_net::share::RemoteInput::Swipe { x0, y0, x1, y1 } => {
+                                    let (sx, sy) = to_px(x0, y0);
+                                    let (ex, ey) = to_px(x1, y1);
+                                    let _ = teller.tell(Event::Touch(Touch::Down(sx, sy), t0));
+                                    for step in 1..=6 {
+                                        let frac = step as f32 / 6.0;
+                                        let _ = teller.tell(Event::Touch(
+                                            Touch::Move(sx + (ex - sx) * frac, sy + (ey - sy) * frac),
+                                            t0 + step as u64 * 20,
+                                        ));
+                                    }
+                                    let _ = teller.tell(Event::Touch(Touch::Up, t0 + 140));
+                                }
+                                aweyuki_net::share::RemoteInput::Key { key } => {
+                                    let k = match key {
+                                        aweyuki_net::share::RemoteKey::Power => Key::Power,
+                                        aweyuki_net::share::RemoteKey::VolumeUp => Key::VolumeUp,
+                                        aweyuki_net::share::RemoteKey::VolumeDown => Key::VolumeDown,
+                                        aweyuki_net::share::RemoteKey::Back => Key::Back,
+                                    };
+                                    let _ = teller.tell(Event::Key(k, true));
+                                    let _ = teller.tell(Event::Key(k, false));
+                                }
+                            }
+                        }),
+                    };
+                    match aweyuki_net::share::Server::start_with_mirror(dir, addr, Some(hooks)) {
                         Ok(server) => {
                             self.share_server = Some(server);
+                            self.mirror_rx = Some(told);
                             self.app.set_share(true, self.share_ip(), None);
                         }
                         Err(e) => {
@@ -3148,6 +3346,140 @@ impl Pages<'_> {
                     })
                     .map_err(|e| format!("{e:#}"));
                     teller.tell(BatchEvent::Ended(res));
+                })?);
+            }
+            Effect::ReadDev => {
+                self.app.set_dev_info(aweyuki_install::dev::read_kernel_info());
+            }
+            Effect::SetPrintk(level) => {
+                if let Err(e) = aweyuki_install::dev::set_printk_level(level) {
+                    self.app.report(&format!("{e:#}"), now);
+                }
+                self.app.set_dev_info(aweyuki_install::dev::read_kernel_info());
+            }
+            Effect::SetAdb(on) => {
+                if let Err(e) = aweyuki_install::dev::set_adb_enabled(on) {
+                    self.app.report(&format!("{e:#}"), now);
+                }
+                self.app.set_dev_info(aweyuki_install::dev::read_kernel_info());
+            }
+            Effect::RunBench(target) => {
+                ensure!(self.dev_worker.is_none(), "a benchmark is already running");
+                let (dir, label) = match target {
+                    BenchTarget::Storage => {
+                        if !withhold(&mut self.transfer, &mut self.app, now)? {
+                            self.app.dev_bench_ended(Err("storage is held by USB file transfer".into()), now);
+                            return Ok(Vec::new());
+                        }
+                        (PathBuf::from(aweyuki_crypto::data::SDCARD), "Internal storage")
+                    }
+                    BenchTarget::UsbDrive => (PathBuf::from(USB_DRIVE), "USB drive"),
+                };
+                self.dev_worker = Some(aweyuki_sys::worker::Worker::start("storage-bench", move |teller| {
+                    let t = teller.clone();
+                    let mut last = Instant::now();
+                    let res = aweyuki_install::dev::run_storage_benchmark(&dir, label, 64 * 1024 * 1024, |done, total| {
+                        if done == 0 || done == total || last.elapsed() >= Duration::from_millis(80) {
+                            last = Instant::now();
+                            t.tell(DevEvent::Progress(done, total));
+                        }
+                    })
+                    .map_err(|e| format!("{e:#}"));
+                    teller.tell(DevEvent::Ended(Box::new(res)));
+                })?);
+            }
+            Effect::ReadVault => {
+                self.start_read_vault()?;
+            }
+            Effect::VaultBackup(package) => {
+                ensure!(self.vault_worker.is_none(), "a vault task is already running");
+                if !withhold(&mut self.transfer, &mut self.app, now)? {
+                    self.app.vault_ended(Err("storage is held by USB file transfer".into()), now);
+                    return Ok(Vec::new());
+                }
+                let vault_dir = Path::new(aweyuki_crypto::data::SDCARD).join(aweyuki_backup::vault::VAULT_FOLDER);
+                let data_root = PathBuf::from(aweyuki_crypto::data::MOUNT);
+                let own_root = vault_dir.ancestors().find(|p| p.exists()).unwrap_or(Path::new(aweyuki_crypto::data::SDCARD));
+                let own = ownership(own_root).unwrap_or(Ownership::Shared);
+                let made = unix_now().unwrap_or(0);
+                let device = self.info.codename.clone();
+                self.vault_worker = Some(aweyuki_sys::worker::Worker::start("vault-backup", move |teller| {
+                    let cancel = AtomicBool::new(false);
+                    let mut last = Instant::now();
+                    let t = teller.clone();
+                    let res = (|| -> Result<String> {
+                        let entry = aweyuki_backup::vault::discover_apps(&data_root)?
+                            .into_iter()
+                            .find(|a| a.package == package)
+                            .with_context(|| format!("app not found: {package}"))?;
+                        let manifest = aweyuki_backup::vault::backup_app(
+                            &entry,
+                            &vault_dir,
+                            &device,
+                            made,
+                            own,
+                            &cancel,
+                            &mut |done, total| {
+                                if done == 0 || done == total || last.elapsed() >= Duration::from_millis(80) {
+                                    last = Instant::now();
+                                    t.tell(VaultEvent::Progress(done, total));
+                                }
+                            },
+                        )?;
+                        Ok(manifest.archive_file)
+                    })()
+                    .map_err(|e| format!("{e:#}"));
+                    teller.tell(VaultEvent::Ended(res));
+                })?);
+            }
+            Effect::VaultRestore(archive_file) => {
+                ensure!(self.vault_worker.is_none(), "a vault task is already running");
+                if !withhold(&mut self.transfer, &mut self.app, now)? {
+                    self.app.vault_ended(Err("storage is held by USB file transfer".into()), now);
+                    return Ok(Vec::new());
+                }
+                let vault_dir = Path::new(aweyuki_crypto::data::SDCARD).join(aweyuki_backup::vault::VAULT_FOLDER);
+                let data_root = PathBuf::from(aweyuki_crypto::data::MOUNT);
+                self.vault_worker = Some(aweyuki_sys::worker::Worker::start("vault-restore", move |teller| {
+                    let cancel = AtomicBool::new(false);
+                    let mut last = Instant::now();
+                    let t = teller.clone();
+                    let res = (|| -> Result<String> {
+                        let manifest = aweyuki_backup::vault::list_vault(&vault_dir)?
+                            .into_iter()
+                            .find(|m| m.archive_file == archive_file)
+                            .with_context(|| format!("archive not found: {archive_file}"))?;
+                        aweyuki_backup::vault::restore_app(
+                            &manifest,
+                            &vault_dir,
+                            &data_root,
+                            &cancel,
+                            &mut |done, total| {
+                                if done == 0 || done == total || last.elapsed() >= Duration::from_millis(80) {
+                                    last = Instant::now();
+                                    t.tell(VaultEvent::Progress(done, total));
+                                }
+                            },
+                        )?;
+                        Ok(manifest.package)
+                    })()
+                    .map_err(|e| format!("{e:#}"));
+                    teller.tell(VaultEvent::Ended(res));
+                })?);
+            }
+            Effect::VaultDelete(archive_file) => {
+                ensure!(self.vault_worker.is_none(), "a vault task is already running");
+                let vault_dir = Path::new(aweyuki_crypto::data::SDCARD).join(aweyuki_backup::vault::VAULT_FOLDER);
+                self.vault_worker = Some(aweyuki_sys::worker::Worker::start("vault-delete", move |teller| {
+                    let res = (|| -> Result<()> {
+                        let manifest = aweyuki_backup::vault::list_vault(&vault_dir)?
+                            .into_iter()
+                            .find(|m| m.archive_file == archive_file)
+                            .with_context(|| format!("archive not found: {archive_file}"))?;
+                        aweyuki_backup::vault::delete_vault_backup(&manifest, &vault_dir)
+                    })()
+                    .map_err(|e| format!("{e:#}"));
+                    teller.tell(VaultEvent::Deleted(res));
                 })?);
             }
         }

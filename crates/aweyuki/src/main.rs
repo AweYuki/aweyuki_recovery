@@ -55,6 +55,17 @@ struct Cli {
     cmd: Cmd,
 }
 
+#[cfg(target_os = "android")]
+#[derive(Subcommand)]
+enum AppVaultOp {
+    /// List installed user apps and saved vault archives.
+    List,
+    /// Back up an installed app package to `/sdcard/Aweyuki/app-vault`.
+    Backup { package: String },
+    /// Restore a saved `.tar.lz4` archive by filename or package name.
+    Restore { archive: String },
+}
+
 #[derive(Subcommand)]
 enum Cmd {
     /// Print what the About page shows, plus a partition summary.
@@ -150,6 +161,21 @@ enum Cmd {
         #[arg(long, default_value = "current")]
         slot: String,
         files: Vec<PathBuf>,
+    },
+    /// Inspect SELinux, printk level, ADB state, CPU governor, and kernel cmdline.
+    Dev,
+    /// Run a sequential storage write/read throughput benchmark inside `dir`.
+    Bench {
+        #[arg(default_value = ".")]
+        dir: PathBuf,
+        #[arg(long, default_value_t = 64)]
+        mb: u64,
+    },
+    /// Manage per-app `.tar.lz4` backups under /sdcard/Aweyuki/app-vault.
+    #[cfg(target_os = "android")]
+    AppVault {
+        #[command(subcommand)]
+        op: AppVaultOp,
     },
     /// Discard all a block device holds and write zeros over its start, as
     /// a factory reset erases the data partition.
@@ -466,6 +492,78 @@ fn main() -> Result<()> {
             }
             let flashed = aweyuki_install::batch::execute_batch(&items, &slots, |_, _, _, _| {})?;
             println!("flashed {} partitions: {}", flashed.len(), flashed.join(", "));
+            Ok(())
+        }
+        Cmd::Dev => {
+            let info = aweyuki_install::dev::read_kernel_info();
+            println!("selinux={}", info.selinux);
+            println!("usb={}", info.adb_config);
+            println!("printk={:?}", info.printk_level);
+            println!("cpu_governor={:?}", info.cpu_governor);
+            println!("cmdline={}", info.cmdline);
+            Ok(())
+        }
+        Cmd::Bench { dir, mb } => {
+            let res = aweyuki_install::dev::run_storage_benchmark(
+                &dir,
+                &dir.display().to_string(),
+                mb * 1024 * 1024,
+                |_, _| {},
+            )?;
+            println!(
+                "target={} mb={} write={:.1} MB/s read={:.1} MB/s",
+                res.target_label,
+                res.bytes / (1024 * 1024),
+                res.write_mb_s,
+                res.read_mb_s
+            );
+            Ok(())
+        }
+        #[cfg(target_os = "android")]
+        Cmd::AppVault { op } => {
+            let data_root = Path::new("/data");
+            let vault_dir = Path::new("/sdcard").join(aweyuki_backup::vault::VAULT_FOLDER);
+            match op {
+                AppVaultOp::List => {
+                    println!("Apps:");
+                    for a in aweyuki_backup::vault::discover_apps(data_root)? {
+                        println!("  {:<40} apk={}B data={}B", a.package, a.apk_bytes, a.data_bytes);
+                    }
+                    println!("Vault:");
+                    for m in aweyuki_backup::vault::list_vault(&vault_dir)? {
+                        println!("  {:<40} {} ({}B)", m.archive_file, m.package, m.archive_bytes);
+                    }
+                }
+                AppVaultOp::Backup { package } => {
+                    let entry = aweyuki_backup::vault::discover_apps(data_root)?
+                        .into_iter()
+                        .find(|a| a.package == package)
+                        .with_context(|| format!("app {package:?} not found"))?;
+                    let made = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_secs() as i64);
+                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    let m = aweyuki_backup::vault::backup_app(
+                        &entry,
+                        &vault_dir,
+                        "cli",
+                        made,
+                        aweyuki_files::Ownership::Shared,
+                        &cancel,
+                        &mut |_, _| {},
+                    )?;
+                    println!("saved {} ({} bytes)", m.archive_file, m.archive_bytes);
+                }
+                AppVaultOp::Restore { archive } => {
+                    let manifest = aweyuki_backup::vault::list_vault(&vault_dir)?
+                        .into_iter()
+                        .find(|m| m.archive_file == archive || m.package == archive)
+                        .with_context(|| format!("vault archive {archive:?} not found"))?;
+                    let cancel = std::sync::atomic::AtomicBool::new(false);
+                    aweyuki_backup::vault::restore_app(&manifest, &vault_dir, data_root, &cancel, &mut |_, _| {})?;
+                    println!("restored {}", manifest.package);
+                }
+            }
             Ok(())
         }
         Cmd::Mount => {

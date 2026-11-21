@@ -80,6 +80,9 @@ impl App {
     /// and in a place, until it reaches the place's top.
     pub(super) fn back(&mut self, now: u64) -> Vec<Effect> {
         let (l, mut fx) = (self.state.lang, Vec::new());
+        if self.screen() == Screen::Lock {
+            return fx;
+        }
         if self.stack.len() <= 1 {
             return fx;
         }
@@ -223,6 +226,24 @@ impl App {
                 }
                 self.state.batch.job = None;
             }
+            Screen::LockSetup => {
+                self.state.lock_setup = LockSetupState::default();
+                self.state.lock_input.clear();
+            }
+            Screen::Developer => {
+                if self.state.dev.bench.as_ref().is_some_and(|j| j.outcome.is_none()) {
+                    self.say(l.pick(["正在测试，请等待完成", "正在測試，請等待完成", "Benchmark running. Wait for it to finish"]), now);
+                    return fx;
+                }
+                self.state.dev.bench = None;
+            }
+            Screen::AppVault => {
+                if self.state.vault.job.as_ref().is_some_and(|j| j.outcome.is_none()) {
+                    self.say(l.pick(["正在处理，请等待完成", "正在處理，請等待完成", "Working. Wait for it to finish"]), now);
+                    return fx;
+                }
+                self.state.vault.job = None;
+            }
             Screen::Reboot => self.state.abl_warning = None,
             _ => {}
         }
@@ -355,6 +376,8 @@ impl App {
                     Vec::new()
                 }
             }
+            Screen::Developer => vec![Effect::ReadDev],
+            Screen::AppVault if self.state.data.storage_open() => vec![Effect::ReadVault],
             _ => Vec::new(),
         }
     }
@@ -479,7 +502,7 @@ mod tests {
     #[test]
     fn every_unfinished_entry_now_opens_its_page() {
         let (f, i) = (fonts(), DeviceInfo { slot: Some(Slot::B), ..info() });
-        let routes: [(Screen, Screen); 17] = [
+        let routes: [(Screen, Screen); 20] = [
             (Screen::Home, Screen::Search),
             (Screen::Home, Screen::Backup),
             (Screen::Home, Screen::Restore),
@@ -491,8 +514,11 @@ mod tests {
             (Screen::Advanced, Screen::Share),
             (Screen::Advanced, Screen::Plugins),
             (Screen::Advanced, Screen::BatchFlash),
+            (Screen::Advanced, Screen::Developer),
+            (Screen::Advanced, Screen::AppVault),
             (Screen::Settings, Screen::Language),
             (Screen::Settings, Screen::TimeZone),
+            (Screen::Settings, Screen::LockSetup),
             (Screen::Settings, Screen::Terminal),
             (Screen::About, Screen::Logs),
             (Screen::Specs, Screen::License),

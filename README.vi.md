@@ -81,9 +81,10 @@ Chúng cũng có `avbctl` và `resetprop` để tắt các kiểm tra của veri
 - Khởi động lại vào hệ thống, recovery, fastboot, bootloader hoặc EDL, và chuyển khe
 - Giao diện sáng và tối; tiếng Trung giản thể, tiếng Trung phồn thể, tiếng Anh và
   tiếng Việt
-- Flash trực tiếp ảnh ARM64 `.efi` vào phân vùng `efisp` (không phân khe) và xóa kiểm tra từng byte cho phân vùng `efisp` / `frp`
+- Flash trực tiếp ảnh ARM64 `.efi` vào phân vùng `efisp` (không phân khe) và xóa kiểm tra từng byte cho phân vùng `efisp` / `frp`, hỗ trợ sao lưu/khôi phục `efisp` và cảnh báo ABL mất bộ nạp EFISP trước khi khởi động lại
 - Trình quản lý Root (nhận diện KMI nhân, phát hiện Magisk/KernelSU/APatch và bật/tắt/gỡ mô-đun trong `/data/adb/modules/*`)
-- Chia sẻ tệp qua mạng HTTP/1.1 hỗ trợ tải lên/tải xuống trên trình duyệt, tiện ích mở rộng thời gian chạy với luồng đầu ra trực tiếp và nhật ký lịch sử Flash/Xóa trong trang Nhật ký
+- Chia sẻ tệp qua mạng HTTP/1.1 hỗ trợ tải lên/tải xuống trên trình duyệt, điều khiển & phản chiếu màn hình từ xa (`/mirror`), tiện ích mở rộng thời gian chạy với luồng đầu ra trực tiếp và lịch sử Flash/Xóa trong trang Nhật ký
+- Trình kiểm tra OTA `payload.bin`/`.zip` (kiểm tra chống hạ cấp ARB và trích xuất phân vùng), flash hàng loạt `.img`/`.efi` có kiểm tra dung lượng phân vùng, khóa PIN recovery, công cụ nhà phát triển & đo tốc độ lưu trữ, cùng Kho ứng dụng sao lưu từng app `.tar.lz4` tại `/sdcard/Aweyuki/app-vault`
 
 ### Không có hệ thống
 

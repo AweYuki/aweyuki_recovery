@@ -37,6 +37,7 @@ mod act;
 mod backup;
 mod batch;
 mod decrypt;
+mod developer;
 mod draw;
 mod entry;
 mod filesystem;
@@ -44,6 +45,7 @@ mod frame;
 mod input;
 mod install;
 mod keys;
+mod lock;
 mod manager;
 mod mount;
 mod nav;
@@ -63,16 +65,19 @@ mod terminal;
 #[cfg(test)]
 mod testing;
 mod update;
+mod vault;
 mod wipe;
 mod wlan;
 
 pub use backup::*;
 pub use batch::*;
 pub use decrypt::*;
+pub use developer::*;
 pub use entry::*;
 pub use filesystem::*;
 pub use frame::*;
 pub use install::*;
+pub use lock::*;
 pub use manager::*;
 pub use mount::*;
 pub use payload::*;
@@ -87,6 +92,7 @@ pub use state::*;
 pub use systems::*;
 pub use terminal::*;
 pub use update::*;
+pub use vault::*;
 pub use wipe::*;
 pub use wlan::*;
 
@@ -210,6 +216,14 @@ pub enum Screen {
     Payload,
     /// Multi-image batch flasher with geometry pre-validation.
     BatchFlash,
+    /// Full-screen recovery PIN lock gate.
+    Lock,
+    /// Recovery PIN setup / change / remove page.
+    LockSetup,
+    /// Developer & kernel inspection and storage throughput benchmark.
+    Developer,
+    /// Per-app `.tar.lz4` backup and restore vault.
+    AppVault,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -439,6 +453,32 @@ pub enum Action {
     BatchToggle(usize),
     /// Pick target slots for slotted images in batch flash.
     BatchSlot(Pick),
+    /// Immediately lock the recovery behind the configured PIN.
+    LockNow,
+    /// Start setting a new recovery PIN.
+    LockStartSet,
+    /// Start changing an existing recovery PIN.
+    LockStartChange,
+    /// Start removing an existing recovery PIN.
+    LockStartRemove,
+    /// Refresh kernel/sysfs info on [`Screen::Developer`].
+    RefreshDev,
+    /// Change console kernel `printk` verbosity level.
+    SetPrintk(u8),
+    /// Toggle USB ADB mode from [`Screen::Developer`].
+    ToggleAdb,
+    /// Run a sequential storage write/read benchmark.
+    RunBench(BenchTarget),
+    /// Switch active tab on [`Screen::AppVault`].
+    VaultTab(VaultTab),
+    /// Refresh discovered apps and saved vault archives.
+    RefreshVault,
+    /// Back up installed app `i` to the vault.
+    VaultBackupApp(usize),
+    /// Restore saved vault archive `i`.
+    VaultRestoreSaved(usize),
+    /// Delete saved vault archive `i`.
+    VaultDeleteSaved(usize),
     /// A control whose work is not wired up yet; touching it says so.
     Unavailable(&'static str),
 }
@@ -675,6 +715,22 @@ pub enum Effect {
     /// Execute a verified batch flash, reporting via [`App::batch_progress`]
     /// and [`App::batch_ended`].
     RunBatch { items: Vec<(std::path::PathBuf, String, bool)>, pick: Pick },
+    /// Read kernel/sysfs info for [`Screen::Developer`].
+    ReadDev,
+    /// Write console `printk` level to `/proc/sys/kernel/printk`.
+    SetPrintk(u8),
+    /// Toggle ADB USB gadget configuration.
+    SetAdb(bool),
+    /// Run a sequential storage benchmark on `BenchTarget`.
+    RunBench(BenchTarget),
+    /// Discover installed apps and saved vault archives.
+    ReadVault,
+    /// Back up `package` to the app vault.
+    VaultBackup(String),
+    /// Restore `archive_file` from the app vault.
+    VaultRestore(String),
+    /// Delete `archive_file` and its manifest from the app vault.
+    VaultDelete(String),
 }
 
 enum Drag {

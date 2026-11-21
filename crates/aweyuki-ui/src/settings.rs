@@ -24,6 +24,14 @@ const USB_DRIVE: &str = "usb_drive";
 const LOGS: [&str; 2] = ["recovery", "kernel"];
 const LOG_PLACES: [&str; 2] = ["temporary", "storage"];
 
+/// Salted iterated SHA-256 recovery PIN lock persisted across reboots.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryLock {
+    pub salt_hex: String,
+    pub hash_hex: String,
+    pub iterations: u32,
+}
+
 /// The settings as they are kept. A value missing is the one a recovery
 /// starts with, and one this version does not know is left out.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -49,6 +57,9 @@ pub struct Settings {
     pub vibration: f32,
     /// A computer connected over USB is offered internal storage.
     pub file_transfer: bool,
+    /// Optional recovery UI PIN lock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_lock: Option<RecoveryLock>,
     pub install: Install,
     pub backup: Backup,
     pub logs: Logs,
@@ -126,6 +137,7 @@ impl Settings {
             vibrate: state.vibrate,
             vibration: state.vibration,
             file_transfer: state.file_transfer,
+            recovery_lock: state.recovery_lock.clone(),
             install: Install { check_signature: state.check_signature, keep_recovery: state.keep_recovery },
             backup: Backup {
                 parts: names(&state.backup, &PARTS),
@@ -184,6 +196,7 @@ impl Settings {
             state.vibration = self.vibration;
         }
         state.file_transfer = self.file_transfer;
+        state.recovery_lock = self.recovery_lock.clone();
         state.check_signature = self.install.check_signature;
         state.keep_recovery = self.install.keep_recovery;
         state.backup = picked(&self.backup.parts, &PARTS);
@@ -415,5 +428,24 @@ mod tests {
         keeper.remade();
         keeper.due(dark.clone(), 20_000);
         assert_eq!(keeper.due(dark.clone(), 22_000), Some(dark), "erasing takes the file with it, so it is written again");
+    }
+
+    #[test]
+    fn recovery_lock_round_trips_and_omits_when_unset() {
+        let plain: serde_json::Value = serde_json::from_str(&Settings::default().text()).unwrap();
+        assert!(plain.get("recovery_lock").is_none());
+
+        let locked = State {
+            recovery_lock: Some(RecoveryLock {
+                salt_hex: "00112233445566778899aabbccddeeff".into(),
+                hash_hex: "ab".repeat(32),
+                iterations: 50_000,
+            }),
+            ..State::default()
+        };
+        let round = Settings::read(&Settings::of(&locked).text()).unwrap();
+        let mut restored = State::default();
+        round.apply(&mut restored);
+        assert_eq!(restored.recovery_lock, locked.recovery_lock);
     }
 }

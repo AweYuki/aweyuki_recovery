@@ -79,9 +79,10 @@ read and set properties.
 
 - Reboot to system, recovery, fastboot, bootloader or EDL, and switch slots
 - Light and dark themes; Simplified Chinese, Traditional Chinese, English and Vietnamese
-- Direct non-slotted ARM64 `.efi` flashing to `efisp` and verified zero-fill wiping for `efisp` and `frp` partitions
+- Direct non-slotted ARM64 `.efi` flashing to `efisp` and verified zero-fill wiping for `efisp` and `frp` partitions, plus optional EFISP backup/restore and pre-reboot ABL EFISP regression guard
 - Root Manager (kernel KMI resolution, Magisk/KernelSU/APatch framework detection, and `/data/adb/modules/*` enable/disable/remove toggles)
-- Network File Sharing over HTTP/1.1 with browser download/upload, runtime plugins with live streaming output and cancellation, and recent Flash/Wipe History on the Logs page
+- Network File Sharing over HTTP/1.1 with browser download/upload, remote screen mirror & touch/key control (`/mirror`), runtime plugins with live streaming output and cancellation, and recent Flash/Wipe History on the Logs page
+- OTA `payload.bin` / `.zip` inspector (Anti-Rollback security patch/timestamp check and `REPLACE`/`REPLACE_ZSTD`/`ZERO`/`DISCARD` partition extraction), batch `.img`/`.efi` flash with geometry validation, recovery PIN lock, developer/kernel tools (`printk`, SELinux, ADB, 64 MiB storage benchmark), and per-app `.tar.lz4` backup vault (`/sdcard/Aweyuki/app-vault`)
 
 ### Without a system
 
