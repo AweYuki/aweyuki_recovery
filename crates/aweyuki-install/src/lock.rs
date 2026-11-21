@@ -30,9 +30,9 @@ fn decode_hex(raw: &str) -> Result<Vec<u8>> {
     let bytes = raw.as_bytes();
     ensure!(bytes.len().is_multiple_of(2), "odd hex length");
     let mut out = Vec::with_capacity(bytes.len() / 2);
-    for pair in bytes.chunks_exact(2) {
-        let hi = hex_nibble(pair[0]).context("invalid hex character")?;
-        let lo = hex_nibble(pair[1]).context("invalid hex character")?;
+    for &[a, b] in bytes.as_chunks::<2>().0 {
+        let hi = hex_nibble(a).context("invalid hex character")?;
+        let lo = hex_nibble(b).context("invalid hex character")?;
         out.push((hi << 4) | lo);
     }
     Ok(out)
