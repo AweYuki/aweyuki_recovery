@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Write};
-use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tar::{Archive, Builder, EntryType, Header};
@@ -599,7 +599,7 @@ pub fn restore_app(
         };
         let target = if sub.as_os_str().is_empty() { base.clone() } else { base.join(sub) };
         let header = entry.header().clone();
-        let mode = (header.mode()? & 0o7777) as u32;
+        let mode = header.mode()? & 0o7777;
 
         match header.entry_type() {
             EntryType::Directory => {

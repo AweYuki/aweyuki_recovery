@@ -1,7 +1,7 @@
 //! Developer & kernel inspection helpers and sequential storage benchmark.
 
 use anyhow::{ensure, Context, Result};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
