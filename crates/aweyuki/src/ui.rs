@@ -794,11 +794,7 @@ fn load_aerap_plugin(path: &Path) -> Result<AerapPlugin> {
 }
 
 fn pct_of(done: u64, total: u64) -> u8 {
-    if total == 0 {
-        0
-    } else {
-        ((done.min(total) * 100) / total).min(100) as u8
-    }
+    (done.min(total) * 100).checked_div(total).unwrap_or(0).min(100) as u8
 }
 
 fn download_aerap_bundle(
@@ -1377,6 +1373,8 @@ pub fn run(cfg: &DeviceConfig, programs: &[Service], font: &Path, mono: &Path, r
     }
 }
 
+type MirrorFrame = Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>;
+
 /// The pages, and all the loop that runs them holds from one turn to the
 /// next: the panel and what is drawn on it, what the phone tells of
 /// itself, the request from misc, and the work under way, each on a thread
@@ -1495,7 +1493,7 @@ struct Pages<'a> {
     /// Background HTTP/1.1 file-sharing server while Share is turned on.
     share_server: Option<aweyuki_net::share::Server>,
     /// Latest raw RGBA framebuffer `(w, h, rgba)` for `/screen.png`, copied on demand while Share runs.
-    mirror_frame: Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>,
+    mirror_frame: MirrorFrame,
     /// Flag set by `/screen.png` requests so the next rendered frame refreshes `mirror_frame`.
     mirror_wanted: Arc<AtomicBool>,
     /// When `mirror_frame` was last refreshed from `self.screen`.
