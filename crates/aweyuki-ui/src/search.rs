@@ -116,6 +116,18 @@ pub const ENTRIES: &[Entry] = &[
         &["chajian", "cj", "plugins", "plugin", "tien ich mo rong"],
     ),
     entry(
+        ["AERA Browser 浏览器", "AERA Browser 瀏覽器", "AERA Browser"],
+        ["高级 > 插件", "進階 > 擴充功能", "Advanced > Plugins"],
+        Screen::Plugins,
+        &["browser", "liulanqi", "webkit", "aerap", "trinh duyet"],
+    ),
+    entry(
+        ["AERA Telegram 客户端", "AERA Telegram 客戶端", "AERA Telegram"],
+        ["高级 > 插件", "進階 > 擴充功能", "Advanced > Plugins"],
+        Screen::Plugins,
+        &["telegram", "dianbao", "tdlib", "aerap"],
+    ),
+    entry(
         ["批量刷入镜像", "批次刷入映像檔", "Batch flash"],
         ADVANCED,
         Screen::BatchFlash,

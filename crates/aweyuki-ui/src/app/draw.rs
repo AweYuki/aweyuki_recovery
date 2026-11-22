@@ -702,6 +702,8 @@ mod tests {
             Screen::LockSetup,
             Screen::Developer,
             Screen::AppVault,
+            Screen::Browser,
+            Screen::Telegram,
         ];
         for t in [Theme::light(W, H, PPD), Theme::dark(W, H, PPD).pressed()] {
             for screen in screens {

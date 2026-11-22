@@ -121,6 +121,21 @@ pub struct Plugin {
     pub manifest: PluginManifest,
 }
 
+fn plugin_command(entry: &Path) -> Command {
+    if entry
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("sh"))
+    {
+        let sh = if cfg!(target_os = "android") { "/system/bin/sh" } else { "/bin/sh" };
+        let mut cmd = Command::new(sh);
+        cmd.arg(entry);
+        cmd
+    } else {
+        Command::new(entry)
+    }
+}
+
 impl Plugin {
     /// Load a plugin from `dir/plugin.toml` and validate its `id` and `entry`.
     ///
@@ -155,7 +170,7 @@ impl Plugin {
     /// Returns an error if the plugin process fails to spawn or wait.
     pub fn run(&self, extra_args: &[&str]) -> Result<ExitStatus> {
         let entry = self.dir.join(&self.manifest.entry);
-        Command::new(&entry)
+        plugin_command(&entry)
             .args(&self.manifest.args)
             .args(extra_args)
             .env("AWEYUKI_PLUGIN_DIR", &self.dir)
@@ -177,7 +192,7 @@ impl Plugin {
         mut on_line: impl FnMut(String),
     ) -> Result<ExitStatus> {
         let entry = self.dir.join(&self.manifest.entry);
-        let mut child = Command::new(&entry)
+        let mut child = plugin_command(&entry)
             .args(&self.manifest.args)
             .args(extra_args)
             .env("AWEYUKI_PLUGIN_DIR", &self.dir)

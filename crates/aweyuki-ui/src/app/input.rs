@@ -110,7 +110,13 @@ impl App {
                 // the finger lands on it, if the finger stays.
                 let row = hit
                     .filter(|&(a, r)| self.frame.as_ref().is_some_and(|fr| fr.hits.contains(&Hit { rect: r, action: a })))
-                    .filter(|&(a, r)| row_wide(&t, r) && !matches!(a, Action::Open(Screen::Search) | Action::Confirm(_) | Action::TypeInto(_)))
+                    .filter(|&(a, r)| {
+                        row_wide(&t, r)
+                            && !matches!(
+                                a,
+                                Action::Open(Screen::Search) | Action::Confirm(_) | Action::TypeInto(_) | Action::BrowserViewport
+                            )
+                    })
                     .map(|(_, r)| r);
                 self.drag = match hit {
                     Some((Action::Slider(which), track)) => {
@@ -125,6 +131,11 @@ impl App {
                         self.state.pattern.clear();
                         self.trace(&t, x, y + scroll);
                         Drag::Pattern
+                    }
+                    Some((Action::BrowserViewport, rect)) => {
+                        let (vx, vy) = scale_browser_touch(rect, x, y + scroll);
+                        fx.push(Effect::BrowserTouch { kind: BrowserTouchKind::Down, x: vx, y: vy });
+                        Drag::Browser { rect, vx, vy }
                     }
                     _ => {
                         if let Some(rect) = row {
@@ -198,6 +209,11 @@ impl App {
                     self.tracker.add(now, y);
                     self.drag = self.scroll_history(last, y, carry, pitch);
                 }
+                Drag::Browser { rect, .. } => {
+                    let (vx, vy) = scale_browser_touch(rect, x, y + scroll);
+                    fx.push(Effect::BrowserTouch { kind: BrowserTouchKind::Move, x: vx, y: vy });
+                    self.drag = Drag::Browser { rect, vx, vy };
+                }
                 Drag::Waking => self.drag = Drag::Waking,
                 Drag::Held => self.drag = Drag::Held,
                 Drag::Idle => {}
@@ -259,6 +275,7 @@ impl App {
                     }
                 }
                 Drag::Pattern => fx.extend(self.drawn(now)),
+                Drag::Browser { vx, vy, .. } => fx.push(Effect::BrowserTouch { kind: BrowserTouchKind::Up, x: vx, y: vy }),
                 // Let go, the strength slider taps the motor as strongly as
                 // it was left at.
                 Drag::Slider(Slider::Vibration, _) if self.state.vibrate => fx.push(Effect::Haptic),

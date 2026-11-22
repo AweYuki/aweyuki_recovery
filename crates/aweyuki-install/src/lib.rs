@@ -5,6 +5,7 @@
 
 pub mod abl;
 pub mod adb;
+pub mod aerap;
 pub mod asked;
 pub mod batch;
 pub mod blockmap;

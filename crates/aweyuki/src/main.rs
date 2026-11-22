@@ -8,6 +8,8 @@ use aweyuki_vab::SnapshotState;
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "android")]
+mod aera_jail;
+#[cfg(target_os = "android")]
 mod backup;
 #[cfg(target_os = "android")]
 mod decrypt;
@@ -176,6 +178,18 @@ enum Cmd {
     AppVault {
         #[command(subcommand)]
         op: AppVaultOp,
+    },
+    /// Internal unprivileged AERA sandbox jail entrypoint.
+    #[cfg(target_os = "android")]
+    #[command(hide = true)]
+    AeraJail {
+        #[arg(long)]
+        browser: bool,
+        #[arg(long)]
+        telegram: bool,
+        #[arg(long)]
+        dns: Vec<String>,
+        runtime: PathBuf,
     },
     /// Discard all a block device holds and write zeros over its start, as
     /// a factory reset erases the data partition.
@@ -565,6 +579,15 @@ fn main() -> Result<()> {
                 }
             }
             Ok(())
+        }
+        #[cfg(target_os = "android")]
+        Cmd::AeraJail { browser, telegram, dns, runtime } => {
+            let kind = match (browser, telegram) {
+                (true, false) => aera_jail::JailKind::Browser,
+                (false, true) => aera_jail::JailKind::Telegram,
+                _ => anyhow::bail!("specify exactly one of --browser or --telegram"),
+            };
+            aera_jail::exec_jail(kind, &runtime, &dns)
         }
         Cmd::Mount => {
             let mounts = aweyuki_vab::mount_partitions(booted_slot()?)?;

@@ -626,6 +626,118 @@ impl App {
                     return vec![Effect::StopPlugin];
                 }
             }
+            Action::LaunchAerap(i) => {
+                let Some(entry) = self.state.aerap_plugins.as_ref().and_then(|v| v.get(i)).cloned() else {
+                    return Vec::new();
+                };
+                match entry.kind {
+                    aweyuki_install::aerap::AerapKind::Browser => {
+                        self.state.browser = BrowserState {
+                            starting: true,
+                            url: "aera://start".into(),
+                            url_input: "aera://start".into(),
+                            ..BrowserState::default()
+                        };
+                        self.open(Screen::Browser);
+                        return vec![Effect::StartBrowser(entry.path)];
+                    }
+                    aweyuki_install::aerap::AerapKind::Telegram => {
+                        self.state.telegram = TelegramState { starting: true, ..TelegramState::default() };
+                        self.open(Screen::Telegram);
+                        return vec![Effect::StartTelegram(entry.path)];
+                    }
+                    aweyuki_install::aerap::AerapKind::Other => {
+                        self.say(
+                            l.pick([
+                                "暂仅支持直接启动 AERA Browser 与 Telegram 插件",
+                                "暫僅支援直接啟動 AERA Browser 與 Telegram 外掛",
+                                "Only AERA Browser and Telegram plugins are supported directly",
+                            ]),
+                            now,
+                        );
+                    }
+                }
+            }
+            Action::DownloadAerap(kind) => {
+                if !self.state.online() {
+                    self.open(Screen::Wlan);
+                    return self.arrive_at(Screen::Wlan);
+                }
+                if !self.state.data.storage_open() {
+                    self.open(Screen::Decrypt);
+                    return self.arrive_at(Screen::Decrypt);
+                }
+                if self.state.aerap_download.is_some() {
+                    self.say(l.pick(["正在下载或安装插件，请稍候", "正在下載或安裝外掛，請稍候", "A plugin download is already running"]), now);
+                    return Vec::new();
+                }
+                let name = match kind {
+                    aweyuki_install::aerap::AerapKind::Browser => "AERA Browser",
+                    aweyuki_install::aerap::AerapKind::Telegram => "AERA Telegram",
+                    aweyuki_install::aerap::AerapKind::Other => "AERA Plugin",
+                };
+                self.state.aerap_download = Some((name.to_string(), 0));
+                self.refresh();
+                return vec![Effect::DownloadAerap(kind)];
+            }
+            Action::InstallAerapEntry => {
+                if !self.state.data.storage_open() {
+                    self.say(l.pick(DECRYPT_FIRST), now);
+                    return Vec::new();
+                }
+                let path = std::path::PathBuf::from(self.entry_path());
+                let name = self.state.file.as_ref().map_or_else(|| "AERA".into(), |f| f.name.clone());
+                self.state.aerap_download = Some((name, 0));
+                let mut fx = self.back(now);
+                fx.push(Effect::InstallAerap(path));
+                return fx;
+            }
+            Action::BrowserBack => return vec![Effect::BrowserNav(BrowserNavOp::Back)],
+            Action::BrowserForward => return vec![Effect::BrowserNav(BrowserNavOp::Forward)],
+            Action::BrowserReload => return vec![Effect::BrowserNav(BrowserNavOp::Reload)],
+            Action::BrowserEditUrl => {
+                self.state.browser.editing_url = true;
+                self.state.browser.show_keyboard = false;
+                self.state.layer = Layer::Letters;
+                self.refresh();
+            }
+            Action::BrowserHideKeyboard => {
+                self.state.browser.editing_url = false;
+                self.state.browser.show_keyboard = false;
+                self.refresh();
+            }
+            Action::BrowserViewport => {}
+            Action::BrowserClose => {
+                self.state.browser.editing_url = false;
+                self.state.browser.show_keyboard = false;
+                return self.back(now);
+            }
+            Action::TgFocus(field) => {
+                self.state.telegram.focus = field;
+                self.refresh();
+            }
+            Action::TgSubmit => return self.tg_submit_effect(now),
+            Action::TgRefreshChats => return vec![Effect::TelegramLoadChats],
+            Action::TgOpenChat(i) => {
+                if let Some(chat) = self.state.telegram.chats.get(i).cloned() {
+                    self.state.telegram.open_chat = Some((chat.id, chat.title));
+                    self.state.telegram.messages.clear();
+                    self.state.telegram.focus = TgField::Compose;
+                    self.refresh();
+                    return vec![Effect::TelegramOpenChat(chat.id)];
+                }
+            }
+            Action::TgBackToChats => {
+                self.state.telegram.open_chat = None;
+                self.state.telegram.messages.clear();
+                self.state.telegram.compose.clear();
+                self.refresh();
+            }
+            Action::TgDownload(file_id) => return vec![Effect::TelegramDownload(file_id)],
+            Action::TgClose => {
+                self.state.telegram.open_chat = None;
+                return self.back(now);
+            }
             Action::DismissAblWarning => {
                 self.state.abl_warning = None;
                 self.refresh();
@@ -889,6 +1001,8 @@ impl App {
             Screen::Lock | Screen::LockSetup => &mut self.state.lock_input,
             Screen::Rename => &mut self.state.new_name,
             Screen::WlanPassword => &mut self.state.password,
+            Screen::Browser => &mut self.state.browser.url_input,
+            Screen::Telegram => self.tg_active_text(),
             Screen::WlanAdd => {
                 let a = self.state.adding.as_mut().expect("the page adds a network");
                 match a.field {
@@ -904,6 +1018,32 @@ impl App {
     /// opens the first result of a search, and runs a terminal's command.
     fn type_key(&mut self, cap: Cap, now: u64) -> Vec<Effect> {
         let (l, layer) = (self.state.lang, self.state.layer);
+        if self.screen() == Screen::Browser && !self.state.browser.editing_url {
+            match cap {
+                Cap::Char(ch) => {
+                    let shifted = self.state.layer == Layer::Shifted;
+                    let out = if shifted { ch.to_ascii_uppercase() } else { ch };
+                    if shifted {
+                        self.state.layer = Layer::Letters;
+                        self.refresh();
+                    }
+                    return vec![Effect::BrowserKey { code: 0, text: out.to_string() }];
+                }
+                Cap::Space => return vec![Effect::BrowserKey { code: 0, text: " ".into() }],
+                Cap::Backspace => return vec![Effect::BrowserKey { code: 8, text: String::new() }],
+                Cap::Enter => return vec![Effect::BrowserKey { code: 13, text: String::new() }],
+                Cap::Shift => {
+                    self.state.layer = if self.state.layer == Layer::Shifted { Layer::Letters } else { Layer::Shifted };
+                    self.refresh();
+                    return Vec::new();
+                }
+                Cap::Show(next_layer) => {
+                    self.state.layer = next_layer;
+                    self.refresh();
+                    return Vec::new();
+                }
+            }
+        }
         match cap {
             Cap::Char(ch) => {
                 let shifted = self.state.layer == Layer::Shifted;
@@ -1004,12 +1144,39 @@ impl App {
                         }
                     }
                 }
+                Screen::Browser => {
+                    match aweyuki_install::aerap::browser_proto::normalize_url(&self.state.browser.url_input) {
+                        Some(url) => {
+                            self.state.browser.url = url.clone();
+                            self.state.browser.url_input = url.clone();
+                            self.state.browser.editing_url = false;
+                            self.state.browser.show_keyboard = false;
+                            self.refresh();
+                            return vec![Effect::BrowserOpen(url)];
+                        }
+                        None => {
+                            self.say(
+                                l.pick([
+                                    "无效网址，仅支持 http:// 或 https://",
+                                    "無效網址，僅支援 http:// 或 https://",
+                                    "Invalid URL (only http:// or https:// supported)",
+                                ]),
+                                now,
+                            );
+                            return Vec::new();
+                        }
+                    }
+                }
+                Screen::Telegram => return self.tg_submit_effect(now),
                 other => unreachable!("{other:?} shows no keyboard"),
             },
         }
         // What is typed shows above the keyboard, which stays as it was
         // while its keys do.
-        if matches!(cap, Cap::Char(_) | Cap::Space | Cap::Backspace) && self.state.layer == layer {
+        if !matches!(self.screen(), Screen::Browser | Screen::Telegram)
+            && matches!(cap, Cap::Char(_) | Cap::Space | Cap::Backspace)
+            && self.state.layer == layer
+        {
             let t = self.theme();
             let panel_h = if matches!(self.screen(), Screen::Lock | Screen::LockSetup) {
                 widgets::keypad_height(&t)

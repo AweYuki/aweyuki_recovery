@@ -1,3 +1,4 @@
+use crate::aera_jail::{BrowserProcess, TelegramProcess};
 use crate::backup;
 use crate::decrypt::{self, Decryptor};
 use crate::filework;
@@ -20,6 +21,12 @@ use aweyuki_block::fsck::Fixed;
 use aweyuki_block::{fstab, mount, probe};
 use aweyuki_config::{DeviceConfig, Service};
 use aweyuki_crypto::data::{Closed, Opened};
+use aweyuki_install::aerap::{
+    self,
+    browser_proto::{BrowserKind, BrowserMsg},
+    telegram_proto::{TgAuthState, TgKind, TgMsg},
+    AerapKind, AerapPlugin, AerapSource,
+};
 use aweyuki_install::asked::{self, Needs};
 use aweyuki_install::{Detach, Installer, Options};
 use aweyuki_sys::bcb::{self, Work, REFORMATS};
@@ -35,10 +42,11 @@ use aweyuki_sys::sleep::{Sleeper, Slept};
 use aweyuki_sys::uevent;
 use aweyuki_systems::Who;
 use aweyuki_ui::app::{
-    App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, BatchSource, BenchTarget, ClashChoice, Data, DownloadEnd, Effect, EraseStop,
-    FileKind, FileOp, FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Key, Keys, MountFailure, Part, PartKind,
-    PartStop, Place, PluginEnd, RenameRefused, RootOverview, Screen, ShareRoot, Shot, Source, AweyukiEnd, AweyukiStage, Target, Touch, UsbDrive,
-    UsbLink, VaultAppRow, VaultBackupRow, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS, INSTALL_UNFINISHED, USB_DRIVE,
+    AerapEntry, App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, BatchSource, BenchTarget, BrowserNavOp, BrowserTouchKind,
+    ClashChoice, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp, FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState,
+    JobEnd, Key, Keys, MountFailure, Part, PartKind, PartStop, Place, PluginEnd, RenameRefused, RootOverview, Screen, ShareRoot, Shot, Source,
+    AweyukiEnd, AweyukiStage, Target, Touch, UsbDrive, UsbLink, VaultAppRow, VaultBackupRow, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS,
+    INSTALL_UNFINISHED, USB_DRIVE,
 };
 use aweyuki_ui::settings::Keeper;
 use aweyuki_ui::surface::kms::KmsSurface;
@@ -46,7 +54,7 @@ use aweyuki_ui::{Canvas, Fonts, Lang, Surface};
 use aweyuki_vab::{Merge, Standing};
 use std::collections::{BTreeSet, VecDeque};
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -742,6 +750,134 @@ fn discover_plugins() -> Vec<aweyuki_install::plugins::Plugin> {
     aweyuki_install::plugins::discover(&dirs)
 }
 
+fn discover_aerap_plugins() -> Vec<AerapPlugin> {
+    let mut dirs: Vec<&Path> = aerap::DEFAULT_AERAP_DIRS.iter().map(Path::new).collect();
+    let aweyuki_dl = Path::new("/sdcard/Aweyuki/Downloads");
+    if aweyuki_dl.is_dir() {
+        dirs.push(aweyuki_dl);
+    }
+    aerap::discover(&dirs)
+}
+
+fn aerap_entries(list: &[AerapPlugin]) -> Vec<AerapEntry> {
+    list.iter()
+        .map(|p| {
+            let (installed, path) = match &p.source {
+                AerapSource::InstalledDir(dir) => (true, dir.clone()),
+                AerapSource::BundleFile(bundle) => (false, bundle.clone()),
+            };
+            AerapEntry {
+                id: p.manifest.id.clone(),
+                name: p.manifest.name.clone(),
+                version: p.manifest.version.clone(),
+                description: p.manifest.description.clone(),
+                kind: p.manifest.kind,
+                installed,
+                path,
+            }
+        })
+        .collect()
+}
+
+fn load_aerap_plugin(path: &Path) -> Result<AerapPlugin> {
+    if path.is_dir() {
+        Ok(AerapPlugin {
+            manifest: aerap::inspect_dir(path)?,
+            source: AerapSource::InstalledDir(path.to_path_buf()),
+        })
+    } else {
+        Ok(AerapPlugin {
+            manifest: aerap::inspect_bundle(path)?,
+            source: AerapSource::BundleFile(path.to_path_buf()),
+        })
+    }
+}
+
+fn pct_of(done: u64, total: u64) -> u8 {
+    if total == 0 {
+        0
+    } else {
+        ((done.min(total) * 100) / total).min(100) as u8
+    }
+}
+
+fn download_aerap_bundle(
+    agent: &ureq::Agent,
+    url: &str,
+    dest_dir: &Path,
+    filename: &str,
+    id: &str,
+    cancel: &AtomicBool,
+    teller: &aweyuki_sys::worker::Teller<AerapEvent>,
+) -> Result<String> {
+    fs::create_dir_all(dest_dir).with_context(|| format!("create {}", dest_dir.display()))?;
+    let bundle_path = dest_dir.join(filename);
+    let part_path = dest_dir.join(format!("{filename}.part"));
+    let _ = fs::remove_file(&part_path);
+
+    let mut resp = agent.get(url).call().with_context(|| format!("GET {url}"))?;
+    let status = resp.status().as_u16();
+    ensure!(status == 200, "download failed: HTTP {status}");
+    let total = resp
+        .headers()
+        .get("content-length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+
+    let dl_res = (|| -> Result<()> {
+        let mut body = resp.body_mut().with_config().limit(u64::MAX).reader();
+        let mut out = fs::File::create(&part_path).with_context(|| format!("create {}", part_path.display()))?;
+        let mut buf = vec![0u8; 64 * 1024];
+        let mut done = 0u64;
+        let mut last = Instant::now();
+        teller.tell(AerapEvent::DownloadProgress { id: id.to_string(), pct: 0 });
+        loop {
+            if cancel.load(Ordering::Relaxed) {
+                anyhow::bail!("cancelled");
+            }
+            let n = body.read(&mut buf).context("read .aerap download stream")?;
+            if n == 0 {
+                break;
+            }
+            out.write_all(&buf[..n]).context("write .aerap part")?;
+            done += n as u64;
+            if total > 0 && last.elapsed() >= Duration::from_millis(80) {
+                last = Instant::now();
+                let dl_pct = ((done.min(total) * 90) / total).min(90) as u8;
+                teller.tell(AerapEvent::DownloadProgress { id: id.to_string(), pct: dl_pct });
+            }
+        }
+        out.sync_all().context("sync .aerap download")?;
+        Ok(())
+    })();
+    if let Err(e) = dl_res {
+        let _ = fs::remove_file(&part_path);
+        return Err(e);
+    }
+    fs::rename(&part_path, &bundle_path).with_context(|| format!("save {}", bundle_path.display()))?;
+
+    let mut last = Instant::now();
+    let installed = aerap::install_bundle(&bundle_path, dest_dir, cancel, &mut |done, tot| {
+        if done == tot || last.elapsed() >= Duration::from_millis(80) {
+            last = Instant::now();
+            let pct = 90 + (pct_of(done, tot) / 10);
+            teller.tell(AerapEvent::DownloadProgress { id: id.to_string(), pct });
+        }
+    });
+    let _ = fs::remove_file(&bundle_path);
+    let plugin = installed?;
+    Ok(format!("Installed {} v{}", plugin.manifest.name, plugin.manifest.version))
+}
+
+enum AerapEvent {
+    DownloadProgress { id: String, pct: u8 },
+    DownloadDone(Result<String, String>),
+    InstallDone(Result<String, String>),
+    UnpackProgress { kind: AerapKind, pct: u8 },
+    Unpacked { kind: AerapKind, dir: Result<PathBuf, String> },
+}
+
 enum PayloadEvent {
     Inspected(Box<Result<aweyuki_install::payload::PayloadReport, String>>),
     Progress(u64, u64),
@@ -1369,6 +1505,14 @@ struct Pages<'a> {
     dev_worker: Option<aweyuki_sys::worker::Worker<DevEvent>>,
     /// Worker scanning, packing, or restoring [`Screen::AppVault`] archives.
     vault_worker: Option<aweyuki_sys::worker::Worker<VaultEvent>>,
+    /// Background worker downloading, verifying, or unpacking `.aerap` GUI bundles.
+    aerap_worker: Option<aweyuki_sys::worker::Worker<AerapEvent>>,
+    /// Cancellation flag shared with [`Self::aerap_worker`].
+    aerap_cancel: Arc<AtomicBool>,
+    /// Live isolated WPE WebKit browser worker.
+    browser_proc: Option<BrowserProcess>,
+    /// Live isolated Telegram TDLib worker.
+    telegram_proc: Option<TelegramProcess>,
     /// The USB drive plugged in, looked for each second.
     plugged: Option<Plugged>,
     seen: Option<String>,
@@ -1599,6 +1743,10 @@ impl<'a> Pages<'a> {
             batch_worker: None,
             dev_worker: None,
             vault_worker: None,
+            aerap_worker: None,
+            aerap_cancel: Arc::new(AtomicBool::new(false)),
+            browser_proc: None,
+            telegram_proc: None,
             plugged: None,
             seen: None,
             drive_at: Instant::now(),
@@ -1785,6 +1933,9 @@ impl<'a> Pages<'a> {
         self.decrypt_told(now)?;
         self.shell_told()?;
         self.plugin_told(now);
+        self.aerap_told(now);
+        self.browser_told(now);
+        self.telegram_told(now);
         self.payload_told(now);
         self.batch_told(now);
         self.dev_told(now);
@@ -2002,6 +2153,15 @@ impl<'a> Pages<'a> {
         if let Some(v) = &self.vault_worker {
             fds.push(v.fd());
         }
+        if let Some(a) = &self.aerap_worker {
+            fds.push(a.fd());
+        }
+        if let Some(b) = &self.browser_proc {
+            fds.push(b.fd());
+        }
+        if let Some(t) = &self.telegram_proc {
+            fds.push(t.fd());
+        }
         if let Some(m) = &self.mirror_rx {
             fds.push(m.fd());
         }
@@ -2034,6 +2194,9 @@ impl<'a> Pages<'a> {
             || self.batch_worker.is_some()
             || self.dev_worker.is_some()
             || self.vault_worker.is_some()
+            || self.aerap_worker.is_some()
+            || self.browser_proc.is_some()
+            || self.telegram_proc.is_some()
             || systems_busy;
         let joining = self.app.state.wlan.as_ref().and_then(|w| w.joined.as_ref()).is_some_and(|j| matches!(j.stage, Joining::Joining | Joining::Addressing));
         let running = match &self.shell {
@@ -2300,6 +2463,139 @@ impl Pages<'_> {
             && let Some(handle) = worker.thread.take()
         {
             let _ = handle.join();
+        }
+    }
+
+    fn aerap_told(&mut self, now: u64) {
+        let events = self.aerap_worker.as_ref().map(aweyuki_sys::worker::Worker::events).unwrap_or_default();
+        let mut finish_worker = false;
+        for ev in events {
+            match ev {
+                AerapEvent::DownloadProgress { id, pct } => self.app.aerap_download_progress(id, pct),
+                AerapEvent::DownloadDone(res) | AerapEvent::InstallDone(res) => {
+                    finish_worker = true;
+                    self.app.aerap_download_ended(res, now);
+                    let manifests = discover_plugins().into_iter().map(|p| p.manifest).collect();
+                    self.app.set_plugins(manifests);
+                    self.app.set_aerap_plugins(aerap_entries(&discover_aerap_plugins()));
+                }
+                AerapEvent::UnpackProgress { kind, pct } => match kind {
+                    AerapKind::Browser => self.app.browser_unpack_progress(pct),
+                    AerapKind::Telegram => self.app.telegram_unpack_progress(pct),
+                    AerapKind::Other => {}
+                },
+                AerapEvent::Unpacked { kind, dir } => {
+                    finish_worker = true;
+                    let dns = self.servers.lock().expect("dns servers lock").clone();
+                    match (kind, dir) {
+                        (AerapKind::Browser, Ok(runtime)) => match BrowserProcess::start(runtime, &dns) {
+                            Ok(proc) => {
+                                let url = self.app.state.browser.url.clone();
+                                if let Err(e) = proc.send(&BrowserMsg::open(&url)) {
+                                    self.app.browser_ended(Some(format!("{e:#}")), now);
+                                } else {
+                                    self.browser_proc = Some(proc);
+                                    self.app.browser_started(now);
+                                }
+                            }
+                            Err(e) => self.app.browser_ended(Some(format!("{e:#}")), now),
+                        },
+                        (AerapKind::Browser, Err(why)) => self.app.browser_ended(Some(why), now),
+                        (AerapKind::Telegram, Ok(runtime)) => match TelegramProcess::start(runtime, &dns) {
+                            Ok(proc) => {
+                                self.telegram_proc = Some(proc);
+                                self.app.telegram_started(now);
+                            }
+                            Err(e) => self.app.telegram_ended(Some(format!("{e:#}")), now),
+                        },
+                        (AerapKind::Telegram, Err(why)) => self.app.telegram_ended(Some(why), now),
+                        (AerapKind::Other, _) => {}
+                    }
+                }
+            }
+        }
+        if finish_worker {
+            self.aerap_worker = None;
+        }
+    }
+
+    fn browser_told(&mut self, now: u64) {
+        let mut dead = false;
+        if let Some(proc) = self.browser_proc.as_mut() {
+            match proc.recv() {
+                Ok(list) => {
+                    for msg in list {
+                        match msg.kind {
+                            BrowserKind::Frame => {
+                                let w = u32::try_from(msg.x).unwrap_or(aerap::browser_proto::WIDTH);
+                                let h = u32::try_from(msg.y).unwrap_or(aerap::browser_proto::HEIGHT);
+                                let pixels = Arc::new(proc.frame_bgra(msg.sequence).to_vec());
+                                let _ = proc.send(&BrowserMsg::ack(msg.sequence));
+                                self.app.browser_frame(w, h, pixels);
+                            }
+                            BrowserKind::Status => {
+                                self.app.browser_status(msg.text, msg.value as u8, msg.x != 0, msg.y != 0);
+                            }
+                            BrowserKind::KeyboardShow => self.app.browser_keyboard(true),
+                            BrowserKind::KeyboardHide => self.app.browser_keyboard(false),
+                            BrowserKind::Error => self.app.browser_error(msg.text, now),
+                            _ => {}
+                        }
+                    }
+                }
+                Err(e) => {
+                    dead = true;
+                    self.app.browser_error(format!("{e:#}"), now);
+                }
+            }
+            if !dead && !proc.is_running() {
+                dead = true;
+            }
+        }
+        if dead {
+            self.browser_proc = None;
+            self.app.browser_ended(None, now);
+        }
+    }
+
+    fn telegram_told(&mut self, now: u64) {
+        let mut dead = false;
+        if let Some(proc) = self.telegram_proc.as_mut() {
+            match proc.recv() {
+                Ok(list) => {
+                    for msg in list {
+                        match msg.kind {
+                            TgKind::State => {
+                                let auth = TgAuthState::from_u32(msg.value);
+                                let was_ready = self.app.state.telegram.auth == TgAuthState::Ready;
+                                self.app.telegram_state(auth, msg.text, now);
+                                if auth == TgAuthState::Ready && !was_ready {
+                                    let _ = proc.send(&TgMsg::simple(TgKind::LoadChats, ""));
+                                }
+                            }
+                            TgKind::Status => self.app.telegram_status(msg.text),
+                            TgKind::Error => self.app.telegram_error(msg.text, now),
+                            TgKind::Chat => self.app.telegram_chat(msg.primary, msg.value, msg.text),
+                            TgKind::ChatsDone => self.app.telegram_chats_done(),
+                            TgKind::Message => self.app.telegram_message(msg.primary, msg.secondary, msg.value, msg.text),
+                            TgKind::Attachment => self.app.telegram_attachment(msg.primary, msg.secondary, msg.value as i32, msg.text),
+                            TgKind::FileReady => self.app.telegram_file_ready(msg.text, now),
+                            _ => {}
+                        }
+                    }
+                }
+                Err(e) => {
+                    dead = true;
+                    self.app.telegram_error(format!("{e:#}"), now);
+                }
+            }
+            if !dead && !proc.is_running() {
+                dead = true;
+            }
+        }
+        if dead {
+            self.telegram_proc = None;
+            self.app.telegram_ended(None, now);
         }
     }
 
@@ -3252,6 +3548,7 @@ impl Pages<'_> {
             Effect::ReadPlugins => {
                 let manifests = discover_plugins().into_iter().map(|p| p.manifest).collect();
                 self.app.set_plugins(manifests);
+                self.app.set_aerap_plugins(aerap_entries(&discover_aerap_plugins()));
             }
             Effect::RunPlugin(id) => {
                 if self.plugin_worker.is_some() {
@@ -3488,6 +3785,187 @@ impl Pages<'_> {
                     .map_err(|e| format!("{e:#}"));
                     teller.tell(VaultEvent::Deleted(res));
                 })?);
+            }
+            Effect::DownloadAerap(kind) => {
+                if self.aerap_worker.is_some() {
+                    self.app.aerap_download_ended(Err("an AERA plugin task is already running".into()), now);
+                    return Ok(Vec::new());
+                }
+                let (url, filename, id) = match kind {
+                    AerapKind::Browser => (aerap::AERA_BROWSER_URL, aerap::AERA_BROWSER_FILE, "AERA Browser"),
+                    AerapKind::Telegram => (aerap::AERA_TELEGRAM_URL, aerap::AERA_TELEGRAM_FILE, "AERA Telegram"),
+                    AerapKind::Other => {
+                        self.app.aerap_download_ended(Err("no download URL for this plugin".into()), now);
+                        return Ok(Vec::new());
+                    }
+                };
+                self.aerap_cancel = Arc::new(AtomicBool::new(false));
+                let cancel = Arc::clone(&self.aerap_cancel);
+                let agent = aweyuki_net::http::agent(self.servers.clone());
+                let dest_dir = PathBuf::from(aerap::INSTALLED_AERAP_DIR);
+                self.aerap_worker = Some(aweyuki_sys::worker::Worker::start("aerap-download", move |teller| {
+                    let res = download_aerap_bundle(&agent, url, &dest_dir, filename, id, &cancel, &teller).map_err(|e| format!("{e:#}"));
+                    teller.tell(AerapEvent::DownloadDone(res));
+                })?);
+            }
+            Effect::InstallAerap(path) => {
+                if self.aerap_worker.is_some() {
+                    self.app.aerap_download_ended(Err("an AERA plugin task is already running".into()), now);
+                    return Ok(Vec::new());
+                }
+                self.aerap_cancel = Arc::new(AtomicBool::new(false));
+                let cancel = Arc::clone(&self.aerap_cancel);
+                let dest_dir = PathBuf::from(aerap::INSTALLED_AERAP_DIR);
+                self.aerap_worker = Some(aweyuki_sys::worker::Worker::start("aerap-install", move |teller| {
+                    let mut last = Instant::now();
+                    let t = teller.clone();
+                    let res = aerap::install_bundle(&path, &dest_dir, &cancel, &mut |done, tot| {
+                        if done == 0 || done == tot || last.elapsed() >= Duration::from_millis(80) {
+                            last = Instant::now();
+                            t.tell(AerapEvent::DownloadProgress { id: "AERA".into(), pct: pct_of(done, tot) });
+                        }
+                    })
+                    .map(|p| format!("Installed {} v{}", p.manifest.name, p.manifest.version))
+                    .map_err(|e| format!("{e:#}"));
+                    teller.tell(AerapEvent::InstallDone(res));
+                })?);
+            }
+            Effect::StartBrowser(path) => {
+                self.browser_proc = None;
+                if self.aerap_worker.is_some() {
+                    self.app.browser_ended(Some("wait for the active AERA task to finish".into()), now);
+                    return Ok(Vec::new());
+                }
+                self.aerap_cancel = Arc::new(AtomicBool::new(false));
+                let cancel = Arc::clone(&self.aerap_cancel);
+                let stage = Path::new(aweyuki_sys::RUN).join("aerap");
+                self.aerap_worker = Some(aweyuki_sys::worker::Worker::start("aerap-browser", move |teller| {
+                    let mut last = Instant::now();
+                    let t = teller.clone();
+                    let res = load_aerap_plugin(&path)
+                        .and_then(|plug| {
+                            aerap::unpack_runtime(&plug, &stage, &cancel, &mut |done, tot| {
+                                if done == 0 || done == tot || last.elapsed() >= Duration::from_millis(80) {
+                                    last = Instant::now();
+                                    t.tell(AerapEvent::UnpackProgress { kind: AerapKind::Browser, pct: pct_of(done, tot) });
+                                }
+                            })
+                        })
+                        .map_err(|e| format!("{e:#}"));
+                    teller.tell(AerapEvent::Unpacked { kind: AerapKind::Browser, dir: res });
+                })?);
+            }
+            Effect::StopBrowser => {
+                self.aerap_cancel.store(true, Ordering::Relaxed);
+                self.browser_proc = None;
+            }
+            Effect::BrowserOpen(url) => {
+                if let Some(proc) = &self.browser_proc
+                    && let Err(e) = proc.send(&BrowserMsg::open(&url))
+                {
+                    self.app.browser_error(format!("{e:#}"), now);
+                }
+            }
+            Effect::BrowserNav(op) => {
+                if let Some(proc) = &self.browser_proc {
+                    let kind = match op {
+                        BrowserNavOp::Back => BrowserKind::Back,
+                        BrowserNavOp::Forward => BrowserKind::Forward,
+                        BrowserNavOp::Reload => BrowserKind::Reload,
+                        BrowserNavOp::Stop => BrowserKind::Stop,
+                    };
+                    if let Err(e) = proc.send(&BrowserMsg::cmd(kind)) {
+                        self.app.browser_error(format!("{e:#}"), now);
+                    }
+                }
+            }
+            Effect::BrowserTouch { kind, x, y } => {
+                if let Some(proc) = &self.browser_proc {
+                    let k = match kind {
+                        BrowserTouchKind::Down => BrowserKind::TouchDown,
+                        BrowserTouchKind::Move => BrowserKind::TouchMove,
+                        BrowserTouchKind::Up => BrowserKind::TouchUp,
+                    };
+                    let _ = proc.send(&BrowserMsg { kind: k, sequence: 0, x, y, value: 0, text: String::new() });
+                }
+            }
+            Effect::BrowserKey { code, text } => {
+                if let Some(proc) = &self.browser_proc {
+                    let _ = proc.send(&BrowserMsg {
+                        kind: BrowserKind::Key,
+                        sequence: 0,
+                        x: 0,
+                        y: 0,
+                        value: code,
+                        text,
+                    });
+                }
+            }
+            Effect::StartTelegram(path) => {
+                self.telegram_proc = None;
+                if self.aerap_worker.is_some() {
+                    self.app.telegram_ended(Some("wait for the active AERA task to finish".into()), now);
+                    return Ok(Vec::new());
+                }
+                self.aerap_cancel = Arc::new(AtomicBool::new(false));
+                let cancel = Arc::clone(&self.aerap_cancel);
+                let stage = Path::new(aweyuki_sys::RUN).join("aerap");
+                self.aerap_worker = Some(aweyuki_sys::worker::Worker::start("aerap-telegram", move |teller| {
+                    let mut last = Instant::now();
+                    let t = teller.clone();
+                    let res = load_aerap_plugin(&path)
+                        .and_then(|plug| {
+                            aerap::unpack_runtime(&plug, &stage, &cancel, &mut |done, tot| {
+                                if done == 0 || done == tot || last.elapsed() >= Duration::from_millis(80) {
+                                    last = Instant::now();
+                                    t.tell(AerapEvent::UnpackProgress { kind: AerapKind::Telegram, pct: pct_of(done, tot) });
+                                }
+                            })
+                        })
+                        .map_err(|e| format!("{e:#}"));
+                    teller.tell(AerapEvent::Unpacked { kind: AerapKind::Telegram, dir: res });
+                })?);
+            }
+            Effect::StopTelegram => {
+                self.aerap_cancel.store(true, Ordering::Relaxed);
+                self.telegram_proc = None;
+            }
+            Effect::TelegramConfigure { api_id, api_hash, vault_key } => {
+                if let Some(proc) = &self.telegram_proc {
+                    let text = if api_id > 0 { format!("{api_hash}\n{vault_key}") } else { vault_key };
+                    if let Err(e) = proc.send(&TgMsg { kind: TgKind::Configure, value: 0, primary: api_id, secondary: 0, text }) {
+                        self.app.telegram_error(format!("{e:#}"), now);
+                    }
+                }
+            }
+            Effect::TelegramAuth { kind, text } => {
+                if let Some(proc) = &self.telegram_proc
+                    && let Err(e) = proc.send(&TgMsg::simple(kind, text))
+                {
+                    self.app.telegram_error(format!("{e:#}"), now);
+                }
+            }
+            Effect::TelegramLoadChats => {
+                if let Some(proc) = &self.telegram_proc {
+                    let _ = proc.send(&TgMsg::simple(TgKind::LoadChats, ""));
+                }
+            }
+            Effect::TelegramOpenChat(chat_id) => {
+                if let Some(proc) = &self.telegram_proc {
+                    let _ = proc.send(&TgMsg { kind: TgKind::OpenChat, value: 0, primary: chat_id, secondary: 0, text: String::new() });
+                }
+            }
+            Effect::TelegramSendText { chat_id, text } => {
+                if let Some(proc) = &self.telegram_proc
+                    && let Err(e) = proc.send(&TgMsg { kind: TgKind::SendText, value: 0, primary: chat_id, secondary: 0, text })
+                {
+                    self.app.telegram_error(format!("{e:#}"), now);
+                }
+            }
+            Effect::TelegramDownload(file_id) => {
+                if let Some(proc) = &self.telegram_proc {
+                    let _ = proc.send(&TgMsg { kind: TgKind::DownloadFile, value: file_id as u32, primary: 0, secondary: 0, text: String::new() });
+                }
             }
         }
         Ok(Vec::new())

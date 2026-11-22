@@ -2,7 +2,7 @@ use crate::app::{
     Action, BackupAt, BackupEnd, BackupJob, BatchSource, BenchTarget, Check, ClashChoice, Confirm, Damage, Data, Dock, DownloadEnd, EraseStop,
     Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, LockSetupStage,
     PayloadState, Pick, Place, PluginEnd, Rows, Screen, ShareRoot, AweyukiCheck, AweyukiEnd, AweyukiJob, AweyukiStage, Slider, Source, State,
-    Switch, SystemsWork, Target, UsbDrive, UsbLink, VaultTab, Wipe, ADDABLE, BACKUP_PARTS, DATA_ERASED, DATA_PARTITION, DOWNLOADS,
+    Switch, SystemsWork, Target, TgField, UsbDrive, UsbLink, VaultTab, Wipe, ADDABLE, BACKUP_PARTS, DATA_ERASED, DATA_PARTITION, DOWNLOADS,
     FASTBOOT_CHOICES, SCREEN_OFF, TARGETS, TIME_ZONES, USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, WIPES, installs, starting,
 };
 use crate::canvas::Canvas;
@@ -20,6 +20,7 @@ use crate::tr;
 use crate::icons::{self, Icon};
 use crate::widgets::{self, Caption, Detail, Fact, Outline, Row, Spec, SystemCard, SystemMark, Tone, Trail};
 use aweyuki_info::{DeviceInfo, VERSION};
+use aweyuki_install::aerap::{AerapKind, browser_proto::WIDTH as AERAP_BROWSER_W, browser_proto::HEIGHT as AERAP_BROWSER_H, telegram_proto::TgAuthState};
 use aweyuki_install::{Outcome, Reflash, Refusal, Stage};
 use aweyuki_net::download::Progress;
 use aweyuki_net::supplicant::Security;
@@ -120,6 +121,8 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
         Screen::LockSetup => lock_setup(cx),
         Screen::Developer => developer(cx),
         Screen::AppVault => app_vault(cx),
+        Screen::Browser => browser(cx),
+        Screen::Telegram => telegram(cx),
     }
 }
 
@@ -3361,6 +3364,14 @@ pub fn file_info(cx: &Ctx) -> Frame {
         if Path::new(&e.name)
             .extension()
             .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("aerap"))
+        {
+            rows.push(Row::new(l.pick(["安装 AERA 插件", "安裝 AERA 外掛", "Install AERA plugin"])));
+            acts.push(Action::InstallAerapEntry);
+        }
+        if Path::new(&e.name)
+            .extension()
+            .and_then(|ext| ext.to_str())
             .is_some_and(|ext| ext.eq_ignore_ascii_case("zip") || ext.eq_ignore_ascii_case("bin"))
         {
             rows.push(Row::new(l.pick(["检查 OTA Payload", "檢查 OTA Payload", "Inspect OTA payload"])));
@@ -4471,7 +4482,426 @@ pub fn plugins(cx: &Ctx) -> Frame {
         }
     }
 
+    y = widgets::section(&mut c, t, f, y, l.pick(["AERA GUI 插件", "AERA GUI 外掛", "AERA GUI plugins"]));
+    match &s.aerap_plugins {
+        Some(list) if !list.is_empty() => {
+            let subs: Vec<String> = list
+                .iter()
+                .map(|p| {
+                    let state_word = l.pick(if p.installed {
+                        ["已安装 · 点击启动", "已安裝 · 點擊啟動", "Installed · Tap to launch"]
+                    } else {
+                        ["未解压 · 点击运行", "未解壓 · 點擊執行", "Bundle · Tap to run"]
+                    });
+                    if p.version.is_empty() {
+                        state_word.to_string()
+                    } else {
+                        format!("v{} · {state_word}", p.version)
+                    }
+                })
+                .collect();
+            let rows: Vec<Row> = list
+                .iter()
+                .zip(&subs)
+                .map(|(p, sub)| {
+                    let (color, icon) = match p.kind {
+                        AerapKind::Browser => (BLUE, Icon::Globe),
+                        AerapKind::Telegram => (PURPLE, Icon::More),
+                        AerapKind::Other => (SLATE, Icon::Layers),
+                    };
+                    Row::new(&p.name).subtitle(sub).icon(color, icon)
+                })
+                .collect();
+            let block = widgets::list(&mut c, t, f, y, &rows);
+            let acts: Vec<Action> = (0..list.len()).map(Action::LaunchAerap).collect();
+            out.extend(hits(&block.rows, &acts));
+            y = block.bottom;
+        }
+        Some(_) => {
+            y = widgets::footnote(
+                &mut c,
+                t,
+                f,
+                y,
+                l.pick([
+                    "未找到 .aerap 插件。可从下方在线下载，或将 .aerap 放入 /sdcard/Aweyuki/plugins。",
+                    "未找到 .aerap 外掛。可從下方線上免費下載，或將 .aerap 放入 /sdcard/Aweyuki/plugins。",
+                    "No .aerap plugins found. Download below or place .aerap files in /sdcard/Aweyuki/plugins.",
+                ]),
+            );
+        }
+        None => {
+            y = widgets::footnote(&mut c, t, f, y, l.pick(["正在扫描插件", "正在掃描擴充功能", "Scanning for plugins"]));
+        }
+    }
+
+    y = widgets::section(&mut c, t, f, y, l.pick(["在线下载官方插件", "線上免費下載官方外掛", "Download official plugins"]));
+    if let Some((name, pct)) = &s.aerap_download {
+        let frac = (f32::from(*pct) / 100.0).clamp(0.0, 1.0);
+        y = widgets::progress_card(&mut c, t, f, y, name, l.pick(["正在下载", "正在下載", "Downloading"]), Some(frac));
+    } else {
+        let dl_rows = [
+            Row::new("AERA Browser · v1.5.6")
+                .subtitle(l.pick(["浏览器 (WPE WebKit 引擎)", "瀏覽器 (WPE WebKit 引擎)", "Web browser (WPE WebKit)"]))
+                .icon(BLUE, Icon::Globe),
+            Row::new("AERA Telegram · v1.3.5")
+                .subtitle(l.pick(["Telegram 客户端 (TDLib)", "Telegram 客戶端 (TDLib)", "Telegram client (TDLib)"]))
+                .icon(PURPLE, Icon::More),
+        ];
+        let block = widgets::list(&mut c, t, f, y, &dl_rows);
+        out.extend(hits(
+            &block.rows,
+            &[Action::DownloadAerap(AerapKind::Browser), Action::DownloadAerap(AerapKind::Telegram)],
+        ));
+        y = block.bottom;
+    }
+
     Frame::new(t, fit(c, t, y), out, l.pick(PLUGINS), top)
+}
+
+/// Isolated WPE WebKit browser page with top toolbar, scaled shared framebuffer viewport,
+/// and URL/form keyboard support.
+pub fn browser(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let m = &t.m;
+    let b = &s.browser;
+    let mut c = page(cx);
+    let mut out = Vec::new();
+    let title = l.pick(["浏览器", "瀏覽器", "Browser"]);
+    let tb_y = widgets::bar_bottom(t) + m.dp(4.0);
+
+    if b.editing_url {
+        let (below, caret) = widgets::text_field(&mut c, t, f, tb_y, &b.url_input);
+        let hint = l.pick(["请输入网址（http:// 或 https://）", "請輸入網址（http:// 或 https://）", "Enter URL (http:// or https://)"]);
+        let next = widgets::footnote(&mut c, t, f, below, hint);
+        let cancel_btn = widgets::list(&mut c, t, f, next + m.card_gap, &[Row::new(l.pick(CANCEL)).trail(Trail::None)]);
+        out.extend(hits(&cancel_btn.rows, &[Action::BrowserHideKeyboard]));
+        keyboard_hits(&mut c, t, f, s, l.pick(["打开", "開啟", "Open"]), &mut out);
+        return Frame {
+            header: false,
+            caret: Some(caret),
+            ..Frame::new(t, c, out, title, m.content_top)
+        };
+    }
+
+    let tb_h = m.dp(40.0);
+    let gap = m.dp(6.0);
+    let btn_w = m.dp(34.0);
+    let nav_count = if b.show_keyboard { 4 } else { 3 };
+    let url_w = (m.w as f32 - m.margin * 2.0 - (btn_w + gap) * nav_count as f32).max(m.dp(80.0));
+    let url_rect = Rect::new(m.margin, tb_y, url_w, tb_h);
+    let r_chip = tb_h / 2.0;
+    c.fill_round_rect(url_rect.x, url_rect.y, url_rect.w, url_rect.h, r_chip, t.pal.card);
+    if b.progress > 0 && b.progress < 100 {
+        let pw = (url_rect.w * f32::from(b.progress) / 100.0).max(m.dp(6.0));
+        c.fill_rect(url_rect.x + m.dp(8.0), url_rect.y + url_rect.h - m.dp(3.0), (pw - m.dp(16.0)).max(0.0), m.dp(2.0), t.pal.accent);
+    }
+    let url_x = url_rect.x + m.dp(12.0);
+    let url_room = (url_rect.w - m.dp(24.0)).max(m.dp(20.0));
+    c.text_vc(&f.value, &b.url, url_x, url_rect.y + tb_h / 2.0, m.sub_px, t.pal.text, Some(url_room));
+    out.push(Hit { rect: url_rect, action: Action::BrowserEditUrl });
+
+    let mut btns: Vec<(&str, Action, bool)> = vec![
+        ("<", Action::BrowserBack, b.can_back),
+        (">", Action::BrowserForward, b.can_forward),
+        ("R", Action::BrowserReload, true),
+    ];
+    if b.show_keyboard {
+        btns.push(("v", Action::BrowserHideKeyboard, true));
+    }
+    for (idx, &(sym, act, enabled)) in btns.iter().enumerate() {
+        let bx = url_rect.x + url_rect.w + gap + idx as f32 * (btn_w + gap);
+        let br = Rect::new(bx, tb_y, btn_w, tb_h);
+        c.fill_round_rect(br.x, br.y, br.w, br.h, r_chip, t.pal.card);
+        let ink = if enabled { t.pal.text } else { t.pal.chevron };
+        c.text_center(&f.heading, sym, br.x + br.w / 2.0, br.y + br.h / 2.0, m.sub_px, ink);
+        out.push(Hit { rect: br, action: act });
+    }
+
+    let vp_y = tb_y + tb_h + m.dp(8.0);
+    let vp_bottom = if b.show_keyboard {
+        m.h as f32 - widgets::keyboard_height(t) - m.dp(6.0)
+    } else {
+        m.h as f32 - m.dp(10.0)
+    };
+    let max_w = m.w as f32 - m.margin * 2.0;
+    let avail_h = (vp_bottom - vp_y).max(m.dp(120.0));
+    // Preserve 1080:2100 aspect when height is constrained (e.g., while keyboard is shown)
+    let aspect = AERAP_BROWSER_W as f32 / AERAP_BROWSER_H as f32;
+    let vp_w = (avail_h * aspect).min(max_w);
+    let vp_h = (vp_w / aspect).min(avail_h);
+    let vp_x = m.margin + (max_w - vp_w) / 2.0;
+    let vp_rect = Rect::new(vp_x, vp_y, vp_w, vp_h);
+
+    if let Some(pixels) = &b.frame {
+        c.blit_bgra_scaled(pixels, b.frame_w, b.frame_h, vp_rect);
+        out.push(Hit { rect: vp_rect, action: Action::BrowserViewport });
+    } else if b.starting {
+        let frac = (f32::from(b.unpack_pct) / 100.0).clamp(0.0, 1.0);
+        widgets::progress_card(
+            &mut c,
+            t,
+            f,
+            vp_y,
+            "AERA Browser",
+            l.pick(["正在解压与启动浏览器", "正在解壓與啟動瀏覽器", "Preparing and launching browser"]),
+            Some(frac),
+        );
+    } else if let Some(err) = &b.error {
+        widgets::list(&mut c, t, f, vp_y, &[standing(l.pick(["浏览器未运行", "瀏覽器未執行", "Browser not running"]), RED, Icon::Globe, err)]);
+    } else {
+        widgets::list(
+            &mut c,
+            t,
+            f,
+            vp_y,
+            &[standing(
+                "AERA Browser",
+                BLUE,
+                Icon::Globe,
+                l.pick(["正在加载页面", "正在載入頁面", "Loading page"]),
+            )],
+        );
+    }
+
+    if b.show_keyboard {
+        keyboard_hits(&mut c, t, f, s, l.pick(["回车", "Enter", "Enter"]), &mut out);
+    }
+
+    Frame {
+        header: false,
+        ..Frame::new(t, c, out, title, m.content_top)
+    }
+}
+
+/// Isolated AERA Telegram TDLib client page: auth wizard, chat list, conversation viewer,
+/// composer, and file downloads.
+pub fn telegram(cx: &Ctx) -> Frame {
+    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+    let m = &t.m;
+    let tg = &s.telegram;
+    let top = m.content_top;
+
+    if !tg.shows_keyboard() {
+        let mut c = long_page(cx);
+        let mut out = Vec::new();
+        let mut y = top;
+        match tg.auth {
+            TgAuthState::Ready => {
+                let (head_y, refresh_rect) = widgets::section_action(
+                    &mut c,
+                    t,
+                    f,
+                    y,
+                    l.pick(["会话列表", "對話列表", "Chats"]),
+                    l.pick(["刷新", "重新整理", "Refresh"]),
+                );
+                out.push(Hit { rect: refresh_rect, action: Action::TgRefreshChats });
+                y = head_y;
+                if tg.chats.is_empty() {
+                    y = widgets::footnote(&mut c, t, f, y, l.pick(["暂无对话", "暫無對話", "No chats yet"]));
+                } else {
+                    let rows: Vec<Row> = tg
+                        .chats
+                        .iter()
+                        .map(|chat| {
+                            let mut r = Row::new(&chat.title).icon(BLUE, Icon::More);
+                            if !chat.preview.is_empty() {
+                                r = r.subtitle(&chat.preview);
+                            }
+                            r
+                        })
+                        .collect();
+                    let list = widgets::list(&mut c, t, f, y, &rows);
+                    let acts: Vec<Action> = (0..tg.chats.len()).map(Action::TgOpenChat).collect();
+                    out.extend(hits(&list.rows, &acts));
+                    y = list.bottom;
+                }
+            }
+            TgAuthState::ConfirmElsewhere => {
+                let msg = tg.status.as_deref().unwrap_or_else(|| {
+                    l.pick([
+                        "请在其他 Telegram 设备上确认本次登录。",
+                        "請在其他 Telegram 裝置上確認本次登入。",
+                        "Confirm this login on another Telegram device.",
+                    ])
+                });
+                y = widgets::list(&mut c, t, f, y, &[standing("Telegram", BLUE, Icon::More, msg)]).bottom;
+            }
+            _ => {
+                if let Some(err) = &tg.error {
+                    y = widgets::list(
+                        &mut c,
+                        t,
+                        f,
+                        y,
+                        &[standing(l.pick(["Telegram 未运行", "Telegram 未執行", "Telegram not running"]), RED, Icon::More, err)],
+                    )
+                    .bottom;
+                } else {
+                    let detail = if tg.starting {
+                        l.pick(["正在解压与启动 Telegram", "正在解壓與啟動 Telegram", "Preparing and launching Telegram"])
+                    } else {
+                        tg.status
+                            .as_deref()
+                            .unwrap_or_else(|| l.pick(["连接 Telegram 中", "正在連線 Telegram", "Connecting to Telegram"]))
+                    };
+                    let frac = tg.starting.then(|| (f32::from(tg.unpack_pct) / 100.0).clamp(0.0, 1.0));
+                    y = widgets::progress_card(&mut c, t, f, y, "Telegram", detail, frac);
+                }
+            }
+        }
+        return Frame::new(t, fit(c, t, y), out, "Telegram", top);
+    }
+
+    let mut c = page(cx);
+    let mut out = Vec::new();
+    let mut caret = None;
+    let field_rect = |fy: f32| Rect::new(m.margin, fy, m.w as f32 - m.margin * 2.0, m.dp(56.0));
+    let submit_label = match tg.auth {
+        TgAuthState::Ready => l.pick(["发送消息", "傳送訊息", "Send message"]),
+        _ => l.pick(["提交", "送出", "Submit"]),
+    };
+
+    if tg.auth == TgAuthState::Ready
+        && let Some((_, chat_title)) = &tg.open_chat
+    {
+        let (mut y, chats_rect) = widgets::section_action(
+            &mut c,
+            t,
+            f,
+            top,
+            chat_title,
+            l.pick(["列表", "列表", "Chats"]),
+        );
+        out.push(Hit { rect: chats_rect, action: Action::TgBackToChats });
+        let kb_top = keyboard_hits(&mut c, t, f, s, submit_label, &mut out);
+        let compose_y = kb_top - m.dp(64.0);
+        let (_, comp_caret) = widgets::text_field(&mut c, t, f, compose_y, &tg.compose);
+        out.push(Hit { rect: field_rect(compose_y), action: Action::TgFocus(TgField::Compose) });
+        caret = Some(comp_caret);
+
+        let box_h = (compose_y - m.dp(8.0) - y).max(m.dp(80.0));
+        let card_x = m.margin;
+        let card_w = m.w as f32 - m.margin * 2.0;
+        c.fill_round_rect(card_x, y, card_w, box_h, m.card_radius, t.pal.card);
+        y += m.dp(10.0);
+        let max_y = compose_y - m.dp(14.0);
+        let text_w = (card_w - m.inner * 2.0).max(m.dp(40.0));
+
+        // Layout most recent messages that fit cleanly above the compose box.
+        let recent_start = tg.messages.len().saturating_sub(12);
+        for msg in &tg.messages[recent_start..] {
+            if y + m.sub_pitch > max_y {
+                break;
+            }
+            let prefix = if msg.outgoing { "> " } else { "" };
+            let header = if msg.sender.is_empty() {
+                format!("{prefix}{}", msg.body)
+            } else if msg.body.is_empty() {
+                format!("{prefix}{}:", msg.sender)
+            } else {
+                format!("{prefix}{}: {}", msg.sender, msg.body)
+            };
+            for line in widgets::wrap(&c, &f.body, &header, m.sub_px, text_w) {
+                if y + m.sub_pitch > max_y {
+                    break;
+                }
+                let ink = if msg.outgoing { t.pal.accent } else { t.pal.text };
+                c.text_top(&f.body, &line, card_x + m.inner, y, m.sub_px, ink, Some(text_w));
+                y += m.sub_pitch;
+            }
+            for att in &msg.attachments {
+                let chip_h = m.dp(28.0);
+                if y + chip_h > max_y {
+                    break;
+                }
+                let label = format!("{} ({})", att.name, fmt::file_size(att.size));
+                let chip_w = (c.text_width(&f.value, &label, m.sub_px) + m.dp(20.0)).min(text_w);
+                let rect = Rect::new(card_x + m.inner, y, chip_w, chip_h);
+                c.fill_round_rect(rect.x, rect.y, rect.w, rect.h, chip_h / 2.0, t.pal.search);
+                c.text_vc(&f.value, &label, rect.x + m.dp(10.0), rect.y + chip_h / 2.0, m.sub_px, t.pal.accent, Some(chip_w - m.dp(16.0)));
+                out.push(Hit { rect, action: Action::TgDownload(att.file_id) });
+                y += chip_h + m.dp(4.0);
+            }
+            y += m.dp(4.0);
+        }
+
+        return Frame {
+            caret,
+            ..Frame::new(t, c, out, "Telegram", top)
+        };
+    }
+
+    let mut add_field = |y: f32, first: bool, label: &str, value: &str, masked: bool, field: TgField| -> f32 {
+        let sy = if first {
+            widgets::section_first(&mut c, t, f, y, label)
+        } else {
+            widgets::section(&mut c, t, f, y, label)
+        };
+        let shown: String = if masked { "•".repeat(value.chars().count()) } else { value.to_string() };
+        let (below, c_pos) = widgets::text_field(&mut c, t, f, sy, &shown);
+        out.push(Hit { rect: field_rect(sy), action: Action::TgFocus(field) });
+        if tg.focus == field {
+            caret = Some(c_pos);
+        }
+        below + m.card_gap
+    };
+
+    match tg.auth {
+        TgAuthState::NeedConfiguration => {
+            let y1 = add_field(top, true, "API ID", &tg.api_id, false, TgField::ApiId);
+            let y2 = add_field(y1, false, "API Hash", &tg.api_hash, false, TgField::ApiHash);
+            add_field(
+                y2,
+                false,
+                l.pick(["本地密钥（用于加密会话）", "本機金鑰（用於加密工作階段）", "Vault key (encrypts local session)"]),
+                &tg.vault_key,
+                true,
+                TgField::VaultKey,
+            );
+        }
+        TgAuthState::NeedVault => {
+            add_field(
+                top,
+                true,
+                l.pick(["本地密钥（用于加密会话）", "本機金鑰（用於加密工作階段）", "Vault key (encrypts local session)"]),
+                &tg.vault_key,
+                true,
+                TgField::VaultKey,
+            );
+        }
+        TgAuthState::NeedPhone => {
+            add_field(
+                top,
+                true,
+                l.pick(["手机号（如 +84...）", "手機號碼（如 +84...）", "Phone number (e.g. +84...)"]),
+                &tg.phone,
+                false,
+                TgField::Phone,
+            );
+        }
+        TgAuthState::NeedCode => {
+            add_field(top, true, l.pick(["验证码", "驗證碼", "Login code"]), &tg.code, false, TgField::Code);
+        }
+        TgAuthState::NeedPassword => {
+            add_field(top, true, l.pick(["两步验证密码", "兩步驟驗證密碼", "Two-step password"]), &tg.password, true, TgField::Password);
+        }
+        TgAuthState::NeedEmail => {
+            add_field(top, true, l.pick(["邮箱地址", "電子郵件地址", "Email address"]), &tg.email, false, TgField::Email);
+        }
+        TgAuthState::NeedEmailCode => {
+            add_field(top, true, l.pick(["邮箱验证码", "信箱驗證碼", "Email code"]), &tg.email_code, false, TgField::EmailCode);
+        }
+        TgAuthState::NeedRegistration => {
+            let y1 = add_field(top, true, l.pick(["名字", "名字", "First name"]), &tg.first_name, false, TgField::FirstName);
+            add_field(y1, false, l.pick(["姓氏（可选）", "姓氏（選填）", "Last name (optional)"]), &tg.last_name, false, TgField::LastName);
+        }
+        _ => {}
+    }
+
+    keyboard_hits(&mut c, t, f, s, submit_label, &mut out);
+    Frame { caret, ..Frame::new(t, c, out, "Telegram", top) }
 }
 
 /// Live stdout/stderr output of an active or completed runtime plugin.

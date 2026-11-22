@@ -323,6 +323,7 @@ dependencies = [
  "cpio",
  "flate2",
  "libc",
+ "liblzma",
  "lz4_flex 0.14.0",
  "p256",
  "polyfuse-kernel",

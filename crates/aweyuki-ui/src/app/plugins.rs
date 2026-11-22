@@ -1,7 +1,10 @@
-//! The runtime plugins pages: discovered plugins and live execution output.
+//! The runtime plugins pages: discovered `plugin.toml` scripts, native AERA
+//! `.aerap` GUI bundles, and live execution output.
 
 use super::*;
+use aweyuki_install::aerap::AerapKind;
 use aweyuki_install::plugins::PluginManifest;
+use std::path::PathBuf;
 
 /// How a plugin run finished.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,10 +24,50 @@ pub struct PluginRun {
     pub outcome: Option<PluginEnd>,
 }
 
+/// Discovered AERA `.aerap` GUI plugin entry listed on [`Screen::Plugins`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AerapEntry {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub kind: AerapKind,
+    pub installed: bool,
+    pub path: PathBuf,
+}
+
 impl App {
-    /// Set the list of discovered runtime plugins.
+    /// Set the list of discovered runtime `plugin.toml` plugins.
     pub fn set_plugins(&mut self, plugins: Vec<PluginManifest>) {
         self.state.plugins = Some(plugins);
+        if self.screen() == Screen::Plugins {
+            self.refresh();
+        }
+    }
+
+    /// Set the list of discovered AERA `.aerap` GUI plugins.
+    pub fn set_aerap_plugins(&mut self, list: Vec<AerapEntry>) {
+        self.state.aerap_plugins = Some(list);
+        if self.screen() == Screen::Plugins {
+            self.refresh();
+        }
+    }
+
+    /// Update download percentage for an official AERA `.aerap` release.
+    pub fn aerap_download_progress(&mut self, id: String, pct: u8) {
+        self.state.aerap_download = Some((id, pct.min(100)));
+        if self.screen() == Screen::Plugins {
+            self.refresh();
+        }
+    }
+
+    /// Finish an official AERA `.aerap` download or `.aerap` bundle installation.
+    pub fn aerap_download_ended(&mut self, res: Result<String, String>, now: u64) {
+        self.state.aerap_download = None;
+        self.wake(now);
+        match res {
+            Ok(msg) | Err(msg) => self.say(&msg, now),
+        }
         if self.screen() == Screen::Plugins {
             self.refresh();
         }
@@ -107,5 +150,64 @@ mod tests {
         assert!(app.frame(&f, &i).back);
         tap_at(&mut app, &f, &i, Action::Back, 2000);
         assert_eq!((app.screen(), app.state.plugin_run.as_ref()), (Screen::Plugins, None));
+    }
+
+    #[test]
+    fn aerap_plugins_list_download_and_launch() {
+        let (f, i) = (fonts(), info());
+        let mut app = App::new(Screen::Plugins, W, H, PPD);
+        app.set_aerap_plugins(vec![
+            AerapEntry {
+                id: "browser".into(),
+                name: "AERA Browser".into(),
+                version: "1.5.6".into(),
+                description: "WebKit".into(),
+                kind: AerapKind::Browser,
+                installed: true,
+                path: PathBuf::from("/sdcard/Aweyuki/plugins/browser"),
+            },
+            AerapEntry {
+                id: "telegram".into(),
+                name: "AERA Telegram".into(),
+                version: "1.3.5".into(),
+                description: "TDLib".into(),
+                kind: AerapKind::Telegram,
+                installed: false,
+                path: PathBuf::from("/sdcard/Download/AERA-Telegram-1.3.5.aerap"),
+            },
+        ]);
+
+        // Requires WLAN + storage for online official downloads; once online & open it triggers DownloadAerap.
+        app.set_data(Data::Open);
+        app.set_wlan(Some(aweyuki_net::wlan::Wlan {
+            power: aweyuki_net::wlan::Power::On,
+            scanning: false,
+            found: Vec::new(),
+            saved: Vec::new(),
+            joined: Some(aweyuki_net::wlan::Joined {
+                ssid: b"Lab".to_vec(),
+                name: "Lab".into(),
+                security: aweyuki_net::supplicant::Security::None,
+                stage: aweyuki_net::wlan::Stage::Connected(aweyuki_net::wlan::Link {
+                    signal: -50,
+                    frequency: 5180,
+                    speed: 866,
+                    address: None,
+                    gateway: None,
+                    dns: Vec::new(),
+                }),
+            }),
+        }));
+        assert_eq!(tap(&mut app, &f, &i, Action::DownloadAerap(AerapKind::Browser)), vec![Effect::DownloadAerap(AerapKind::Browser)]);
+        app.aerap_download_progress("AERA Browser".into(), 50);
+        assert_eq!(app.state.aerap_download, Some(("AERA Browser".into(), 50)));
+        app.aerap_download_ended(Ok("Installed AERA Browser".into()), 100);
+        assert_eq!(app.state.aerap_download, None);
+
+        assert_eq!(
+            tap_at(&mut app, &f, &i, Action::LaunchAerap(1), 200),
+            vec![Effect::StartTelegram(PathBuf::from("/sdcard/Download/AERA-Telegram-1.3.5.aerap"))]
+        );
+        assert_eq!(app.screen(), Screen::Telegram);
     }
 }

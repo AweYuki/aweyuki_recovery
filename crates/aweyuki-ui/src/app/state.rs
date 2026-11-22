@@ -217,6 +217,14 @@ pub struct State {
     pub dev: DevState,
     /// App Backup Vault state.
     pub vault: VaultState,
+    /// Discovered native AERA `.aerap` GUI plugins.
+    pub aerap_plugins: Option<Vec<AerapEntry>>,
+    /// Active official `.aerap` download or install progress: `(name, pct)`.
+    pub aerap_download: Option<(String, u8)>,
+    /// Isolated AERA Browser state.
+    pub browser: BrowserState,
+    /// Isolated AERA Telegram state.
+    pub telegram: TelegramState,
 }
 
 impl Default for State {
@@ -320,6 +328,10 @@ impl Default for State {
             lock_after: Screen::Home,
             dev: DevState::default(),
             vault: VaultState::default(),
+            aerap_plugins: None,
+            aerap_download: None,
+            browser: BrowserState::default(),
+            telegram: TelegramState::default(),
         }
     }
 }

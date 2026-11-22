@@ -1,5 +1,6 @@
 use crate::color::{blend_over, blend_px, Rgba};
 use crate::font::{Face, SUBPIXELS};
+use crate::geom::Rect;
 use ab_glyph::{Font, GlyphId, PxScale, ScaleFont};
 
 /// A straight-alpha RGBA8 raster target. All primitives are antialiased via
@@ -537,6 +538,45 @@ impl Canvas {
         self.bottom = self.bottom.min(h);
         self.h = h;
         self
+    }
+
+    /// Blit a little-endian `BGRA8888` (`ARGB8888` WPE) pixel buffer scaled into
+    /// `dst`, clipping to the rows and columns this canvas band holds.
+    pub fn blit_bgra_scaled(&mut self, src: &[u8], src_w: u32, src_h: u32, dst: Rect) {
+        if src_w == 0 || src_h == 0 || dst.w < 1.0 || dst.h < 1.0 {
+            return;
+        }
+        let need = (src_w as usize).saturating_mul(src_h as usize).saturating_mul(4);
+        if src.len() < need {
+            return;
+        }
+        let (x0, y0) = (dst.x.floor() as i32, dst.y.floor() as i32);
+        let (x1, y1) = ((dst.x + dst.w).ceil() as i32, (dst.y + dst.h).ceil() as i32);
+        if x1 <= x0 || y1 <= y0 {
+            return;
+        }
+        let (dst_w, dst_h) = ((x1 - x0) as u64, (y1 - y0) as u64);
+        let (cy0, cy1) = self.rows(y0, y1);
+        let (cx0, cx1) = self.columns(x0, x1);
+        if cy0 >= cy1 || cx0 >= cx1 {
+            return;
+        }
+        let max_sx = u64::from(src_w - 1);
+        let max_sy = u64::from(src_h - 1);
+        for y in cy0..cy1 {
+            let sy = ((((y - y0) as u64) * u64::from(src_h)) / dst_h).min(max_sy) as usize;
+            let row_off = sy * (src_w as usize);
+            let mut di = self.at(cx0, y);
+            for x in cx0..cx1 {
+                let sx = ((((x - x0) as u64) * u64::from(src_w)) / dst_w).min(max_sx) as usize;
+                let si = (row_off + sx) * 4;
+                self.data[di] = src[si + 2];
+                self.data[di + 1] = src[si + 1];
+                self.data[di + 2] = src[si];
+                self.data[di + 3] = 255;
+                di += 4;
+            }
+        }
     }
 
     /// A rounded rectangle in one colour.
@@ -1335,6 +1375,33 @@ mod tests {
         let part = src.crop(1, 2, 1, 3);
         assert_eq!((part.w, part.h), (1, 3));
         assert_eq!(part.data.chunks(4).map(|p| p[0]).collect::<Vec<_>>(), [2, 3, 4]);
+    }
+
+    #[test]
+    fn a_bgra_frame_blits_scaled_with_swapped_channels_and_band_parity() {
+        // 2x2 BGRA pixels: top-left=(B:10,G:20,R:30), top-right=(B:40,G:50,R:60),
+        // bottom-left=(B:70,G:80,R:90), bottom-right=(B:100,G:110,R:120)
+        let src = [
+            10, 20, 30, 255, 40, 50, 60, 255,
+            70, 80, 90, 255, 100, 110, 120, 255,
+        ];
+        let rect = Rect::new(2.0, 2.0, 4.0, 4.0);
+        let mut whole = Canvas::new(8, 8);
+        whole.clear(Rgba::rgb(0, 0, 0));
+        whole.blit_bgra_scaled(&src, 2, 2, rect);
+        // Top-left scaled quadrant -> RGBA [30, 20, 10, 255]
+        let tl = whole.at(2, 2);
+        assert_eq!(&whole.data[tl..tl + 4], &[30, 20, 10, 255]);
+        // Bottom-right scaled quadrant -> RGBA [120, 110, 100, 255]
+        let br = whole.at(5, 5);
+        assert_eq!(&whole.data[br..br + 4], &[120, 110, 100, 255]);
+
+        let mut b0 = Canvas::band(8, 8, 0..4, 0..8, Rgba::rgb(0, 0, 0));
+        let mut b1 = Canvas::band(8, 8, 4..8, 0..8, Rgba::rgb(0, 0, 0));
+        b0.blit_bgra_scaled(&src, 2, 2, rect);
+        b1.blit_bgra_scaled(&src, 2, 2, rect);
+        b0.join(&b1);
+        assert_eq!(b0.data, whole.data);
     }
 }
 

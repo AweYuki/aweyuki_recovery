@@ -245,6 +245,27 @@ impl App {
                 self.state.vault.job = None;
             }
             Screen::Reboot => self.state.abl_warning = None,
+            Screen::Browser => {
+                if self.state.browser.editing_url || self.state.browser.show_keyboard {
+                    self.state.browser.editing_url = false;
+                    self.state.browser.show_keyboard = false;
+                    self.refresh();
+                    return fx;
+                }
+                self.state.browser = BrowserState::default();
+                fx.push(Effect::StopBrowser);
+            }
+            Screen::Telegram => {
+                if self.state.telegram.open_chat.is_some() {
+                    self.state.telegram.open_chat = None;
+                    self.state.telegram.messages.clear();
+                    self.state.telegram.compose.clear();
+                    self.refresh();
+                    return fx;
+                }
+                self.state.telegram = TelegramState::default();
+                fx.push(Effect::StopTelegram);
+            }
             _ => {}
         }
         if self.screen() == Screen::Installing {
@@ -313,6 +334,7 @@ impl App {
         match self.screen() {
             Screen::Restore => fx.push(self.find_backups()),
             Screen::Filesystem | Screen::Filesystems if left == Screen::PartWork => fx.push(Effect::ReadFilesystems),
+            Screen::Plugins => fx.push(Effect::ReadPlugins),
             _ => {}
         }
         fx

@@ -36,6 +36,7 @@ use aweyuki_vab::{BootSlots, Hold, Slot, SnapshotState, Standing};
 mod act;
 mod backup;
 mod batch;
+mod browser;
 mod decrypt;
 mod developer;
 mod draw;
@@ -61,6 +62,7 @@ mod aweyuki;
 mod share;
 mod state;
 mod systems;
+mod telegram;
 mod terminal;
 #[cfg(test)]
 mod testing;
@@ -71,6 +73,7 @@ mod wlan;
 
 pub use backup::*;
 pub use batch::*;
+pub use browser::*;
 pub use decrypt::*;
 pub use developer::*;
 pub use entry::*;
@@ -90,6 +93,7 @@ pub use aweyuki::*;
 pub use share::*;
 pub use state::*;
 pub use systems::*;
+pub use telegram::*;
 pub use terminal::*;
 pub use update::*;
 pub use vault::*;
@@ -224,6 +228,10 @@ pub enum Screen {
     Developer,
     /// Per-app `.tar.lz4` backup and restore vault.
     AppVault,
+    /// Isolated AERA WPE WebKit browser viewport.
+    Browser,
+    /// Isolated AERA Telegram TDLib client.
+    Telegram,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -479,6 +487,40 @@ pub enum Action {
     VaultRestoreSaved(usize),
     /// Delete saved vault archive `i`.
     VaultDeleteSaved(usize),
+    /// Launch AERA `.aerap` GUI plugin `i`.
+    LaunchAerap(usize),
+    /// Download official AERA `.aerap` bundle from GitHub.
+    DownloadAerap(aweyuki_install::aerap::AerapKind),
+    /// Install the currently inspected `.aerap` bundle into `/sdcard/Aweyuki/plugins`.
+    InstallAerapEntry,
+    /// Navigate browser history backward.
+    BrowserBack,
+    /// Navigate browser history forward.
+    BrowserForward,
+    /// Reload the active browser page.
+    BrowserReload,
+    /// Focus the browser URL bar for editing.
+    BrowserEditUrl,
+    /// Interactive WebKit framebuffer viewport area.
+    BrowserViewport,
+    /// Hide the soft keyboard on the browser page.
+    BrowserHideKeyboard,
+    /// Exit the browser page and stop its worker.
+    BrowserClose,
+    /// Focus a specific input field on [`Screen::Telegram`].
+    TgFocus(TgField),
+    /// Submit the active Telegram authentication or compose form.
+    TgSubmit,
+    /// Reload the Telegram chat list.
+    TgRefreshChats,
+    /// Open conversation `i` in the Telegram chat list.
+    TgOpenChat(usize),
+    /// Return from an open conversation back to the chat list.
+    TgBackToChats,
+    /// Download Telegram attachment `file_id`.
+    TgDownload(i32),
+    /// Exit Telegram and stop its worker.
+    TgClose,
     /// A control whose work is not wired up yet; touching it says so.
     Unavailable(&'static str),
 }
@@ -731,6 +773,38 @@ pub enum Effect {
     VaultRestore(String),
     /// Delete `archive_file` and its manifest from the app vault.
     VaultDelete(String),
+    /// Download an official AERA `.aerap` release into `/sdcard/Aweyuki/plugins`.
+    DownloadAerap(aweyuki_install::aerap::AerapKind),
+    /// Verify and install a local `.aerap` bundle into `/sdcard/Aweyuki/plugins`.
+    InstallAerap(std::path::PathBuf),
+    /// Unpack and launch the isolated AERA Browser worker from `.aerap` dir/bundle.
+    StartBrowser(std::path::PathBuf),
+    /// Terminate the active AERA Browser worker and clean its runtime directory.
+    StopBrowser,
+    /// Navigate AERA Browser to `url`.
+    BrowserOpen(String),
+    /// Send a navigation command to AERA Browser.
+    BrowserNav(BrowserNavOp),
+    /// Forward a scaled touch event (`0..360 x 0..700`) to AERA Browser.
+    BrowserTouch { kind: BrowserTouchKind, x: i32, y: i32 },
+    /// Forward a key event to AERA Browser.
+    BrowserKey { code: u32, text: String },
+    /// Unpack and launch the isolated AERA Telegram worker from `.aerap` dir/bundle.
+    StartTelegram(std::path::PathBuf),
+    /// Terminate the active AERA Telegram worker and clean its runtime directory.
+    StopTelegram,
+    /// Send Telegram API ID, API Hash, and local vault key.
+    TelegramConfigure { api_id: i64, api_hash: String, vault_key: String },
+    /// Send a Telegram authentication step payload.
+    TelegramAuth { kind: aweyuki_install::aerap::telegram_proto::TgKind, text: String },
+    /// Request the Telegram chat list.
+    TelegramLoadChats,
+    /// Open Telegram conversation `chat_id`.
+    TelegramOpenChat(i64),
+    /// Send a text message to Telegram conversation `chat_id`.
+    TelegramSendText { chat_id: i64, text: String },
+    /// Request download of Telegram file `file_id`.
+    TelegramDownload(i32),
 }
 
 enum Drag {
@@ -754,6 +828,8 @@ enum Drag {
     /// the editor's text, `carry` being the part of a row not yet scrolled.
     History { last: f32, carry: f32, pitch: f32 },
     Pattern,
+    /// Touch held/dragged inside the live WebKit viewport.
+    Browser { rect: Rect, vx: i32, vy: i32 },
     /// A finger that landed just after the panel lit; nothing it does
     /// counts until it lifts.
     Waking,
