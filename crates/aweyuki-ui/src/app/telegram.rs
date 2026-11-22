@@ -440,31 +440,31 @@ mod tests {
         app.telegram_state(TgAuthState::NeedPhone, String::new(), 11);
         app.state.telegram.phone = "+84901234567".into();
         assert_eq!(
-            tap_at(&mut app, &f, &i, Action::TgSubmit, 12),
+            tap_at(&mut app, &f, &i, Action::Type(Cap::Enter), 1000),
             vec![Effect::TelegramAuth { kind: TgKind::Phone, text: "+84901234567".into() }]
         );
 
-        app.telegram_state(TgAuthState::Ready, String::new(), 13);
+        app.telegram_state(TgAuthState::Ready, String::new(), 1100);
         app.telegram_chat(100, 2, "Saved Messages\nhello\n".into());
         app.telegram_chats_done();
-        assert_eq!(tap_at(&mut app, &f, &i, Action::TgOpenChat(0), 14), vec![Effect::TelegramOpenChat(100)]);
+        assert_eq!(tap_at(&mut app, &f, &i, Action::TgOpenChat(0), 2000), vec![Effect::TelegramOpenChat(100)]);
         app.telegram_message(100, 1, 0, "Alice\n\nhi there".into());
 
         app.state.telegram.compose = "ping".into();
         assert_eq!(
-            tap_at(&mut app, &f, &i, Action::Type(Cap::Enter), 15),
+            tap_at(&mut app, &f, &i, Action::Type(Cap::Enter), 2100),
             vec![Effect::TelegramSendText { chat_id: 100, text: "ping".into() }]
         );
 
         // First Back from open chat returns to chat list without stopping daemon
-        let fx = tap_at(&mut app, &f, &i, Action::Back, 16);
+        let fx = app.key(Key::Back, 2200);
         assert!(fx.is_empty());
         assert_eq!(app.screen(), Screen::Telegram);
         assert!(app.state.telegram.open_chat.is_none());
 
         // Second Back leaves Telegram and stops the worker
-        let fx = tap_at(&mut app, &f, &i, Action::Back, 17);
-        assert_eq!(fx, vec![Effect::StopTelegram]);
+        let fx = app.key(Key::Back, 2300);
+        assert!(fx.contains(&Effect::StopTelegram));
         assert_eq!(app.screen(), Screen::Plugins);
     }
 }

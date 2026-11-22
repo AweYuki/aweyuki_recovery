@@ -149,6 +149,26 @@ impl Canvas {
         Ok(())
     }
 
+    /// Encode raw RGBA pixel bytes (`w * h * 4`) as a fast-compressed RGB PNG
+    /// suitable for live `/screen.png` streaming off the UI render thread.
+    pub fn encode_rgba_png_fast(w: u32, h: u32, rgba: &[u8], to: impl std::io::Write) -> anyhow::Result<()> {
+        let pixels = (w as usize).saturating_mul(h as usize);
+        anyhow::ensure!(rgba.len() == pixels.saturating_mul(4), "invalid RGBA buffer size");
+        let mut rgb = Vec::with_capacity(pixels.saturating_mul(3));
+        for &[r, g, b, _] in rgba.as_chunks::<4>().0 {
+            rgb.extend_from_slice(&[r, g, b]);
+        }
+        let mut png = png::Encoder::new(to, w, h);
+        png.set_color(png::ColorType::Rgb);
+        png.set_depth(png::BitDepth::Eight);
+        png.set_compression(png::Compression::Fast);
+        png.set_filter(png::FilterType::Sub);
+        let mut writer = png.write_header()?;
+        writer.write_image_data(&rgb)?;
+        writer.finish()?;
+        Ok(())
+    }
+
     /// Take on the rows `band` holds, the same columns of them as this
     /// canvas holds, which run on from this canvas's last row or up to its
     /// first.

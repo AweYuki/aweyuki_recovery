@@ -152,6 +152,16 @@ impl App {
             }
             Action::RebootTo(target) => return vec![Effect::Reboot(target)],
             Action::EnterRecovery => return vec![Effect::EnterRecovery],
+            Action::DelayedScreenshot => {
+                self.shot_at = Some(now + DELAYED_SHOT_MS);
+                let msg = l.pick([
+                    "3 秒后截屏，可切换至目标页面",
+                    "3 秒後截圖，可切換至目標頁面",
+                    "Taking screenshot in 3s — switch to any page",
+                ]);
+                self.toast = Some((msg.to_string(), now + DELAYED_SHOT_TOAST_MS));
+                self.dirty = true;
+            }
             Action::Dismiss => {
                 self.stack = vec![(Screen::Home, 0.0, Focus::Unset)];
                 self.settle_page();

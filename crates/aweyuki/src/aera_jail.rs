@@ -35,8 +35,10 @@ const BPF_RET: u16 = 0x06;
 
 const SYS_STATFS_NR: u32 = 43;
 const SYS_FSTATFS_NR: u32 = 44;
+const SYS_FTRUNCATE_NR: u32 = 46;
 const SYS_NEWFSTATAT_NR: u32 = 79;
 const SYS_FSTAT_NR: u32 = 80;
+const SYS_FADVISE64_NR: u32 = 223;
 const SYS_RSEQ_NR: u32 = 293;
 
 const CAP_V3: u32 = 0x2008_0522;
@@ -634,9 +636,9 @@ fn build_seccomp_policy() -> Vec<libc::sock_filter> {
         libc::SYS_dup as u32,
         libc::SYS_dup3 as u32,
         libc::SYS_pipe2 as u32,
-        libc::SYS_ftruncate as u32,
+        SYS_FTRUNCATE_NR,
         libc::SYS_fallocate as u32,
-        libc::SYS_fadvise64 as u32,
+        SYS_FADVISE64_NR,
         libc::SYS_fsync as u32,
         libc::SYS_fdatasync as u32,
         libc::SYS_mkdirat as u32,
@@ -937,6 +939,7 @@ pub fn exec_jail(kind: JailKind, runtime: &Path, dns: &[String]) -> Result<()> {
         pid: libc::c_int,
     }
     #[repr(C)]
+    #[derive(Clone, Copy)]
     struct CapData {
         effective: u32,
         permitted: u32,

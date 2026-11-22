@@ -403,8 +403,11 @@ pub fn settings(cx: &Ctx) -> Frame {
     ]);
     y = widgets::footnote(&mut c, t, f, usb.bottom, note);
     y = widgets::section(&mut c, t, f, y, l.pick(["调试", "偵錯", "Debugging"]));
-    let debug = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal)]);
-    out.extend(hits(&debug.rows, &[Action::Open(Screen::Terminal)]));
+    let debug = widgets::list(&mut c, t, f, y, &[
+        Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal),
+        Row::new(l.pick(["延时截屏（3 秒）", "延時截圖（3 秒）", "Screenshot (3s delay)"])).icon(BLUE, Icon::Clock).trail(Trail::None),
+    ]);
+    out.extend(hits(&debug.rows, &[Action::Open(Screen::Terminal), Action::DelayedScreenshot]));
     y = widgets::section(&mut c, t, f, debug.bottom, l.pick(["关于", "關於", "About"]));
     let mut rows = vec![Row::new(l.pick(ABOUT)).trail(Trail::Value(VERSION))];
     let mut opens = vec![Action::Open(Screen::About)];
@@ -2337,6 +2340,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
         Row::new(l.pick(SHARE)).icon(BLUE, Icon::Globe).trail(Trail::Value(share_state)),
         Row::new(l.pick(PLUGINS)).icon(GREEN, Icon::More),
         Row::new(l.pick(DEVELOPER)).icon(SLATE, Icon::Terminal),
+        Row::new(l.pick(["延时截屏（3 秒）", "延時截圖（3 秒）", "Screenshot (3s delay)"])).icon(ORANGE, Icon::Clock).trail(Trail::None),
     ]);
     let out = hits(&tools.rows, &[
         Action::Open(Screen::Files),
@@ -2351,6 +2355,7 @@ pub fn advanced(cx: &Ctx) -> Frame {
         Action::Open(Screen::Share),
         Action::Open(Screen::Plugins),
         Action::Open(Screen::Developer),
+        Action::DelayedScreenshot,
     ]);
     Frame::new(t, fit(c, t, tools.bottom), out, l.pick(ADVANCED), top)
 }
@@ -3712,6 +3717,9 @@ const LICENSE_NOTICE: [&str; 2] = [
 發布 Aweyuki 是希望它有用，但不附帶任何擔保，也不擔保其適銷性或適用於特定用途。詳見 GNU 通用公眾授權條款。",
 ];
 
+const LICENSE_NOTICE_VI: &str = "Aweyuki là phần mềm tự do: bạn có thể phân phối lại và/hoặc sửa đổi theo các điều khoản của Giấy phép Công cộng GNU (GPL) phiên bản 3 hoặc mới hơn do Quỹ Phần mềm Tự do (FSF) công bố.\n\n\
+Aweyuki được phát hành với mong muốn hữu ích nhưng không kèm bất kỳ bảo đảm nào, kể cả bảo đảm ngầm về khả năng thương mại hay sự phù hợp cho một mục đích cụ thể. Xem toàn văn Giấy phép Công cộng GNU bên dưới.";
+
 const LICENSE_ORIGINAL: &str = "Aweyuki\nCopyright (C) 2026 Kirk Lin\n\n\
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.\n\n\
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.\n\n\
@@ -3739,6 +3747,7 @@ pub fn license(cx: &Ctx) -> Frame {
         }
         Lang::En => widgets::paragraph(&mut c, t, f, y + t.m.dp(4.0), LICENSE_ORIGINAL),
         Lang::Vi => {
+            let y = widgets::paragraph(&mut c, t, f, y + t.m.dp(4.0), LICENSE_NOTICE_VI);
             let y = widgets::section(&mut c, t, f, y, "Bản gốc");
             widgets::paragraph(&mut c, t, f, y - t.m.dp(16.0), LICENSE_ORIGINAL)
         }
@@ -5047,7 +5056,7 @@ pub fn payload(cx: &Ctx) -> Frame {
                     "防回滚警告：该 OTA 包（{pkg}）早于本机当前版本（{dev}），刷入可能触发 ARB 变砖。",
                     "防回滾警告：此 OTA 套件（{pkg}）早於本機目前版本（{dev}），刷入可能觸發 ARB 無法開機。",
                     "Anti-Rollback warning: package ({pkg}) is older than this phone ({dev}). Flashing may trigger ARB.",
-                    "Cảnh báo chống hạ cấp: gói ({pkg}) cũ hơn bản trên máy ({dev}), flash có thể dính ARB.",
+                    "Cảnh báo chống hạ cấp: gói ({pkg}) cũ hơn bản trên máy ({dev}), flash có thể kích hoạt cơ chế chống hạ cấp (ARB).",
                 );
                 y = widgets::list(
                     &mut c,

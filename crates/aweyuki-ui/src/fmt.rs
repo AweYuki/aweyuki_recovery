@@ -274,7 +274,7 @@ pub fn switch_resumed(l: Lang) -> &'static str {
 }
 
 pub fn switch_unfinished(l: Lang, why: &str) -> String {
-    tr!(l, "上次中断的系统切换未能完成：{why}", "上次中斷的系統切換未能完成：{why}", "The switch of systems cut off last time couldn't be finished: {why}", "Lần chuyển hệ bị cắt trước đó không hoàn tất được: {why}")
+    tr!(l, "上次中断的系统切换未能完成：{why}", "上次中斷的系統切換未能完成：{why}", "The switch of systems cut off last time couldn't be finished: {why}", "Quá trình chuyển hệ thống bị gián đoạn trước đó không thể hoàn tất: {why}")
 }
 
 /// Why the second system does not start yet while an update is in flight,
@@ -430,14 +430,14 @@ pub fn update(l: Lang, s: &Standing, next: Option<Slot>) -> (&'static str, Optio
                     "重启后将从槽位 {slot} 启动新系统，启动后自动合并",
                     "重新啟動後將從槽位 {slot} 啟動新系統，啟動後自動合併",
                     "After a reboot the new system starts from slot {slot}, and merges once it has started",
-                    "Sau khi khởi động lại, hệ thống mới sẽ vào từ khe {slot} rồi tự hợp nhất",
+                    "Sau khi khởi động lại, hệ thống mới sẽ khởi động từ khe {slot} rồi tự hợp nhất",
                 ),
                 Some(_) => tr!(
                     l,
                     "需在系统的「系统更新」中重启，才会从槽位 {slot} 启动新系统",
                     "需在系統的「系統更新」中重新啟動，才會從槽位 {slot} 啟動新系統",
                     "Reboot from the system's System update to start slot {slot}'s new system",
-                    "Hãy khởi động lại từ mục Cập nhật hệ thống trong hệ thống để vào hệ thống mới ở khe {slot}",
+                    "Hãy khởi động lại từ mục Cập nhật hệ thống trong hệ thống để khởi động hệ thống mới ở khe {slot}",
                 ),
                 None => tr!(
                     l,
@@ -1694,6 +1694,10 @@ mod tests {
         assert_eq!(datetime(HANS, summer, zone("America/Los_Angeles")), "2026年7月1日 05:00");
         assert_eq!(clock(summer, zone("Asia/Tokyo")), "21:00");
         assert_eq!(clock(winter, zone("Asia/Shanghai")), "20:00", "China keeps no summer time");
+        assert_eq!(clock(1_792_348_260, zone("Asia/Ho_Chi_Minh")), "01:31", "Vietnam UTC+7 is one hour behind Beijing");
+        for idx in 0..TIME_ZONES.len() {
+            let _ = rules(idx);
+        }
         // New York goes over to summer time at 2:00 on 2026-03-08.
         let before = 1_772_953_200 - 60;
         assert_eq!((clock(before, zone("America/New_York")), clock(before + 60, zone("America/New_York"))), ("01:59".into(), "03:00".into()));

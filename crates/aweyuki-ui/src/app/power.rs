@@ -230,6 +230,27 @@ mod tests {
         assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Kept screenshots couldn't go to the gallery: Read-only file system"));
     }
 
+    #[test]
+    fn delayed_screenshot_hides_toast_before_capturing_without_volume_keys() {
+        let mut app = App::new(Screen::Advanced, W, H, PPD);
+        app.state.vibrate = true;
+        assert!(app.act(Action::DelayedScreenshot, 100).is_empty());
+        assert_eq!(app.shot_at, Some(100 + DELAYED_SHOT_MS));
+        assert_eq!(
+            app.toast.as_ref().map(|(s, until)| (s.as_str(), *until)),
+            Some(("Taking screenshot in 3s — switch to any page", 100 + DELAYED_SHOT_TOAST_MS))
+        );
+        assert_eq!(app.deadline(100), Some(100 + DELAYED_SHOT_TOAST_MS));
+        assert!(app.tick(100 + DELAYED_SHOT_TOAST_MS).is_empty());
+        assert_eq!(app.toast, None, "countdown toast clears before the screenshot is taken");
+        assert_eq!(app.deadline(100 + DELAYED_SHOT_TOAST_MS), Some(100 + DELAYED_SHOT_MS));
+        assert_eq!(
+            app.tick(100 + DELAYED_SHOT_MS),
+            vec![Effect::Haptic, Effect::Screenshot { storage: false }]
+        );
+        assert_eq!(app.shot_at, None);
+    }
+
     /// With the default two minutes, when the panel dims and when it goes
     /// off.
     const DIMS: u64 = 113_000;

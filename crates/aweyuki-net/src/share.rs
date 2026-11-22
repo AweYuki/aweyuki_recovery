@@ -24,6 +24,7 @@ pub enum RemoteKey {
     VolumeUp,
     VolumeDown,
     Back,
+    Screenshot,
 }
 
 /// Normalized pointer or hardware-key input event posted by `/mirror`.
@@ -421,6 +422,8 @@ button:active{{background:#0b57d0}}\
 <button type=\"button\" onclick=\"k('volume_down')\">Vol-</button>\
 <button type=\"button\" onclick=\"k('volume_up')\">Vol+</button>\
 <button type=\"button\" onclick=\"k('power')\">Power</button>\
+<button type=\"button\" onclick=\"k('screenshot')\">Screenshot</button>\
+<a class=\"btn\" href=\"/screen.png\" download=\"aweyuki-screenshot.png\" onclick=\"this.download='aweyuki-'+Date.now()+'.png'\">Save PNG</a>\
 <a class=\"btn\" href=\"/\">Files</a></div>\
 <img id=\"scr\" src=\"/screen.png\" draggable=\"false\" alt=\"Recovery Screen\">\
 <script>const img=document.getElementById('scr');let timer=null,drag=null;\
@@ -699,7 +702,13 @@ mod tests {
         c1.write_all(b"GET /mirror HTTP/1.1\r\n\r\n").unwrap();
         let mut resp1 = String::new();
         c1.read_to_string(&mut resp1).unwrap();
-        assert!(resp1.contains("Aweyuki Mirror") && resp1.contains("aspect-ratio:1440/3200"), "{resp1}");
+        assert!(
+            resp1.contains("Aweyuki Mirror")
+                && resp1.contains("aspect-ratio:1440/3200")
+                && resp1.contains("Save PNG")
+                && resp1.contains("k('screenshot')"),
+            "{resp1}"
+        );
 
         let mut c2 = TcpStream::connect(addr).unwrap();
         c2.write_all(b"GET /screen.png?t=1 HTTP/1.1\r\n\r\n").unwrap();
@@ -711,6 +720,7 @@ mod tests {
             r#"{"kind":"tap","x":0.5,"y":0.25}"#,
             r#"{"kind":"swipe","x0":0.1,"y0":0.8,"x1":0.9,"y1":0.8}"#,
             r#"{"kind":"key","key":"volume_down"}"#,
+            r#"{"kind":"key","key":"screenshot"}"#,
         ];
         for body in payloads {
             let mut c = TcpStream::connect(addr).unwrap();
@@ -739,6 +749,7 @@ mod tests {
                 RemoteInput::Tap { x: 0.5, y: 0.25 },
                 RemoteInput::Swipe { x0: 0.1, y0: 0.8, x1: 0.9, y1: 0.8 },
                 RemoteInput::Key { key: RemoteKey::VolumeDown },
+                RemoteInput::Key { key: RemoteKey::Screenshot },
             ]
         );
         server.stop();

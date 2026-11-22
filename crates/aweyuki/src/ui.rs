@@ -1087,12 +1087,19 @@ fn fs_part(name: &str) -> Result<partwork::Part> {
     Ok(partwork::Part::Entry(entry))
 }
 
+/// Events posted by the browser remote mirror (`POST /input`).
+enum MirrorEvent {
+    Input(Event),
+    Screenshot,
+}
+
 /// What the pages act on: a touch or a key, what a program asked on the
 /// recovery socket, or a USB drive plugged in or pulled out.
 enum Incoming {
     /// The page shown first, which may ask for work as it shows.
     Arrived,
     Input(Event),
+    Screenshot,
     Asked(Request),
     Drive(Option<UsbDrive>),
 }
@@ -1487,10 +1494,14 @@ struct Pages<'a> {
     shell: Option<pty::Shell>,
     /// Background HTTP/1.1 file-sharing server while Share is turned on.
     share_server: Option<aweyuki_net::share::Server>,
-    /// Latest PNG-encoded framebuffer for `/screen.png`, updated only while Share runs.
-    mirror_png: Arc<Mutex<Vec<u8>>>,
-    /// Wakeable channel receiving tap/swipe/key events from `/input`.
-    mirror_rx: Option<aweyuki_sys::worker::Told<Event>>,
+    /// Latest raw RGBA framebuffer `(w, h, rgba)` for `/screen.png`, copied on demand while Share runs.
+    mirror_frame: Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>,
+    /// Flag set by `/screen.png` requests so the next rendered frame refreshes `mirror_frame`.
+    mirror_wanted: Arc<AtomicBool>,
+    /// When `mirror_frame` was last refreshed from `self.screen`.
+    mirror_snap_at: Instant,
+    /// Wakeable channel receiving tap/swipe/key/screenshot events from `/input`.
+    mirror_rx: Option<aweyuki_sys::worker::Told<MirrorEvent>>,
     /// Streaming worker for an active runtime plugin.
     plugin_worker: Option<PluginWorker>,
     /// Boot-time read-only ABL assessments when EFISP is exposed, and last
@@ -1526,6 +1537,10 @@ impl<'a> Pages<'a> {
     fn open(cfg: &'a DeviceConfig, programs: &'a [Service], font: &Path, mono: &Path, request: bcb::Request, start: Screen, dump: Option<&'a Path>) -> Result<Pages<'a>> {
         if cfg.display.density == 0 {
             return Err(anyhow!("{}: [display] density is required to lay out the UI", cfg.device.codename));
+        }
+        // Best-effort scheduling boost so WALT places interactive UI rendering onto performance cores.
+        unsafe {
+            libc::setpriority(libc::PRIO_PROCESS, 0, -8);
         }
         // The pages come up without a battery that cannot be read, as while no
         // driver for it is loaded; the readings taken each second bring it in
@@ -1734,7 +1749,9 @@ impl<'a> Pages<'a> {
             aweyuki_updater: None,
             shell: None,
             share_server: None,
-            mirror_png: Arc::new(Mutex::new(Vec::new())),
+            mirror_frame: Arc::new(Mutex::new(None)),
+            mirror_wanted: Arc::new(AtomicBool::new(false)),
+            mirror_snap_at: Instant::now(),
             mirror_rx: None,
             plugin_worker: None,
             abl_boot,
@@ -1953,7 +1970,8 @@ impl<'a> Pages<'a> {
                 // The power key held past its wait for volume down turns
                 // the screen off.
                 Effect::Ticks => self.ticks()?,
-                other => unreachable!("time passing asks for nothing but the motor, not {other:?}"),
+                Effect::Screenshot { storage } => self.take_screenshot(storage, now),
+                other => unreachable!("time passing asks for nothing but the motor or a delayed screenshot, not {other:?}"),
             }
         }
         let time = clock(self.app.state.time_zone)?;
@@ -2028,10 +2046,17 @@ impl<'a> Pages<'a> {
                 let t0 = Instant::now();
                 self.app.compose(&mut self.screen, &self.fonts, &self.info, &self.shown_clock, now);
                 self.surface.present(&self.screen)?;
-                if self.share_server.is_some() {
-                    self.update_mirror_png();
+                if self.share_server.is_some()
+                    && (self.mirror_wanted.swap(false, Ordering::AcqRel)
+                        || self.mirror_snap_at.elapsed() >= Duration::from_millis(120)
+                        || self.app.deadline(now).is_none_or(|d| d > now))
+                {
+                    self.snapshot_mirror_frame();
                 }
-                eprintln!("frame {:?} in {} ms", self.app.screen(), t0.elapsed().as_millis());
+                let ms = t0.elapsed().as_millis();
+                if ms >= 25 {
+                    eprintln!("slow frame {:?} in {ms} ms", self.app.screen());
+                }
                 if let Some(path) = self.dump {
                     fs::write(path, &self.screen.data).with_context(|| format!("write {}", path.display()))?;
                 }
@@ -2639,16 +2664,32 @@ impl Pages<'_> {
         }
     }
 
-    fn update_mirror_png(&self) {
+    fn snapshot_mirror_frame(&mut self) {
         if !self.screen.whole() {
             return;
         }
-        let mut buf = Vec::new();
-        if self.screen.write_png(&mut buf).is_ok()
-            && let Ok(mut guard) = self.mirror_png.lock()
-        {
-            *guard = buf;
+        let (w, h) = (self.screen.w, self.screen.h);
+        if let Ok(mut guard) = self.mirror_frame.lock() {
+            match &mut *guard {
+                Some((gw, gh, buf)) if (*gw, *gh) == (w, h) && buf.len() == self.screen.data.len() => {
+                    buf.copy_from_slice(&self.screen.data);
+                }
+                slot => {
+                    *slot = Some((w, h, self.screen.data.clone()));
+                }
+            }
         }
+        self.mirror_snap_at = Instant::now();
+    }
+
+    fn take_screenshot(&mut self, storage: bool, now: u64) {
+        if self.app.take_dirty() {
+            self.app.compose(&mut self.screen, &self.fonts, &self.info, &self.shown_clock, now);
+        }
+        let t0 = Instant::now();
+        let saved = save_screenshot(&self.screen, storage, self.app.state.time_zone).map_err(|e| format!("{e:#}"));
+        eprintln!("screenshot {saved:?} in {} ms", t0.elapsed().as_millis());
+        self.app.screenshot_saved(saved, now);
     }
 
     fn dev_told(&mut self, now: u64) {
@@ -3178,7 +3219,10 @@ impl Pages<'_> {
             .map(aweyuki_sys::worker::Told::take)
             .unwrap_or_default()
             .into_iter()
-            .map(Incoming::Input);
+            .map(|ev| match ev {
+                MirrorEvent::Input(e) => Incoming::Input(e),
+                MirrorEvent::Screenshot => Incoming::Screenshot,
+            });
         let incoming = self
             .arriving
             .take()
@@ -3198,12 +3242,24 @@ impl Pages<'_> {
                 Incoming::Input(Event::Touch(t, at)) => self.app.touch(t, &self.fonts, at),
                 Incoming::Input(Event::Key(k, true)) => self.app.key(k, now),
                 Incoming::Input(Event::Key(k, false)) => self.app.key_up(k, now),
+                Incoming::Screenshot => {
+                    let mut fx = Vec::new();
+                    if self.app.state.vibrate {
+                        fx.push(Effect::Haptic);
+                    }
+                    fx.push(Effect::Screenshot {
+                        storage: self.app.state.place_open(Place::Storage),
+                    });
+                    fx
+                }
             };
             // What the pages ask for in answer to the work done goes on
             // after it.
             let mut queue = VecDeque::from(effects);
             while let Some(fx) = queue.pop_front() {
-                eprintln!("effect {fx:?}");
+                if !matches!(fx, Effect::Haptic) {
+                    eprintln!("effect {fx:?}");
+                }
                 queue.extend(self.effect(fx, now)?);
             }
         }
@@ -3254,10 +3310,7 @@ impl Pages<'_> {
             // The panel shows the last frame drawn, which is what is
             // saved; one that cannot be is the page's to report.
             Effect::Screenshot { storage } => {
-                let t0 = Instant::now();
-                let saved = save_screenshot(&self.screen, storage, self.app.state.time_zone).map_err(|e| format!("{e:#}"));
-                eprintln!("screenshot {saved:?} in {} ms", t0.elapsed().as_millis());
-                self.app.screenshot_saved(saved, now);
+                self.take_screenshot(storage, now);
             }
             Effect::Sideload => {
                 if self.may_install(now)? {
@@ -3471,21 +3524,28 @@ impl Pages<'_> {
                 }
                 self.mirror_rx = None;
                 if on {
-                    self.update_mirror_png();
+                    self.snapshot_mirror_frame();
                     let dir = match root {
                         ShareRoot::Storage => PathBuf::from(aweyuki_crypto::data::SDCARD),
                         ShareRoot::Root => PathBuf::from("/"),
                     };
                     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-                    let (teller, told) = aweyuki_sys::worker::telling::<Event>()?;
+                    let (teller, told) = aweyuki_sys::worker::telling::<MirrorEvent>()?;
                     let teller = Mutex::new(teller);
                     let (w, h) = (self.screen.w, self.screen.h);
-                    let buf = self.mirror_png.clone();
+                    let frame_buf = self.mirror_frame.clone();
+                    let wanted = self.mirror_wanted.clone();
                     let hooks = aweyuki_net::share::MirrorHooks {
                         size: (w, h),
                         frame_png: Arc::new(move || {
-                            let guard = buf.lock().ok()?;
-                            (!guard.is_empty()).then(|| guard.clone())
+                            wanted.store(true, Ordering::Release);
+                            let (fw, fh, rgba) = {
+                                let guard = frame_buf.lock().ok()?;
+                                guard.as_ref()?.clone()
+                            };
+                            let mut png = Vec::new();
+                            Canvas::encode_rgba_png_fast(fw, fh, &rgba, &mut png).ok()?;
+                            Some(png)
                         }),
                         on_input: Arc::new(move |ev: aweyuki_net::share::RemoteInput| {
                             let Ok(teller) = teller.lock() else {
@@ -3501,21 +3561,26 @@ impl Pages<'_> {
                             match ev {
                                 aweyuki_net::share::RemoteInput::Tap { x, y } => {
                                     let (px, py) = to_px(x, y);
-                                    let _ = teller.tell(Event::Touch(Touch::Down(px, py), t0));
-                                    let _ = teller.tell(Event::Touch(Touch::Up, t0 + 30));
+                                    let _ = teller.tell(MirrorEvent::Input(Event::Touch(Touch::Down(px, py), t0)));
+                                    let _ = teller.tell(MirrorEvent::Input(Event::Touch(Touch::Up, t0 + 30)));
                                 }
                                 aweyuki_net::share::RemoteInput::Swipe { x0, y0, x1, y1 } => {
                                     let (sx, sy) = to_px(x0, y0);
                                     let (ex, ey) = to_px(x1, y1);
-                                    let _ = teller.tell(Event::Touch(Touch::Down(sx, sy), t0));
+                                    let _ = teller.tell(MirrorEvent::Input(Event::Touch(Touch::Down(sx, sy), t0)));
                                     for step in 1..=6 {
                                         let frac = step as f32 / 6.0;
-                                        let _ = teller.tell(Event::Touch(
+                                        let _ = teller.tell(MirrorEvent::Input(Event::Touch(
                                             Touch::Move(sx + (ex - sx) * frac, sy + (ey - sy) * frac),
                                             t0 + step as u64 * 20,
-                                        ));
+                                        )));
                                     }
-                                    let _ = teller.tell(Event::Touch(Touch::Up, t0 + 140));
+                                    let _ = teller.tell(MirrorEvent::Input(Event::Touch(Touch::Up, t0 + 140)));
+                                }
+                                aweyuki_net::share::RemoteInput::Key {
+                                    key: aweyuki_net::share::RemoteKey::Screenshot,
+                                } => {
+                                    let _ = teller.tell(MirrorEvent::Screenshot);
                                 }
                                 aweyuki_net::share::RemoteInput::Key { key } => {
                                     let k = match key {
@@ -3523,9 +3588,10 @@ impl Pages<'_> {
                                         aweyuki_net::share::RemoteKey::VolumeUp => Key::VolumeUp,
                                         aweyuki_net::share::RemoteKey::VolumeDown => Key::VolumeDown,
                                         aweyuki_net::share::RemoteKey::Back => Key::Back,
+                                        aweyuki_net::share::RemoteKey::Screenshot => unreachable!(),
                                     };
-                                    let _ = teller.tell(Event::Key(k, true));
-                                    let _ = teller.tell(Event::Key(k, false));
+                                    let _ = teller.tell(MirrorEvent::Input(Event::Key(k, true)));
+                                    let _ = teller.tell(MirrorEvent::Input(Event::Key(k, false)));
                                 }
                             }
                         }),
@@ -3542,6 +3608,9 @@ impl Pages<'_> {
                         }
                     }
                 } else {
+                    if let Ok(mut guard) = self.mirror_frame.lock() {
+                        *guard = None;
+                    }
                     self.app.set_share(false, None, None);
                 }
             }

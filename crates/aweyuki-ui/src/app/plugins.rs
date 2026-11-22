@@ -178,26 +178,8 @@ mod tests {
         ]);
 
         // Requires WLAN + storage for online official downloads; once online & open it triggers DownloadAerap.
-        app.set_data(Data::Open);
-        app.set_wlan(Some(aweyuki_net::wlan::Wlan {
-            power: aweyuki_net::wlan::Power::On,
-            scanning: false,
-            found: Vec::new(),
-            saved: Vec::new(),
-            joined: Some(aweyuki_net::wlan::Joined {
-                ssid: b"Lab".to_vec(),
-                name: "Lab".into(),
-                security: aweyuki_net::supplicant::Security::None,
-                stage: aweyuki_net::wlan::Stage::Connected(aweyuki_net::wlan::Link {
-                    signal: -50,
-                    frequency: 5180,
-                    speed: 866,
-                    address: None,
-                    gateway: None,
-                    dns: Vec::new(),
-                }),
-            }),
-        }));
+        app.state.data = Data::Open;
+        app.set_wlan(connected("Lab"));
         assert_eq!(tap(&mut app, &f, &i, Action::DownloadAerap(AerapKind::Browser)), vec![Effect::DownloadAerap(AerapKind::Browser)]);
         app.aerap_download_progress("AERA Browser".into(), 50);
         assert_eq!(app.state.aerap_download, Some(("AERA Browser".into(), 50)));
@@ -205,7 +187,7 @@ mod tests {
         assert_eq!(app.state.aerap_download, None);
 
         assert_eq!(
-            tap_at(&mut app, &f, &i, Action::LaunchAerap(1), 200),
+            tap_at(&mut app, &f, &i, Action::LaunchAerap(1), 1000),
             vec![Effect::StartTelegram(PathBuf::from("/sdcard/Download/AERA-Telegram-1.3.5.aerap"))]
         );
         assert_eq!(app.screen(), Screen::Telegram);

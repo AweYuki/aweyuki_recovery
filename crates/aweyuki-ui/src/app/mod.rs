@@ -521,6 +521,8 @@ pub enum Action {
     TgDownload(i32),
     /// Exit Telegram and stop its worker.
     TgClose,
+    /// Schedule a 3-second delayed screenshot so any page can be captured without volume keys.
+    DelayedScreenshot,
     /// A control whose work is not wired up yet; touching it says so.
     Unavailable(&'static str),
 }
@@ -866,6 +868,10 @@ enum Press {
 }
 
 const TOAST_MS: u64 = 2000;
+/// Delay before [`Action::DelayedScreenshot`] captures the screen, and how long
+/// its countdown toast stays up so the toast clears before the frame is saved.
+const DELAYED_SHOT_MS: u64 = 3000;
+const DELAYED_SHOT_TOAST_MS: u64 = 2200;
 /// How long a text field's cursor shows and then hides, as the stock
 /// fields blink it.
 const BLINK_MS: u64 = 500;
@@ -1287,6 +1293,8 @@ pub struct App {
     /// The first of the power key and volume down gone down, waiting for
     /// the other to take a screenshot, and when it went down.
     chord: Option<(Key, u64)>,
+    /// When a delayed on-screen screenshot is due to fire.
+    shot_at: Option<u64>,
     /// The page scrolling of its own accord, to show the control the keys
     /// moved to or to fold its search bar whole or not at all: where it
     /// comes to rest, and the spring taking it there.
@@ -1425,6 +1433,7 @@ impl App {
             keys: start == Screen::Fastboot,
             button: None,
             chord: None,
+            shot_at: None,
             seek: None,
             knob: None,
             adjusting: false,
@@ -1549,7 +1558,7 @@ impl App {
         };
         let blink = self.blink_at(now).filter(|_| self.display_on).map(|(_, next)| next);
         let chord = self.chord.map(|(_, at)| at + CHORD_MS);
-        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, blink, darkens, chord].into_iter().flatten().min()
+        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, blink, darkens, chord, self.shot_at].into_iter().flatten().min()
     }
 
     /// Whether a text field's cursor shows at `now`, and when it next turns;
@@ -1580,6 +1589,16 @@ impl App {
         // enough, does what it does alone.
         if self.chord.is_some_and(|(_, at)| now >= at + CHORD_MS) {
             fx.extend(self.let_chord_go(now));
+        }
+        if self.shot_at.is_some_and(|at| now >= at) {
+            self.shot_at = None;
+            if self.toast.take().is_some() {
+                self.dirty = true;
+            }
+            if self.state.vibrate {
+                fx.push(Effect::Haptic);
+            }
+            fx.push(Effect::Screenshot { storage: self.state.place_open(Place::Storage) });
         }
         // An entry of the file manager held long enough, under a finger or
         // the power key, opens what can be done with it, a folder as much as

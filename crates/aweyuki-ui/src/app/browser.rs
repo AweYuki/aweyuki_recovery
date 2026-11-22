@@ -195,14 +195,14 @@ mod tests {
         assert_eq!(scale_browser_touch(rect, rect.x + rect.w * 0.5, rect.y + rect.h * 0.5), (180, 350));
 
         // Edit URL bar and submit
-        tap_at(&mut app, &f, &i, Action::BrowserEditUrl, 20);
+        tap_at(&mut app, &f, &i, Action::BrowserEditUrl, 1000);
         app.state.browser.url_input = "aweyuki.org".into();
-        let fx = tap_at(&mut app, &f, &i, Action::Type(Cap::Enter), 30);
+        let fx = tap_at(&mut app, &f, &i, Action::Type(Cap::Enter), 1100);
         assert_eq!(fx, vec![Effect::BrowserOpen("https://aweyuki.org".into())]);
         assert!(!app.state.browser.editing_url);
 
         // Navigating back stops the isolated browser process
-        let fx = tap_at(&mut app, &f, &i, Action::Back, 40);
+        let fx = app.key(Key::Back, 1200);
         assert!(fx.contains(&Effect::StopBrowser));
         assert_eq!(app.screen(), Screen::Plugins);
     }

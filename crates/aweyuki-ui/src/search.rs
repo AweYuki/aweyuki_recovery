@@ -137,7 +137,7 @@ pub const ENTRIES: &[Entry] = &[
         ["开发者与基准测试", "開發者與效能測試", "Developer & benchmark"],
         ADVANCED,
         Screen::Developer,
-        &["kaifazhe", "kfz", "jizhun", "benchmark", "kernel", "printk", "selinux", "adb", "nha phat trien"],
+        &["kaifazhe", "kfz", "jizhun", "benchmark", "kernel", "printk", "selinux", "adb", "nha phat trien", "do toc do"],
     ),
     entry(
         ["应用保险库", "應用程式保險庫", "App vault"],
@@ -146,15 +146,21 @@ pub const ENTRIES: &[Entry] = &[
         &["yingyongbaoxianku", "yybxk", "appvault", "vault", "apk", "kho ung dung"],
     ),
     entry(
+        ["延时截屏（3 秒）", "延時截圖（3 秒）", "Screenshot (3s delay)"],
+        ADVANCED,
+        Screen::Advanced,
+        &["jietu", "jt", "jieping", "screenshot", "chup man hinh", "cmh"],
+    ),
+    entry(
         ["恢复模式 PIN 锁", "復原模式 PIN 鎖", "Recovery PIN lock"],
         SETTINGS,
         Screen::LockSetup,
-        &["pin", "suo", "mima", "lock", "khoa pin"],
+        &["pin", "suo", "mima", "lock", "khoa pin", "khoa pin recovery"],
     ),
     entry(SETTINGS, HOME, Screen::Settings, &["shezhi", "sz", "settings", "thiet lap", "tl", "cai dat"]),
     entry(["深色模式", "深色模式", "Dark mode"], SETTINGS, Screen::Settings, &["shensemoshi", "ssms", "dark", "theme", "che do toi", "cdt", "giao dien toi"]),
     entry(["屏幕亮度", "螢幕亮度", "Screen brightness"], SETTINGS, Screen::Settings, &["pingmuliangdu", "pmld", "liangdu", "ld", "brightness", "do sang man hinh", "do sang", "ds"]),
-    entry(["息屏时间", "螢幕自動關閉", "Screen timeout"], SETTINGS, Screen::ScreenOff, &["xipingshijian", "xpsj", "timeout", "het gio tat man hinh", "tat man hinh", "tmh"]),
+    entry(["息屏时间", "螢幕自動關閉", "Screen timeout"], SETTINGS, Screen::ScreenOff, &["xipingshijian", "xpsj", "timeout", "het gio tat man hinh", "thoi gian tu tat man hinh", "tat man hinh", "tmh"]),
     entry(
         ["振动强度", "震動強度", "Vibration intensity"],
         SETTINGS,
@@ -167,7 +173,7 @@ pub const ENTRIES: &[Entry] = &[
     entry(["时区", "時區", "Time zone"], SETTINGS, Screen::TimeZone, &["shiqu", "sq", "timezone", "mui gio", "mg"]),
     entry(["重启", "重新啟動", "Reboot"], HOME, Screen::Reboot, &["chongqi", "cq", "reboot", "fastboot", "bootloader", "edl", "guanji", "khoi dong lai", "kdl", "tat nguon"]),
     entry(["启动槽位", "啟動槽位", "Boot slot"], ["重启", "重新啟動", "Reboot"], Screen::Slot, &["qidongcaowei", "qdcw", "caowei", "cw", "slot", "khe khoi dong", "kkd", "khe"]),
-    entry(["关于本机", "關於手機", "About phone"], SETTINGS, Screen::About, &["guanyubenji", "gybj", "about", "banben", "version", "ve dien thoai", "vdt", "gioi thieu"]),
+    entry(["关于本机", "關於手機", "About phone"], SETTINGS, Screen::About, &["guanyubenji", "gybj", "about", "banben", "version", "ve dien thoai", "gioi thieu dien thoai", "vdt", "gioi thieu"]),
     entry(
         ["Aweyuki 更新", "Aweyuki 更新", "Aweyuki update"],
         SETTINGS,

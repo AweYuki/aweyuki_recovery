@@ -133,6 +133,20 @@ const NO_LINE_START: &str = "，。、；：！？）」』》%,.;:!?)]>”";
 /// opens.
 const NO_LINE_END: &str = "（「『《([<“";
 
+fn is_cjk(r: char) -> bool {
+    matches!(
+        r,
+        '\u{2E80}'..='\u{2FFF}'
+            | '\u{3040}'..='\u{30FF}'
+            | '\u{3400}'..='\u{4DBF}'
+            | '\u{4E00}'..='\u{9FFF}'
+            | '\u{AC00}'..='\u{D7AF}'
+            | '\u{F900}'..='\u{FAFF}'
+            | '\u{FF00}'..='\u{FFEF}'
+            | '\u{20000}'..='\u{2FA1F}'
+    )
+}
+
 pub(crate) fn wrap(c: &Canvas, face: &Face, text: &str, px: f32, max_w: f32) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
@@ -149,7 +163,7 @@ pub(crate) fn wrap(c: &Canvas, face: &Face, text: &str, px: f32, max_w: f32) -> 
             // fills the line alone: then a path breaks after the last of its
             // slashes on the line, and any other word where the line ends.
             // An opening bracket in front of what moves goes with it.
-            let word = |r: char| r.is_ascii_alphanumeric() || matches!(r, '_' | '-' | '.' | '/' | ':' | '\'');
+            let word = |r: char| (r.is_alphanumeric() && !is_cjk(r)) || matches!(r, '_' | '-' | '.' | '/' | ':' | '\'');
             let mut split = line.len();
             if word(ch) {
                 let start = line.char_indices().rev().take_while(|&(_, r)| word(r)).last().map(|(at, _)| at);
@@ -3088,8 +3102,10 @@ mod tests {
             "This phone's system doesn't make an emptied data partition anew when it starts, so it can't be wiped.",
             "This zip isn't signed. Turn off “Verify zip signatures”, then try again.",
             "這個刷機包未簽署，請關閉「驗證刷機包簽章」後重試。",
+            "Phân vùng dữ liệu cần được giải mã trước khi sao lưu hoặc khôi phục ứng dụng trên thiết bị này.",
+            "Chữ ký của gói này không xác minh được. Hãy tắt “Xác minh chữ ký zip” rồi thử lại.",
         ];
-        let latin = |ch: char| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/' | ':' | '\'');
+        let latin = |ch: char| (ch.is_alphanumeric() && !is_cjk(ch)) || matches!(ch, '_' | '-' | '.' | '/' | ':' | '\'');
         for text in texts {
             for ems in 6..30 {
                 let max_w = ems as f32 * px;

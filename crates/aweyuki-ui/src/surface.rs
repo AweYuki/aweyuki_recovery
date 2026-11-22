@@ -511,6 +511,9 @@ pub mod kms {
         w: u32,
         h: u32,
         order: Order,
+        /// Cached CPU row buffer for BGRA byte-swizzling before writing into
+        /// write-combining KMS dumb buffers.
+        scratch: Vec<u8>,
         summary: String,
     }
 
@@ -747,6 +750,7 @@ pub mod kms {
                 w,
                 h,
                 order,
+                scratch: Vec::new(),
                 summary,
             };
             s.to_fastest()?;
@@ -864,15 +868,24 @@ pub mod kms {
             let pitch = buffer::Buffer::pitch(&buf.db) as usize;
             let row = self.w as usize * 4;
             let dst = unsafe { std::slice::from_raw_parts_mut(buf.map, buf.len) };
-            for y in 0..self.h as usize {
-                let src = &canvas.data[y * row..(y + 1) * row];
-                let out = &mut dst[y * pitch..y * pitch + row];
-                match order {
-                    Order::Rgba => out.copy_from_slice(src),
-                    Order::Bgra => {
-                        for (o, s) in out.as_chunks_mut::<4>().0.iter_mut().zip(src.as_chunks::<4>().0) {
+            match order {
+                Order::Rgba if pitch == row => {
+                    dst[..canvas.data.len()].copy_from_slice(&canvas.data);
+                }
+                Order::Rgba => {
+                    for y in 0..self.h as usize {
+                        let src = &canvas.data[y * row..(y + 1) * row];
+                        dst[y * pitch..y * pitch + row].copy_from_slice(src);
+                    }
+                }
+                Order::Bgra => {
+                    self.scratch.resize(row, 0);
+                    for y in 0..self.h as usize {
+                        let src = &canvas.data[y * row..(y + 1) * row];
+                        for (o, s) in self.scratch.as_chunks_mut::<4>().0.iter_mut().zip(src.as_chunks::<4>().0) {
                             *o = [s[2], s[1], s[0], s[3]];
                         }
+                        dst[y * pitch..y * pitch + row].copy_from_slice(&self.scratch);
                     }
                 }
             }
