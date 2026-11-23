@@ -3730,7 +3730,7 @@ impl Pages<'_> {
                 }
                 let slots = if items.iter().any(|(_, _, slotted)| *slotted) {
                     let slot = aweyuki_vab::current_slot()?.context("not an A/B phone")?;
-                    pick.slots(slot)
+                    pick.slots(aweyuki_install::Place::Slotted, slot)
                 } else {
                     Vec::new()
                 };
