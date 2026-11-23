@@ -125,7 +125,7 @@ Chạy các plugin script `plugin.toml` với luồng đầu ra trực tiếp v�
   <img src="assets/screenshots/24-reboot.png" width="32%" alt="Khởi động lại">
 </p>
 
-- **Ngôn ngữ & Giao diện**: Giao diện sáng/tối; hỗ trợ tiếng Việt, tiếng Anh, tiếng Trung giản thể và phồn thể; 28 múi giờ IANA bao gồm Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7).
+- **Ngôn ngữ & Giao diện**: Giao diện sáng/tối; 15 ngôn ngữ (简体中文, 繁體中文, English, Türkçe, Русский, Українська, Español, Português (Brasil), Bahasa Indonesia, Tiếng Việt, Deutsch, Français, Italiano, Polski và 日本語); múi giờ IANA bao gồm Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7).
 - **Thông tin máy**: Xem phiên bản Aweyuki, dung lượng lưu trữ, SoC, RAM, tình trạng pin và số chu kỳ sạc.
 - **Khởi động lại & Chọn khe**: Khởi động lại vào Hệ thống, Recovery, Fastboot, Bootloader, EDL hoặc Tắt nguồn, chuyển khe A/B và cảnh báo ABL mất bộ nạp EFISP trước khi khởi động lại.
 
@@ -317,6 +317,12 @@ thời điểm chạm và chuyển động. `--lang` chọn ngôn ngữ theo loc
 ```sh
 cargo run --release -p aweyuki-preview -- target/preview --lang vi
 ```
+
+### Bản dịch
+
+Văn bản của mỗi ngôn ngữ nằm trong một tệp riêng tại `crates/aweyuki-ui/locales`, đặt tên theo mã vùng như `vi.toml`, `tr.toml`, `pt-BR.toml`. `en.toml` là tệp chuẩn đối chiếu. Quá trình biên dịch sẽ kiểm tra toàn bộ các tệp và dừng lại nếu thiếu khóa hoặc sai khác tên biến trong dấu ngoặc nhọn so với bản tiếng Anh.
+
+Để sửa bản dịch, hãy chỉnh trực tiếp trong tệp ngôn ngữ tương ứng và chạy `aweyuki-preview --lang` để kiểm tra hiển thị: `cut short in` báo chữ bị cắt dấu ba chấm, `set at 80% in` báo chữ bị thu nhỏ để vừa nút/thanh trượt, `past the edge in` báo chữ tràn mép màn hình, và `overlap in` báo hai đoạn chữ đè lên nhau.
 
 ## Ghi công
 

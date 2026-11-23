@@ -125,7 +125,7 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
   <img src="assets/screenshots/24-reboot.png" width="32%" alt="重启选项">
 </p>
 
-- **语言与主题**：浅色与深色模式；简体中文、繁体中文、英文与越南文；28 个 IANA 时区（含越南 `Asia/Ho_Chi_Minh` UTC+7）。
+- **语言与主题**：浅色与深色模式；15 种语言（简体中文、繁體中文、English、Türkçe、Русский、Українська、Español、Português (Brasil)、Bahasa Indonesia、Tiếng Việt、Deutsch、Français、Italiano、Polski 和日本語）；支持含越南时区（`Asia/Ho_Chi_Minh`, UTC+7）在内的 IANA 时区。
 - **关于本机**：查看 Aweyuki 版本、存储空间、处理器、内存、电池健康度与充电循环次数。
 - **重启与槽位切换**：重启至系统、Recovery、Fastboot、Bootloader、EDL 或关机，切换 A/B 启动槽位，并在重启前执行 ABL EFISP 加载器回归检查。
 
@@ -260,6 +260,12 @@ cargo ndk -t arm64-v8a --platform 30 test -p aweyuki -p aweyuki-block -p aweyuki
 ```sh
 cargo run --release -p aweyuki-preview -- target/preview --lang en
 ```
+
+### 翻译
+
+每种语言的文字是 `crates/aweyuki-ui/locales` 里的一个文件，以地区代码命名，例如 `tr.toml`、`pt-BR.toml`。`en.toml` 是参照文件，每条文字上方的注释说明它显示在哪里。构建时会读取全部文件，缺少某条文字，或者花括号里的名称和英文不一致，构建就会停止。
+
+修正翻译时，直接修改对应语言文件里的文字。用 `aweyuki-preview --lang` 把页面按这种语言绘制出来检查效果：每绘制完一个页面，它会列出这个页面上显示不下的文字：`cut short in` 是以省略号结尾的文字，`set at 80% in` 是为了放进按键、按钮或滑动条而缩小了字号的文字，`past the edge in` 是超出屏幕的文字，`overlap in` 是互相重叠的两段文字。
 
 ## 致谢
 

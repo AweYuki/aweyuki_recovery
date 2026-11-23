@@ -148,16 +148,12 @@ impl App {
         match tg.auth {
             TgAuthState::NeedConfiguration => {
                 let Ok(api_id) = tg.api_id.trim().parse::<i64>() else {
-                    self.say(l.pick(["请输入有效的 API ID", "請輸入有效的 API ID", "Enter a valid API ID"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M020), now);
                     return Vec::new();
                 };
                 if api_id <= 0 || tg.api_hash.trim().is_empty() || tg.vault_key.is_empty() {
                     self.say(
-                        l.pick([
-                            "请填写 API ID、API Hash 和本地解锁密钥",
-                            "請填寫 API ID、API Hash 與本機解鎖金鑰",
-                            "Enter API ID, API Hash, and local vault key",
-                        ]),
+                        l.pick(crate::texts::fork::s::M021),
                         now,
                     );
                     return Vec::new();
@@ -169,7 +165,7 @@ impl App {
             }
             TgAuthState::NeedVault => {
                 if tg.vault_key.is_empty() {
-                    self.say(l.pick(["请输入本地解锁密钥", "請輸入本機解鎖金鑰", "Enter local vault key"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M022), now);
                     return Vec::new();
                 }
                 let key = std::mem::take(&mut tg.vault_key);
@@ -179,7 +175,7 @@ impl App {
             TgAuthState::NeedPhone => {
                 let phone = tg.phone.trim().to_string();
                 if phone.is_empty() {
-                    self.say(l.pick(["请输入手机号", "請輸入手機號碼", "Enter phone number"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M023), now);
                     return Vec::new();
                 }
                 vec![Effect::TelegramAuth { kind: TgKind::Phone, text: phone }]
@@ -187,7 +183,7 @@ impl App {
             TgAuthState::NeedCode => {
                 let code = std::mem::take(&mut tg.code);
                 if code.trim().is_empty() {
-                    self.say(l.pick(["请输入验证码", "請輸入驗證碼", "Enter login code"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M024), now);
                     return Vec::new();
                 }
                 self.refresh();
@@ -196,7 +192,7 @@ impl App {
             TgAuthState::NeedPassword => {
                 let pw = std::mem::take(&mut tg.password);
                 if pw.is_empty() {
-                    self.say(l.pick(["请输入两步验证密码", "請輸入兩步驟驗證密碼", "Enter 2FA password"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M025), now);
                     return Vec::new();
                 }
                 self.refresh();
@@ -205,7 +201,7 @@ impl App {
             TgAuthState::NeedEmail => {
                 let email = tg.email.trim().to_string();
                 if email.is_empty() {
-                    self.say(l.pick(["请输入邮箱地址", "請輸入電子郵件地址", "Enter email address"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M026), now);
                     return Vec::new();
                 }
                 vec![Effect::TelegramAuth { kind: TgKind::Email, text: email }]
@@ -213,7 +209,7 @@ impl App {
             TgAuthState::NeedEmailCode => {
                 let code = std::mem::take(&mut tg.email_code);
                 if code.trim().is_empty() {
-                    self.say(l.pick(["请输入邮箱验证码", "請輸入信箱驗證碼", "Enter email code"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M027), now);
                     return Vec::new();
                 }
                 self.refresh();
@@ -223,7 +219,7 @@ impl App {
                 let first = tg.first_name.trim().to_string();
                 let last = tg.last_name.trim().to_string();
                 if first.is_empty() {
-                    self.say(l.pick(["请输入名字", "請輸入名字", "Enter first name"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M028), now);
                     return Vec::new();
                 }
                 vec![Effect::TelegramAuth { kind: TgKind::Register, text: format!("{first}\n{last}") }]

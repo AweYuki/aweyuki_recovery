@@ -66,7 +66,7 @@ impl App {
             self.refresh();
             return self.arrive();
         }
-        self.say(l.pick(["PIN 码错误", "PIN 碼錯誤", "Incorrect PIN"]), now);
+        self.say(l.pick(crate::texts::fork::s::M009), now);
         self.refresh();
         Vec::new()
     }
@@ -83,12 +83,12 @@ impl App {
                     .as_ref()
                     .is_some_and(|lock| verify_pin(&pin, &lock.salt_hex, &lock.hash_hex, lock.iterations));
                 if !ok {
-                    self.say(l.pick(["当前 PIN 码错误", "目前 PIN 碼錯誤", "Incorrect current PIN"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M010), now);
                 } else if self.state.lock_setup.removing {
                     self.state.recovery_lock = None;
                     self.state.locked = false;
                     self.state.lock_setup = LockSetupState::default();
-                    self.say(l.pick(["PIN 锁已移除", "PIN 鎖已移除", "PIN lock removed"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M011), now);
                 } else {
                     self.state.lock_setup.stage = LockSetupStage::EnterNew;
                 }
@@ -97,13 +97,7 @@ impl App {
                 let count = pin.chars().count();
                 if !(MIN_PIN_LEN..=MAX_PIN_LEN).contains(&count) {
                     self.say(
-                        &tr!(
-                            l,
-                            "PIN 码需为 {MIN_PIN_LEN} 到 {MAX_PIN_LEN} 位",
-                            "PIN 碼需為 {MIN_PIN_LEN} 到 {MAX_PIN_LEN} 位",
-                            "PIN must be {MIN_PIN_LEN} to {MAX_PIN_LEN} digits",
-                            "Mã PIN phải từ {MIN_PIN_LEN} đến {MAX_PIN_LEN} số",
-                        ),
+                        &crate::texts::fork::s::m012(l, MIN_PIN_LEN, MAX_PIN_LEN),
                         now,
                     );
                 } else {
@@ -115,7 +109,7 @@ impl App {
                 if pin != self.state.lock_setup.first_pin {
                     self.state.lock_setup.first_pin.clear();
                     self.state.lock_setup.stage = LockSetupStage::EnterNew;
-                    self.say(l.pick(["两次输入的 PIN 码不一致", "兩次輸入的 PIN 碼不一致", "PINs didn't match"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M013), now);
                 } else {
                     match generate_salt().and_then(|salt| make_digest(&pin, &salt, DEFAULT_ITERATIONS)) {
                         Ok(digest) => {
@@ -125,7 +119,7 @@ impl App {
                                 iterations: digest.iterations,
                             });
                             self.state.lock_setup = LockSetupState::default();
-                            self.say(l.pick(["PIN 锁已保存", "PIN 鎖已儲存", "PIN lock saved"]), now);
+                            self.say(l.pick(crate::texts::fork::s::M014), now);
                         }
                         Err(e) => self.report(&format!("{e:#}"), now),
                     }

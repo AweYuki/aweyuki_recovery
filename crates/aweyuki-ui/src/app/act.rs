@@ -110,7 +110,7 @@ impl App {
                 }
                 self.refresh();
             }
-            Action::Confirm(_) => self.say(l.pick(["请按住圆形按钮向右滑动", "請按住圓形按鈕向右滑動", "Hold the round button and slide it right"]), now),
+            Action::Confirm(_) => self.say(l.pick(texts::toast::SLIDE_RIGHT), now),
             Action::Slider(_) | Action::Pattern => {}
             Action::Sideload => match self.state.install {
                 Install::Idle | Install::Finished { .. } => {
@@ -154,11 +154,7 @@ impl App {
             Action::EnterRecovery => return vec![Effect::EnterRecovery],
             Action::DelayedScreenshot => {
                 self.shot_at = Some(now + DELAYED_SHOT_MS);
-                let msg = l.pick([
-                    "3 秒后截屏，可切换至目标页面",
-                    "3 秒後截圖，可切換至目標頁面",
-                    "Taking screenshot in 3s — switch to any page",
-                ]);
+                let msg = l.pick(crate::texts::fork::s::M001);
                 self.toast = Some((msg.to_string(), now + DELAYED_SHOT_TOAST_MS));
                 self.dirty = true;
             }
@@ -181,9 +177,9 @@ impl App {
                 let (path, folder) = (std::path::Path::new(&clip.path), std::path::Path::new(&self.state.files.path));
                 let name = path.file_name().map_or_else(|| clip.path.clone(), |n| n.to_string_lossy().into_owned());
                 if folder.starts_with(path) {
-                    self.say(&tr!(l, "无法将\"{name}\"放入其自身中", "無法將「{name}」放入其本身中", "“{name}” can't go inside itself", "Không thể đặt “{name}” vào chính nó"), now);
+                    self.say(&texts::toast::inside_itself(l, name), now);
                 } else if clip.op == FileOp::Move && path.parent() == Some(folder) {
-                    self.say(&tr!(l, "\"{name}\"已在该文件夹中", "「{name}」已在這個資料夾中", "“{name}” is already in this folder", "“{name}” đã ở trong thư mục này"), now);
+                    self.say(&texts::toast::already_there(l, name), now);
                 } else {
                     return vec![Effect::Paste { op: clip.op, path: clip.path, into: self.state.files.path.clone(), clash: None }];
                 }
@@ -312,7 +308,7 @@ impl App {
             Action::ExportLogs => {
                 let ([recovery, kernel], storage) = (self.state.logs, self.state.logs_to == 1);
                 if !recovery && !kernel {
-                    self.say(l.pick(["请选择要导出的日志", "請選擇要匯出的記錄", "Choose the logs to export"]), now);
+                    self.say(l.pick(texts::toast::CHOOSE_LOGS), now);
                 } else if storage && !self.state.data.storage_open() {
                     self.say(l.pick(DECRYPT_FIRST), now);
                 } else {
@@ -420,10 +416,8 @@ impl App {
                     return self.act(Action::OpenJoined, now);
                 }
                 match network.security {
-                    Security::Wep => self.say(l.pick(["暂不支持 WEP 加密的网络", "尚不支援 WEP 加密的網路", "WEP networks aren't supported"]), now),
-                    Security::Enterprise => {
-                        self.say(l.pick(["暂不支持需要账号登录的网络", "尚不支援需要帳號登入的網路", "Networks that need an account sign-in aren't supported"]), now)
-                    }
+                    Security::Wep => self.say(l.pick(texts::toast::WEP_UNSUPPORTED), now),
+                    Security::Enterprise => self.say(l.pick(texts::toast::ENTERPRISE_UNSUPPORTED), now),
                     s if s.password() => self.ask_password(network),
                     _ => {
                         return vec![Effect::JoinWlan {
@@ -619,7 +613,7 @@ impl App {
             Action::RefreshPlugins => return vec![Effect::ReadPlugins],
             Action::RunPlugin(i) => {
                 if self.state.plugin_run.as_ref().is_some_and(|r| r.outcome.is_none()) {
-                    self.say(l.pick(["插件正在运行，请稍后再试", "擴充功能正在執行，請稍後再試", "A plugin is running. Wait for it to finish"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M002), now);
                     return Vec::new();
                 }
                 if let Some(p) = self.state.plugins.as_ref().and_then(|list| list.get(i)) {
@@ -658,11 +652,7 @@ impl App {
                     }
                     aweyuki_install::aerap::AerapKind::Other => {
                         self.say(
-                            l.pick([
-                                "暂仅支持直接启动 AERA Browser 与 Telegram 插件",
-                                "暫僅支援直接啟動 AERA Browser 與 Telegram 外掛",
-                                "Only AERA Browser and Telegram plugins are supported directly",
-                            ]),
+                            l.pick(crate::texts::fork::s::M003),
                             now,
                         );
                     }
@@ -678,7 +668,7 @@ impl App {
                     return self.arrive_at(Screen::Decrypt);
                 }
                 if self.state.aerap_download.is_some() {
-                    self.say(l.pick(["正在下载或安装插件，请稍候", "正在下載或安裝外掛，請稍候", "A plugin download is already running"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M004), now);
                     return Vec::new();
                 }
                 let name = match kind {
@@ -768,7 +758,7 @@ impl App {
                     return Vec::new();
                 };
                 if st.extracting.is_some() {
-                    self.say(l.pick(["正在提取，请等待完成", "正在提取，請等待完成", "Extracting. Wait for it to finish"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M005), now);
                     return Vec::new();
                 }
                 let Some(Ok(report)) = &st.report else {
@@ -778,7 +768,7 @@ impl App {
                     return Vec::new();
                 };
                 if !part.extractable {
-                    self.say(l.pick(["该分区不支持直接提取", "該分割區不支援直接提取", "This partition cannot be extracted directly"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M006), now);
                     return Vec::new();
                 }
                 let path = st.path.clone();
@@ -1081,7 +1071,7 @@ impl App {
                         return self.act(Action::Open(first.screen), now);
                     }
                 }
-                Screen::Decrypt if self.state.code.is_empty() => self.say(l.pick(["请输入锁屏密码", "請輸入螢幕鎖定密碼", "Enter the screen lock"]), now),
+                Screen::Decrypt if self.state.code.is_empty() => self.say(l.pick(texts::toast::ENTER_LOCK), now),
                 Screen::Decrypt => {
                     let code = std::mem::take(&mut self.state.code);
                     return self.unlock(code);
@@ -1098,9 +1088,9 @@ impl App {
                     let current = &self.state.file.as_ref().expect("the file page shows an entry").name;
                     let taken = self.state.files.entries.as_ref().is_ok_and(|entries| entries.iter().any(|e| e.name == name));
                     match name.as_str() {
-                        "" => self.say(l.pick(["请输入名称", "請輸入名稱", "Enter a name"]), now),
-                        "." | ".." => self.say(l.pick(["名称不能为\".\"或\"..\"", "名稱不能是「.」或「..」", "A name can't be “.” or “..”"]), now),
-                        _ if name.contains('/') => self.say(l.pick(["名称不能包含\"/\"", "名稱不能包含「/」", "A name can't hold “/”"]), now),
+                        "" => self.say(l.pick(texts::toast::ENTER_NAME), now),
+                        "." | ".." => self.say(l.pick(texts::toast::NAME_DOTS), now),
+                        _ if name.contains('/') => self.say(l.pick(texts::toast::NAME_SLASH), now),
                         _ if name == *current => return self.back(now),
                         _ if taken => self.say_taken(now),
                         _ => return vec![Effect::Rename { path: self.entry_path(), name }],
@@ -1126,11 +1116,8 @@ impl App {
                 Screen::WlanAdd => {
                     let a = self.state.adding.as_mut().expect("the page adds a network");
                     let (field, why) = match a.name.len() {
-                        0 => (Field::Name, Some(l.pick(["请输入网络名称", "請輸入網路名稱", "Enter the network's name"]).to_string())),
-                        n if n > SSID_MAX => (
-                            Field::Name,
-                            Some(tr!(l, "网络名称不能超过 {SSID_MAX} 个字符", "網路名稱不能超過 {SSID_MAX} 個字元", "A network's name can't be over {SSID_MAX} characters", "Tên mạng không được quá {SSID_MAX} ký tự")),
-                        ),
+                        0 => (Field::Name, Some(l.pick(texts::toast::ENTER_NETWORK_NAME).to_string())),
+                        n if n > SSID_MAX => (Field::Name, Some(texts::toast::network_name_long(l, SSID_MAX))),
                         _ if a.security.password() => (Field::Password, refused(l, a.security, &self.state.password).map(str::to_string)),
                         _ => (Field::Name, None),
                     };
@@ -1166,11 +1153,7 @@ impl App {
                         }
                         None => {
                             self.say(
-                                l.pick([
-                                    "无效网址，仅支持 http:// 或 https://",
-                                    "無效網址，僅支援 http:// 或 https://",
-                                    "Invalid URL (only http:// or https:// supported)",
-                                ]),
+                                l.pick(crate::texts::fork::s::M007),
                                 now,
                             );
                             return Vec::new();
@@ -1217,7 +1200,7 @@ impl App {
             Confirm::Wipe => {
                 let chosen: Vec<Wipe> = WIPES.iter().zip(self.state.wipe).filter(|(_, on)| *on).map(|(&w, _)| w).collect();
                 match chosen.is_empty() {
-                    true => self.say(l.pick(["请选择要清除的内容", "請選擇要清除的內容", "Choose what to wipe"]), now),
+                    true => self.say(l.pick(texts::toast::CHOOSE_WIPE), now),
                     false => fx.push(Effect::Wipe(chosen)),
                 }
             }
@@ -1240,9 +1223,9 @@ impl App {
                 let mut parts = s.backup;
                 parts[4] &= s.efisp_partition;
                 let refused = if !parts.contains(&true) {
-                    Some(["请选择要备份的内容", "請選擇要備份的內容", "Choose what to back up"])
+                    Some(texts::toast::CHOOSE_BACKUP)
                 } else if parts[2] && s.data != Data::Open {
-                    Some(["备份 data 分区需先完成「解密」", "備份 data 分割區需先完成「解密」", "Decrypt before backing up the data partition"])
+                    Some(texts::toast::DECRYPT_TO_BACK_UP)
                 } else if s.place_open(s.backup_to) {
                     None
                 } else {
@@ -1263,9 +1246,9 @@ impl App {
                 let (entry, parts) = self.state.restore.as_ref().expect("the restore page shows a backup");
                 let restore = Effect::Restore { place: entry.place, name: entry.name.clone(), parts: *parts };
                 if !parts.contains(&true) {
-                    self.say(l.pick(["请选择要恢复的内容", "請選擇要還原的內容", "Choose what to restore"]), now);
+                    self.say(l.pick(texts::toast::CHOOSE_RESTORE), now);
                 } else if parts[2] && self.state.data != Data::Open {
-                    self.say(l.pick(["恢复 data 分区需先完成「解密」", "還原 data 分割區需先完成「解密」", "Decrypt before restoring the data partition"]), now);
+                    self.say(l.pick(texts::toast::DECRYPT_TO_RESTORE), now);
                 } else {
                     fx.push(restore);
                 }
@@ -1276,12 +1259,8 @@ impl App {
             }
             Confirm::Slot => match (&self.state.boot_slots, self.state.next_slot) {
                 (Some(Ok(slots)), Some(pick)) if pick != slots.active => fx.push(Effect::SetSlot(pick)),
-                (Some(Ok(slots)), _) => {
-                    let slot = slots.active.letter();
-                    let said = tr!(l, "下次已从槽位 {slot} 启动", "下次已從槽位 {slot} 啟動", "Slot {slot} already starts next", "Lần tới đã khởi động từ khe {slot}");
-                    self.say(&said, now);
-                }
-                _ => self.say(l.pick(["无法读取启动槽位", "無法讀取啟動槽位", "Couldn't read the boot slots"]), now),
+                (Some(Ok(slots)), _) => self.say(&texts::toast::slot_already_next(l, slots.active.letter()), now),
+                _ => self.say(l.pick(texts::slot::UNREADABLE), now),
             },
             Confirm::FactoryReset => fx.push(Effect::FactoryReset),
             Confirm::Merge => {
@@ -1298,9 +1277,7 @@ impl App {
                 Data::Open | Data::Locked { .. } => fx.push(Effect::Relabel),
                 Data::Opening => self.say(l.pick(DATA_OPENING), now),
                 Data::Erased => self.say(l.pick(DATA_ERASED), now),
-                Data::Closed | Data::Failed(_) => {
-                    self.say(l.pick(["请先在「解密」中打开 data 分区", "請先在「解密」中開啟 data 分割區", "Open the data partition in Decrypt first"]), now)
-                }
+                Data::Closed | Data::Failed(_) => self.say(l.pick(texts::toast::OPEN_DATA_FIRST), now),
             },
             // The data partition is reached through its own key whether or
             // not it is open, but not while it is being opened or erased.
@@ -1348,7 +1325,7 @@ impl App {
             Confirm::BatchFlash => {
                 let selected = self.state.batch.selected_payload();
                 if selected.is_empty() {
-                    self.say(l.pick(["请先选择有效的镜像", "請先選擇有效的映像檔", "Select at least one valid image"]), now);
+                    self.say(l.pick(crate::texts::fork::s::M008), now);
                 } else {
                     let pick = self.state.batch.pick;
                     self.state.batch.job = Some(BatchJob {
@@ -1377,6 +1354,7 @@ mod tests {
     fn search_finds_by_pinyin_typed_on_its_own_keyboard() {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Search, &f, &i);
+        app.state.lang = Lang::Hans;
         type_text(&mut app, &f, &i, "bf");
         assert_eq!(app.state.search, "bf");
         let opens: Vec<Action> = app.frame(&f, &i).hits.iter().map(|h| h.action).filter(|a| matches!(a, Action::Open(_))).collect();

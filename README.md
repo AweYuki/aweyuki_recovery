@@ -125,7 +125,7 @@ Run `plugin.toml` shell plugins with live streaming output and cancellation, alo
   <img src="assets/screenshots/24-reboot.png" width="32%" alt="Reboot options">
 </p>
 
-- **Localization & Themes**: Light and dark themes; Simplified Chinese, Traditional Chinese, English, and Vietnamese; 28 IANA time zones including Vietnam (`Asia/Ho_Chi_Minh`, UTC+7).
+- **Localization & Themes**: Light and dark themes; 15 languages (简体中文, 繁體中文, English, Türkçe, Русский, Українська, Español, Português (Brasil), Bahasa Indonesia, Tiếng Việt, Deutsch, Français, Italiano, Polski, and 日本語); IANA time zones including Vietnam (`Asia/Ho_Chi_Minh`, UTC+7).
 - **About & Diagnostics**: View Aweyuki version, storage, SoC, RAM, battery health, and charge cycles.
 - **Reboot & Slot Control**: Reboot to System, Recovery, Fastboot, Bootloader, EDL, or Power off, switch A/B slots, and rely on the pre-reboot ABL EFISP regression guard.
 
@@ -318,6 +318,20 @@ such as `en` or `zh-TW`:
 ```sh
 cargo run --release -p aweyuki-preview -- target/preview --lang en
 ```
+
+### Translations
+
+Each language's texts are one file in `crates/aweyuki-ui/locales`, named by its
+locale: `tr.toml`, `pt-BR.toml`. `en.toml` is the reference, with a comment on
+where each text shows. The build reads every file and stops on a text that is
+missing, or that names a value in braces the English text does not.
+
+To correct a translation, change its text in the language's file. To check how it
+looks, draw the pages in that language with `aweyuki-preview --lang`. With each
+page, it says which texts did not fit their place: `cut short in` for a text that
+ends in an ellipsis, `set at 80% in` for a label set smaller to fit its key, button
+or slider, `past the edge in` for a text that runs off the screen, and `overlap in`
+for two texts that run into each other.
 
 ## Credits
 

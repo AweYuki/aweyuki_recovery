@@ -40,35 +40,16 @@ pub const SCREEN_OFF: [Option<u64>; 7] = [Some(15_000), Some(30_000), Some(60_00
 /// The time zones the clock and the times on the pages can keep, in the
 /// order their page lists them: the name, the cities it covers, and the
 /// zone's name in the tz database.
-pub const TIME_ZONES: [(Text, Text, &str); 28] = [
-    (["中国标准时间", "中國標準時間", "China Standard Time"], ["UTC+8 · 北京、上海", "UTC+8 · 北京、上海", "UTC+8 · Beijing, Shanghai"], "Asia/Shanghai"),
-    (["香港时间", "香港時間", "Hong Kong Time"], ["UTC+8 · 香港", "UTC+8 · 香港", "UTC+8 · Hong Kong"], "Asia/Hong_Kong"),
-    (["越南时间", "越南時間", "Vietnam Time"], ["UTC+7 · 河内、胡志明市", "UTC+7 · 河內、胡志明市", "UTC+7 · Hanoi, Ho Chi Minh City"], "Asia/Ho_Chi_Minh"),
-    (["台北时间", "台北時間", "Taipei Time"], ["UTC+8 · 台北", "UTC+8 · 台北", "UTC+8 · Taipei"], "Asia/Taipei"),
-    (["新加坡时间", "新加坡時間", "Singapore Time"], ["UTC+8 · 新加坡、吉隆坡", "UTC+8 · 新加坡、吉隆坡", "UTC+8 · Singapore, Kuala Lumpur"], "Asia/Singapore"),
-    (["菲律宾时间", "菲律賓時間", "Philippine Time"], ["UTC+8 · 马尼拉", "UTC+8 · 馬尼拉", "UTC+8 · Manila"], "Asia/Manila"),
-    (["中南半岛时间", "中南半島時間", "Indochina Time"], ["UTC+7 · 曼谷、金边", "UTC+7 · 曼谷、金邊", "UTC+7 · Bangkok, Phnom Penh"], "Asia/Bangkok"),
-    (["印度尼西亚西部时间", "印尼西部時間", "Western Indonesia Time"], ["UTC+7 · 雅加达", "UTC+7 · 雅加達", "UTC+7 · Jakarta"], "Asia/Jakarta"),
-    (["韩国标准时间", "韓國標準時間", "Korea Standard Time"], ["UTC+9 · 首尔", "UTC+9 · 首爾", "UTC+9 · Seoul"], "Asia/Seoul"),
-    (["日本标准时间", "日本標準時間", "Japan Standard Time"], ["UTC+9 · 东京", "UTC+9 · 東京", "UTC+9 · Tokyo"], "Asia/Tokyo"),
-    (["澳大利亚东部时间", "澳洲東部時間", "Australian Eastern Time"], ["UTC+10/+11 · 悉尼、墨尔本", "UTC+10/+11 · 雪梨、墨爾本", "UTC+10/+11 · Sydney, Melbourne"], "Australia/Sydney"),
-    (["新西兰时间", "紐西蘭時間", "New Zealand Time"], ["UTC+12/+13 · 奥克兰", "UTC+12/+13 · 奧克蘭", "UTC+12/+13 · Auckland"], "Pacific/Auckland"),
-    (["印度标准时间", "印度標準時間", "India Standard Time"], ["UTC+5:30 · 新德里、孟买", "UTC+5:30 · 新德里、孟買", "UTC+5:30 · New Delhi, Mumbai"], "Asia/Kolkata"),
-    (["巴基斯坦标准时间", "巴基斯坦標準時間", "Pakistan Standard Time"], ["UTC+5 · 卡拉奇、伊斯兰堡", "UTC+5 · 卡拉奇、伊斯蘭瑪巴德", "UTC+5 · Karachi, Islamabad"], "Asia/Karachi"),
-    (["海湾标准时间", "波斯灣標準時間", "Gulf Standard Time"], ["UTC+4 · 迪拜、阿布扎比", "UTC+4 · 杜拜、阿布達比", "UTC+4 · Dubai, Abu Dhabi"], "Asia/Dubai"),
-    (["莫斯科时间", "莫斯科時間", "Moscow Time"], ["UTC+3 · 莫斯科", "UTC+3 · 莫斯科", "UTC+3 · Moscow"], "Europe/Moscow"),
-    (["阿拉伯标准时间", "阿拉伯標準時間", "Arabia Standard Time"], ["UTC+3 · 利雅得", "UTC+3 · 利雅德", "UTC+3 · Riyadh"], "Asia/Riyadh"),
-    (["东欧时间", "東歐時間", "Eastern European Time"], ["UTC+2/+3 · 雅典、基辅", "UTC+2/+3 · 雅典、基輔", "UTC+2/+3 · Athens, Kyiv"], "Europe/Athens"),
-    (["中欧时间", "中歐時間", "Central European Time"], ["UTC+1/+2 · 柏林、巴黎", "UTC+1/+2 · 柏林、巴黎", "UTC+1/+2 · Berlin, Paris"], "Europe/Berlin"),
-    (["英国时间", "英國時間", "British Time"], ["UTC+0/+1 · 伦敦", "UTC+0/+1 · 倫敦", "UTC+0/+1 · London"], "Europe/London"),
-    (["协调世界时", "世界標準時間", "Coordinated Universal Time"], ["UTC+0 · 国际标准时间", "UTC+0 · 世界標準", "UTC+0 · Universal"], "UTC"),
-    (["巴西利亚时间", "巴西利亞時間", "Brasilia Time"], ["UTC-3 · 圣保罗", "UTC-3 · 聖保羅", "UTC-3 · Sao Paulo"], "America/Sao_Paulo"),
-    (["美国东部时间", "美國東部時間", "Eastern Time"], ["UTC-5/-4 · 纽约、多伦多", "UTC-5/-4 · 紐約、多倫多", "UTC-5/-4 · New York, Toronto"], "America/New_York"),
-    (["美国中部时间", "美國中部時間", "Central Time"], ["UTC-6/-5 · 芝加哥、墨西哥城", "UTC-6/-5 · 芝加哥、墨西哥城", "UTC-6/-5 · Chicago, Mexico City"], "America/Chicago"),
-    (["美国山地时间", "美國山區時間", "Mountain Time"], ["UTC-7/-6 · 丹佛", "UTC-7/-6 · 丹佛", "UTC-7/-6 · Denver"], "America/Denver"),
-    (["美国太平洋时间", "美國太平洋時間", "Pacific Time"], ["UTC-8/-7 · 洛杉矶、温哥华", "UTC-8/-7 · 洛杉磯、溫哥華", "UTC-8/-7 · Los Angeles, Vancouver"], "America/Los_Angeles"),
-    (["阿拉斯加时间", "阿拉斯加時間", "Alaska Time"], ["UTC-9/-8 · 安克雷奇", "UTC-9/-8 · 安克拉治", "UTC-9/-8 · Anchorage"], "America/Anchorage"),
-    (["夏威夷时间", "夏威夷時間", "Hawaii Time"], ["UTC-10 · 檀香山", "UTC-10 · 檀香山", "UTC-10 · Honolulu"], "Pacific/Honolulu"),
+pub const TIME_ZONES: [(Text, Text, &str); 9] = [
+    (texts::time_zone::name::CHINA, texts::time_zone::cities::CHINA, "Asia/Shanghai"),
+    (texts::time_zone::name::HONG_KONG, texts::time_zone::cities::HONG_KONG, "Asia/Hong_Kong"),
+    (texts::time_zone::name::TAIPEI, texts::time_zone::cities::TAIPEI, "Asia/Taipei"),
+    (texts::time_zone::name::JAPAN, texts::time_zone::cities::JAPAN, "Asia/Tokyo"),
+    (texts::time_zone::name::UTC, same("UTC"), "UTC"),
+    (texts::time_zone::name::BRITAIN, texts::time_zone::cities::BRITAIN, "Europe/London"),
+    (texts::time_zone::name::CENTRAL_EUROPE, texts::time_zone::cities::CENTRAL_EUROPE, "Europe/Berlin"),
+    (texts::time_zone::name::US_EASTERN, texts::time_zone::cities::US_EASTERN, "America/New_York"),
+    (texts::time_zone::name::US_PACIFIC, texts::time_zone::cities::US_PACIFIC, "America/Los_Angeles"),
 ];
 
 impl App {

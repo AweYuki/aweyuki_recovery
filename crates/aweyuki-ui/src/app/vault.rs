@@ -85,7 +85,7 @@ impl App {
         let l = self.state.lang;
         match outcome {
             Ok(()) => {
-                self.say(l.pick(["已删除", "已刪除", "Deleted"]), now);
+                self.say(l.pick(crate::texts::fork::s::M029), now);
                 vec![Effect::ReadVault]
             }
             Err(why) => {

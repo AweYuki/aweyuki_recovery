@@ -45,20 +45,8 @@ impl App {
         }
         self.wake(now);
         let msg = match outcome {
-            Ok(out) => tr!(
-                self.state.lang,
-                "已提取到 {out}",
-                "已提取到 {out}",
-                "Extracted to {out}",
-                "Đã trích xuất tới {out}",
-            ),
-            Err(why) => tr!(
-                self.state.lang,
-                "提取失败：{why}",
-                "提取失敗：{why}",
-                "Extract failed: {why}",
-                "Trích xuất thất bại: {why}",
-            ),
+            Ok(out) => crate::texts::fork::s::m018(self.state.lang, out),
+            Err(why) => crate::texts::fork::s::m019(self.state.lang, why),
         };
         self.say(&msg, now);
         if self.screen() == Screen::Payload {
