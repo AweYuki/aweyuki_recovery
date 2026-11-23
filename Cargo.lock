@@ -302,6 +302,7 @@ dependencies = [
  "aweyuki-sys",
  "aweyuki-vab",
  "libc",
+ "prost",
  "rsproperties",
  "tempfile",
 ]

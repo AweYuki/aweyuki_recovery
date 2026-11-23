@@ -258,7 +258,8 @@ enum Cmd {
     },
     /// Set the system clock from the RTC and the offset Android keeps on
     /// persist, as the recovery does when it starts, and print the time in
-    /// China, the first of the time zones the settings offer.
+    /// China, whose zone the clock keeps until the installed system's is
+    /// known or another is chosen.
     #[cfg(target_os = "android")]
     Clock,
     /// Say whether a service has registered with the phone's service
@@ -645,7 +646,8 @@ fn main() -> Result<()> {
         #[cfg(target_os = "android")]
         Cmd::Clock => {
             let ms = aweyuki_sys::clock::set_from_rtc()?;
-            println!("{}", aweyuki_ui::fmt::datetime(aweyuki_ui::Lang::En, (ms / 1000) as i64, 0));
+            let china = aweyuki_ui::app::listed(aweyuki_ui::app::FIRST_ZONE).context("the first zone is one listed")?;
+            println!("{}", aweyuki_ui::fmt::datetime(aweyuki_ui::Lang::En, (ms / 1000) as i64, aweyuki_ui::fmt::rules(china)));
             Ok(())
         }
         #[cfg(target_os = "android")]
@@ -722,8 +724,13 @@ fn main() -> Result<()> {
         Cmd::Data { credential, close: false } => {
             use aweyuki_crypto::data;
             let binder = aweyuki_binder::driver::Binder::open()?;
-            let service = aweyuki_crypto::keymint::KeyMint::open(&binder)?;
-            let opening = data::open_without_credential(&service)?;
+            // A partition the phone's table has encrypted in no way opens
+            // with no key service.
+            let service = match data::keyed()? {
+                true => Some(aweyuki_crypto::keymint::KeyMint::open(&binder)?),
+                false => None,
+            };
+            let opening = data::open_without_credential(service.as_ref())?;
             match &opening.mounted {
                 Some(mounted) => {
                     if let Some(checked) = &mounted.checked {
@@ -736,8 +743,8 @@ fn main() -> Result<()> {
             }
             let mut closed = opening.closed;
             let asked = closed.iter().find(|c| !c.made_up).map(|c| c.user);
-            if let (Some(credential), Some(user)) = (&credential, asked) {
-                closed = data::unlock(&service, &closed, user, credential.as_bytes())?;
+            if let (Some(credential), Some(user), Some(service)) = (&credential, asked, &service) {
+                closed = data::unlock(service, &closed, user, credential.as_bytes())?;
             }
             for c in &closed {
                 match &c.why {

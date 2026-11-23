@@ -48,6 +48,7 @@ use aweyuki_ui::app::{
     AweyukiEnd, AweyukiStage, Target, Touch, UsbDrive, UsbLink, VaultAppRow, VaultBackupRow, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS,
     INSTALL_UNFINISHED, USB_DRIVE,
 };
+use aweyuki_ui::fmt::TimeZone;
 use aweyuki_ui::settings::Keeper;
 use aweyuki_ui::surface::kms::KmsSurface;
 use aweyuki_ui::{Canvas, Fonts, Lang, Surface};
@@ -200,17 +201,17 @@ fn power(target: Target) -> Result<()> {
 }
 
 /// File transfer: the service offering internal storage to a computer over
-/// USB, whether it offers the storage now, and the zone, by its place in
-/// the settings, it tells the times of files in.
+/// USB, whether it offers the storage now, and the zone it tells the times
+/// of files in.
 struct Transfer {
     service: aweyuki_mtp::Service,
     offered: bool,
-    zone: usize,
+    zone: TimeZone,
 }
 
 impl Transfer {
     /// Serve file transfer; the port offers it from when it next rests.
-    fn start(cfg: &DeviceConfig, info: &aweyuki_info::DeviceInfo, zone: usize) -> Result<Transfer> {
+    fn start(cfg: &DeviceConfig, info: &aweyuki_info::DeviceInfo, zone: &TimeZone) -> Result<Transfer> {
         let device = aweyuki_mtp::Device {
             manufacturer: cfg.device.brand.clone(),
             model: info.model.clone(),
@@ -219,9 +220,9 @@ impl Transfer {
             name: info.model.clone(),
             battery: Box::new(|| aweyuki_info::battery_now().ok().flatten().map(|b| b.level)),
         };
-        let service = aweyuki_mtp::Service::start(device, aweyuki_ui::fmt::rules(zone).clone())?;
+        let service = aweyuki_mtp::Service::start(device, zone.clone())?;
         aweyuki_sys::usb::set_mtp(true);
-        Ok(Transfer { service, offered: false, zone })
+        Ok(Transfer { service, offered: false, zone: zone.clone() })
     }
 
     /// Offer internal storage, named for the computer in `lang`, or take it
@@ -370,7 +371,7 @@ fn in_place(place: Place, path: &str) -> PathBuf {
 /// what update_engine wrote while it last installed an update and what the
 /// last install script wrote, and the kernel's. Each file is owned as a
 /// copy into the folder would be. Gives the folder.
-fn export_logs(recovery: bool, kernel: bool, into: &Path, zone: usize) -> Result<PathBuf> {
+fn export_logs(recovery: bool, kernel: bool, into: &Path, zone: &TimeZone) -> Result<PathBuf> {
     let there = into.ancestors().find(|p| p.exists()).context("the root is always there")?;
     let ownership = ownership(there)?;
     let folder = into.join(aweyuki_ui::fmt::stamp(unix_now()?, zone));
@@ -405,7 +406,7 @@ fn export_logs(recovery: bool, kernel: bool, into: &Path, zone: usize) -> Result
 /// taken: into the gallery's screenshots where internal storage is open, as
 /// `storage` says, and otherwise into the recovery's own memory until it
 /// opens. Each is made as the system makes what it saves there.
-fn save_screenshot(frame: &Canvas, storage: bool, zone: usize) -> Result<Shot> {
+fn save_screenshot(frame: &Canvas, storage: bool, zone: &TimeZone) -> Result<Shot> {
     let (folder, shot) = match storage {
         true => (Path::new(aweyuki_crypto::data::SDCARD).join(SCREENSHOTS), Shot::Album),
         false => (PathBuf::from(HELD_SCREENSHOTS), Shot::Held),
@@ -1113,9 +1114,29 @@ fn answer(request: Request, fastboot: bool) -> Vec<Effect> {
     }
 }
 
-/// The time of day for the status bar, in the zone the settings chose.
-fn clock(zone: usize) -> Result<String> {
-    Ok(aweyuki_ui::fmt::clock(unix_now()?, zone))
+/// Tell the pages which time zone the installed system is set to, where
+/// one is named: `kept`, the one init keeps in the data partition, and
+/// else the one the system is built to start in. A name the recovery
+/// carries no rules for goes to the kernel log, and the clock stays in the
+/// zone it keeps.
+fn follow_system_zone(app: &mut App, kept: Option<&str>, info: &aweyuki_info::DeviceInfo) -> Result<()> {
+    let Some(name) = kept.or(info.time_zone.as_deref()) else { return Ok(()) };
+    match app.set_system_zone(name) {
+        Ok(()) => aweyuki_sys::kmsg(&format!("the installed system keeps the time zone {name}")),
+        Err(e) => aweyuki_sys::kmsg(&format!("the installed system's time zone is not followed: {e:#}")),
+    }
+}
+
+/// The time zone init keeps in the data partition, once that is mounted.
+/// One that cannot be read goes to the kernel log, and counts as none.
+fn kept_time_zone() -> Result<Option<String>> {
+    match aweyuki_info::kept_time_zone(Path::new(aweyuki_crypto::data::MOUNT)) {
+        Ok(zone) => Ok(zone),
+        Err(e) => {
+            aweyuki_sys::kmsg(&format!("the time zone the installed system keeps was not read: {e:#}"))?;
+            Ok(None)
+        }
+    }
 }
 
 /// Tell the kernel log how the data partition was mounted, where opening
@@ -1602,6 +1623,14 @@ impl<'a> Pages<'a> {
             if app.state.language_chosen { "the language chosen" } else { "with none chosen" },
             locale.unwrap_or("none")
         ))?;
+        // The clock follows the time zone the installed system was last
+        // seen set to, or else the one it is built to start in, until the
+        // data partition opens and tells which it is set to now. A phone
+        // with no system names none, and keeps the zone chosen.
+        if app.state.system_zone.is_none() {
+            follow_system_zone(&mut app, None, &info)?;
+        }
+        app.set_now(unix_now()?);
         // The home page tells of a restart into the slot the system does not
         // run from now: an update or a switch left for the next boot.
         if info.slot.is_some() {
@@ -1624,7 +1653,7 @@ impl<'a> Pages<'a> {
         let port_at = Instant::now();
         let mut transfer: Option<Transfer> = None;
         if app.state.file_transfer {
-            match Transfer::start(cfg, &info, app.state.time_zone) {
+            match Transfer::start(cfg, &info, app.state.zone()) {
                 Ok(t) => transfer = Some(t),
                 Err(e) => {
                     aweyuki_sys::kmsg(&format!("file transfer did not start: {e:#}"))?;
@@ -1972,7 +2001,9 @@ impl<'a> Pages<'a> {
                 other => unreachable!("time passing asks for nothing but the motor or a delayed screenshot, not {other:?}"),
             }
         }
-        let time = clock(self.app.state.time_zone)?;
+        let unix = unix_now()?;
+        self.app.set_now(unix);
+        let time = aweyuki_ui::fmt::clock(unix, self.app.state.zone());
         if time != self.shown_clock {
             self.shown_clock = time;
             self.app.redraw();
@@ -2371,6 +2402,7 @@ impl Pages<'_> {
                     }
                     self.closed = opening.closed;
                     show_closed(&mut self.app, &self.closed)?;
+                    follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info)?;
                 }
                 wipe::Event::Ended(outcome) => {
                     let said = outcome.as_ref().map_or_else(wipe::said, |_| "done".to_string());
@@ -2685,7 +2717,7 @@ impl Pages<'_> {
             self.app.compose(&mut self.screen, &self.fonts, &self.info, &self.shown_clock, now);
         }
         let t0 = Instant::now();
-        let saved = save_screenshot(&self.screen, storage, self.app.state.time_zone).map_err(|e| format!("{e:#}"));
+        let saved = save_screenshot(&self.screen, storage, self.app.state.zone()).map_err(|e| format!("{e:#}"));
         eprintln!("screenshot {saved:?} in {} ms", t0.elapsed().as_millis());
         self.app.screenshot_saved(saved, now);
     }
@@ -3104,6 +3136,7 @@ impl Pages<'_> {
                 }
                 self.closed = opening.closed;
                 show_closed(&mut self.app, &self.closed)?;
+                follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info)?;
             }
             decrypt::Ended::Opened(Err(why)) => {
                 aweyuki_sys::kmsg(&format!("the data partition stays closed: {why}"))?;
@@ -3177,9 +3210,9 @@ impl Pages<'_> {
             Some(t) => {
                 let offer = self.app.state.data.storage_open() && self.eraser.is_none() && self.installer.is_none();
                 t.offer(offer, self.app.state.lang).and_then(|()| {
-                    if t.zone != self.app.state.time_zone {
-                        t.service.set_zone(aweyuki_ui::fmt::rules(self.app.state.time_zone).clone())?;
-                        t.zone = self.app.state.time_zone;
+                    if &t.zone != self.app.state.zone() {
+                        t.zone = self.app.state.zone().clone();
+                        t.service.set_zone(t.zone.clone())?;
                     }
                     Ok(())
                 })
@@ -3445,7 +3478,7 @@ impl Pages<'_> {
                     true => Path::new(aweyuki_crypto::data::SDCARD).join(STORAGE_LOGS),
                     false => PathBuf::from(TMP_LOGS),
                 };
-                match export_logs(recovery, kernel, &into, self.app.state.time_zone) {
+                match export_logs(recovery, kernel, &into, self.app.state.zone()) {
                     Ok(folder) => self.app.report(&aweyuki_ui::fmt::exported(self.app.state.lang, &folder.display().to_string()), now),
                     Err(e) => self.app.report(&aweyuki_ui::fmt::export_failed(self.app.state.lang, &format!("{e:#}")), now),
                 }
@@ -4247,7 +4280,7 @@ impl Pages<'_> {
         let made = unix_now()?;
         let task = backup::BackupTask {
             parts,
-            stamp: aweyuki_ui::fmt::stamp(made, self.app.state.time_zone),
+            stamp: aweyuki_ui::fmt::stamp(made, self.app.state.zone()),
             into,
             ownership,
             compress,
@@ -4339,7 +4372,7 @@ impl Pages<'_> {
     fn file_transfer(&mut self, on: bool, now: u64) -> Result<()> {
         let rests = !self.fastboot && !self.sideloading;
         match (on, self.transfer.take()) {
-            (true, None) => match Transfer::start(self.cfg, &self.info, self.app.state.time_zone) {
+            (true, None) => match Transfer::start(self.cfg, &self.info, self.app.state.zone()) {
                 Ok(t) => {
                     self.transfer = Some(t);
                     if rests
