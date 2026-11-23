@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 abootimg-oxide = "0.5.2"
+android-sparse-image = "0.2.0"
 anyhow = { workspace = true }
 cms = "0.2.3"
 cpio = "0.4.1"
@@ -21,6 +22,7 @@ sha2 = { version = "0.10.9", features = ["oid"] }
 aweyuki-block = { path = "../aweyuki-block" }
 aweyuki-config = { path = "../aweyuki-config" }
 aweyuki-info = { path = "../aweyuki-info" }
+aweyuki-lp = { path = "../aweyuki-lp" }
 aweyuki-sys = { path = "../aweyuki-sys" }
 aweyuki-systems = { path = "../aweyuki-systems" }
 aweyuki-vab = { path = "../aweyuki-vab" }

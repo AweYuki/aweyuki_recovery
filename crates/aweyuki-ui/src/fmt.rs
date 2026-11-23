@@ -9,7 +9,7 @@ pub use jiff::tz::TimeZone;
 use jiff::Timestamp;
 use aweyuki_info::{Battery, Charge, Cpu, PatchLevel, Storage};
 use aweyuki_install::ota::Trouble;
-use aweyuki_install::{Failure, ImageKind, Ramdisk, Refusal};
+use aweyuki_install::{Failure, ImageKind, Place as FlashPlace, Ramdisk, Refusal, Target as FlashTarget};
 use aweyuki_net::download::Failure as DownloadFailure;
 use aweyuki_net::reach::Reach;
 use aweyuki_net::release::Unanswered;
@@ -299,7 +299,7 @@ pub fn backup_refusal(l: Lang, r: &BackupRefusal, restore: bool) -> String {
             .into(),
         BackupRefusal::OtherPhone(device) => refused::other_phone(l, device),
         BackupRefusal::Resized(name) => refused::resized(l, name),
-        BackupRefusal::DataReset => l.pick(refused::DATA_RESET).into(),
+        BackupRefusal::OlderAndroid { was, now } => refused::older_android(l, was, now),
     }
 }
 
@@ -765,12 +765,12 @@ pub fn file_line(l: Lang, f: &FileRow, now: i64, zone: &TimeZone) -> String {
 }
 
 /// The parts a backup holds: `启动分区、系统分区`.
-pub fn parts(l: Lang, held: &[bool; 5]) -> String {
+pub fn parts(l: Lang, held: &[bool; 6]) -> String {
     list(l, BACKUP_PARTS.iter().zip(held).filter(|&(_, &on)| on).map(|(name, _)| l.pick(*name)))
 }
 
 /// What an image is, and what it holds.
-pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, &'static str) {
+pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, std::borrow::Cow<'static, str>) {
     use texts::image::{self, holds};
     let (name, holds) = match kind {
         ImageKind::Boot { kernel: true, ramdisk: Ramdisk::Recovery } => (image::RECOVERY, holds::KERNEL_AND_RECOVERY_RAMDISK),
@@ -782,23 +782,28 @@ pub fn image_kind(l: Lang, kind: ImageKind) -> (&'static str, &'static str) {
         ImageKind::Dtbo => (image::DTBO, holds::OVERLAYS),
         ImageKind::Vbmeta => (image::VBMETA, holds::VERIFIED_BOOT_DATA),
         ImageKind::Efisp => (texts::fork::image::EFISP, texts::fork::image::EFISP_HOLDS),
+        ImageKind::Super => (image::WHOLE_SUPER, holds::LOGICAL_PARTITIONS),
+        ImageKind::Filesystem(filesystem) => return (l.pick(image::PARTITION), holds::filesystem(l, filesystem.name()).into()),
+        ImageKind::Other => (image::PARTITION, holds::UNIDENTIFIED),
     };
-    (l.pick(name), l.pick(holds))
+    (l.pick(name), l.pick(holds).into())
 }
 
 /// What a partition an image can go to is for.
-pub fn partition_role(l: Lang, name: &str) -> &'static str {
+pub fn partition_role(l: Lang, partition: &FlashTarget) -> &'static str {
     use texts::image::role;
-    l.pick(match name {
-        "boot" => role::BOOT,
-        "init_boot" => role::INIT_BOOT,
-        "recovery" => role::RECOVERY,
-        "vendor_boot" => role::VENDOR_BOOT,
-        "dtbo" => role::DTBO,
-        "vbmeta" => role::VBMETA,
-        "vbmeta_system" => role::VBMETA_SYSTEM,
-        "vbmeta_vendor" => role::VBMETA_VENDOR,
-        _ => role::PARTITION,
+    l.pick(match (partition.place, partition.name.as_str()) {
+        (FlashPlace::Logical, _) => role::LOGICAL,
+        (FlashPlace::Single, _) => role::WHOLE_SUPER,
+        (FlashPlace::Slotted, "boot") => role::BOOT,
+        (FlashPlace::Slotted, "init_boot") => role::INIT_BOOT,
+        (FlashPlace::Slotted, "recovery") => role::RECOVERY,
+        (FlashPlace::Slotted, "vendor_boot") => role::VENDOR_BOOT,
+        (FlashPlace::Slotted, "dtbo") => role::DTBO,
+        (FlashPlace::Slotted, "vbmeta") => role::VBMETA,
+        (FlashPlace::Slotted, "vbmeta_system") => role::VBMETA_SYSTEM,
+        (FlashPlace::Slotted, "vbmeta_vendor") => role::VBMETA_VENDOR,
+        (FlashPlace::Slotted, _) => role::PARTITION,
     })
 }
 
@@ -1426,9 +1431,25 @@ mod tests {
 
     #[test]
     fn a_backup_lists_its_parts() {
-        assert_eq!(parts(HANS, &[true, true, false, true, false]), "启动分区、系统分区、基带与 EFS");
-        assert_eq!(parts(Lang::Hant, &[true, true, false, true, false]), "啟動分割區、系統分割區、基頻與 EFS");
-        assert_eq!(parts(Lang::En, &[true, true, true, true, false]), "Boot partitions, system partitions, data partition, modem and EFS");
+        assert_eq!(parts(HANS, &[true, true, false, false, true, false]), "启动分区、系统分区、基带与 EFS");
+        assert_eq!(parts(Lang::Hant, &[true, true, false, true, true, false]), "啟動分割區、系統分割區、內部儲存空間、基頻與 EFS");
+        assert_eq!(
+            parts(Lang::En, &[true, true, true, true, true, false]),
+            "Boot partitions, system partitions, data partition, internal storage, modem and EFS"
+        );
+    }
+
+    #[test]
+    fn a_data_partition_of_a_newer_android_is_said_not_to_go_back() {
+        let older = BackupRefusal::OlderAndroid { was: "17".into(), now: "16".into() };
+        assert_eq!(
+            backup_refusal(HANS, &older, true),
+            "该备份的 data 分区来自 Android 17，本机当前为 Android 16，无法恢复到更低的 Android 版本。"
+        );
+        assert_eq!(
+            backup_refusal(Lang::En, &older, true),
+            "This backup's data partition is from Android 17, and this phone runs Android 16. An older Android can't read it, so it can't be restored."
+        );
     }
 
     #[test]

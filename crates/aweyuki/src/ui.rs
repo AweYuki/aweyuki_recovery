@@ -531,7 +531,7 @@ fn backup_end(end: backup::End) -> BackupEnd {
             backup::Refusal::Update(state) => BackupRefusal::Update(state),
             backup::Refusal::OtherPhone(device) => BackupRefusal::OtherPhone(device),
             backup::Refusal::Resized(name) => BackupRefusal::Resized(name),
-            backup::Refusal::DataReset => BackupRefusal::DataReset,
+            backup::Refusal::OlderAndroid { was, now } => BackupRefusal::OlderAndroid { was, now },
         }),
         backup::End::Failed(why) => BackupEnd::Failed(why),
     }
@@ -3359,12 +3359,12 @@ impl Pages<'_> {
                     self.installer = Some(Installer::open(PathBuf::from(path), detach(self.programs.to_vec()), install_options(&self.app))?);
                 }
             }
-            Effect::Flash { partition, pick } => {
+            Effect::Flash { partition, place, pick } => {
                 let slots = if partition == "efisp" {
                     Vec::new()
                 } else {
                     let slot = aweyuki_vab::current_slot()?.context("not an A/B phone")?;
-                    pick.slots(slot)
+                    pick.slots(place, slot)
                 };
                 self.installer.as_ref().context("no installer holds an image")?.flash(partition, slots);
             }
@@ -4262,7 +4262,7 @@ impl Pages<'_> {
 
     /// Back the parts chosen up into `place`. An install still stopping may
     /// yet write; a backup waits for it.
-    fn back_up(&mut self, parts: [bool; 5], place: Place, compress: bool, verify: bool, now: u64) -> Result<()> {
+    fn back_up(&mut self, parts: [bool; 6], place: Place, compress: bool, verify: bool, now: u64) -> Result<()> {
         ensure!(self.backuper.is_none(), "a backup or restore is under way already");
         if self.installer.is_some() {
             self.app.report(self.app.state.lang.pick(INSTALL_UNFINISHED), now);
@@ -4289,8 +4289,9 @@ impl Pages<'_> {
             made,
             device: self.cfg.device.codename.clone(),
             system: self.info.os_version.clone(),
+            android: self.info.android.clone(),
             efs: self.cfg.backup.efs.clone(),
-            skipped: backup::data_skipped(&self.cfg.backup.data_skipped),
+            skipped: self.cfg.backup.data_skipped.clone(),
         };
         self.backuper = Some(backup::Worker::start(backup::Task::Backup(task))?);
         self.app.backup_started(false, place, verify);
@@ -4299,7 +4300,7 @@ impl Pages<'_> {
 
     /// Restore the parts chosen of the backup `name` in `place`. An install
     /// still stopping may yet write; a restore waits for it.
-    fn restore(&mut self, place: Place, name: &str, parts: [bool; 5], now: u64) -> Result<()> {
+    fn restore(&mut self, place: Place, name: &str, parts: [bool; 6], now: u64) -> Result<()> {
         ensure!(self.backuper.is_none(), "a backup or restore is under way already");
         if self.installer.is_some() {
             self.app.report(self.app.state.lang.pick(INSTALL_UNFINISHED), now);
@@ -4309,7 +4310,8 @@ impl Pages<'_> {
             folder: backups_in(place).join(name),
             parts,
             device: self.cfg.device.codename.clone(),
-            skipped: backup::data_skipped(&self.cfg.backup.data_skipped),
+            android: self.info.android.clone(),
+            skipped: self.cfg.backup.data_skipped.clone(),
             detach: detach(self.programs.to_vec()),
         };
         self.backuper = Some(backup::Worker::start(backup::Task::Restore(task))?);

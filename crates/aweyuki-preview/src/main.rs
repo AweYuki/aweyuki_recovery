@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use aweyuki_config::DeviceConfig;
 use aweyuki_info::{Battery, Boot, Charge, Cpu, DeviceInfo, PatchLevel, Storage};
-use aweyuki_install::{Failure, ImageKind, Outcome, Ramdisk, Reflash, Refusal, Stage};
+use aweyuki_install::{Failure, Filesystem, ImageKind, Outcome, Place as FlashPlace, Ramdisk, Reflash, Refusal, Stage, Target as FlashTarget};
 use aweyuki_net::download::{Failure as DownloadFailure, Progress};
 use aweyuki_net::github::{Build, Newest};
 use aweyuki_net::reach::Reach;
@@ -205,7 +205,13 @@ fn main() -> Result<()> {
 
     // The sideload page through an install, as the installer tells it.
     let recovery = ImageKind::Boot { kernel: false, ramdisk: Ramdisk::Recovery };
-    let installing: [(&str, bool, Install); 17] = [
+    let slotted = |name: &str| FlashTarget { name: name.into(), place: FlashPlace::Slotted };
+    // A filesystem image named for vendor, which fits every logical
+    // partition of a Xiaomi 13 Ultra.
+    let logical: Vec<FlashTarget> = ["vendor", "odm", "product", "system", "system_dlkm", "system_ext", "vendor_dlkm", "mi_ext"]
+        .map(|name| FlashTarget { name: name.into(), place: FlashPlace::Logical })
+        .to_vec();
+    let installing: [(&str, bool, Install); 22] = [
         ("30-sideload-waiting", false, Install::Waiting),
         ("31-sideload-checking", false, Install::Checking { size: 7_103_043_868, stage: None }),
         (
@@ -216,7 +222,40 @@ fn main() -> Result<()> {
         (
             "32-sideload-choosing",
             false,
-            Install::Choosing(Choice { kind: recovery, size: 43_257_856, partitions: vec!["recovery"], partition: 0, pick: Pick::Current }),
+            Install::Choosing(Choice { kind: recovery, size: 43_257_856, partitions: vec![slotted("recovery")], partition: 0, pick: Pick::Current }),
+        ),
+        (
+            "204-flash-choosing-logical",
+            false,
+            Install::Choosing(Choice {
+                kind: ImageKind::Filesystem(Filesystem::Erofs),
+                size: 1_610_612_736,
+                partitions: logical,
+                partition: 0,
+                pick: Pick::Current,
+            }),
+        ),
+        (
+            "204-flash-choosing-super-dark",
+            true,
+            Install::Choosing(Choice {
+                kind: ImageKind::Super,
+                size: 9_663_676_416,
+                partitions: vec![FlashTarget { name: "super".into(), place: FlashPlace::Single }],
+                partition: 0,
+                pick: Pick::Current,
+            }),
+        ),
+        (
+            "204-flash-choosing-named",
+            false,
+            Install::Choosing(Choice { kind: ImageKind::Other, size: 314_572_800, partitions: vec![slotted("modem")], partition: 0, pick: Pick::Both }),
+        ),
+        ("204-flash-resizing-dark", true, Install::Flashing { partition: "vendor".into(), stage: Some(Stage::Resizing) }),
+        (
+            "204-flash-flashed-super",
+            false,
+            Install::Finished { outcome: Outcome::Flashed { partition: "super".into(), slots: Vec::new() }, damage: None },
         ),
         (
             "33-sideload-writing-dark",
@@ -236,14 +275,14 @@ fn main() -> Result<()> {
                 overwriting: false,
             },
         ),
-        ("35-sideload-flashing", false, Install::Flashing { partition: "boot", stage: Some(Stage::Flashing { done: 300, total: 800 }) }),
+        ("35-sideload-flashing", false, Install::Flashing { partition: "boot".into(), stage: Some(Stage::Flashing { done: 300, total: 800 }) }),
         ("36-sideload-installed", false, Install::Finished { outcome: Outcome::Installed { slot: Slot::A, wipe: false }, damage: None }),
         ("96-sideload-light-wipes", false, Install::Confirming { version: Some("OS3.0.306.0.WMACNXM".into()), wipe: true }),
         ("18-install-ready", false, Install::Confirming { version: Some("OS3.0.306.0.WMACNXM".into()), wipe: false }),
         (
             "37-sideload-flashed-recovery-dark",
             true,
-            Install::Finished { outcome: Outcome::Flashed { partition: "recovery", slots: vec![Slot::A, Slot::B] }, damage: None },
+            Install::Finished { outcome: Outcome::Flashed { partition: "recovery".into(), slots: vec![Slot::A, Slot::B] }, damage: None },
         ),
         (
             "38-sideload-refused",
@@ -319,8 +358,8 @@ fn main() -> Result<()> {
         BackupEntry { place, name: fmt::stamp(made, State::default().zone()), held: Ok(held) }
     };
     let backups = vec![
-        made(Place::Storage, 1_792_348_260, 6_214_000_000, [true, true, false, true, false], "OS4.0.4.0.XPACNXM"),
-        made(Place::UsbDrive, 1_791_830_000, 141_000_000, [true, false, false, false, false], "OS4.0.3.0.XPACNXM"),
+        made(Place::Storage, 1_792_348_260, 58_214_000_000, [true, true, true, true, true, false], "OS4.0.4.0.XPACNXM"),
+        made(Place::UsbDrive, 1_791_830_000, 141_000_000, [true, false, false, false, false, false], "OS4.0.3.0.XPACNXM"),
         BackupEntry {
             place: Place::Storage,
             name: "20261020-221500".into(),
@@ -501,17 +540,17 @@ fn main() -> Result<()> {
         ("46-restore-light-none", Screen::Restore, false, &|_| {}),
         ("47-restore-light", Screen::Restore, false, &|app| app.set_backups(backups.clone())),
         ("48-restore-backup-light", Screen::RestoreBackup, false, &|app| {
-            app.state.restore = Some((backups[0].clone(), [true, false, false, true, false]));
+            app.state.restore = Some((backups[0].clone(), [true, false, true, true, true, false]));
         }),
         ("48-restore-backup-dark-deleting", Screen::RestoreBackup, true, &|app| {
-            app.state.restore = Some((backups[0].clone(), [true, true, false, true, false]));
+            app.state.restore = Some((backups[0].clone(), [true, true, false, false, true, false]));
             app.state.asking_delete = true;
         }),
         ("48-restore-backup-light-other-version", Screen::RestoreBackup, false, &|app| {
-            app.state.restore = Some((backups[1].clone(), [true, false, false, false, false]));
+            app.state.restore = Some((backups[1].clone(), [true, false, false, false, false, false]));
         }),
         ("48-restore-backup-light-unreadable", Screen::RestoreBackup, false, &|app| {
-            app.state.restore = Some((backups[2].clone(), [false; 5]));
+            app.state.restore = Some((backups[2].clone(), [false; 6]));
         }),
         ("100-backup-job-light-measuring", Screen::BackupJob, false, &|app| app.state.backup_job = job(false, Vec::new(), None, None)),
         ("101-backup-job-light", Screen::BackupJob, false, &|app| {
@@ -542,7 +581,8 @@ fn main() -> Result<()> {
             app.state.backup_job = job(true, plan(), at, Some(BackupEnd::Failed("write /dev/block/dm-61: Input/output error (os error 5)".into())))
         }),
         ("109-restore-job-dark-refused", Screen::BackupJob, true, &|app| {
-            app.state.backup_job = job(true, Vec::new(), None, Some(BackupEnd::Refused(BackupRefusal::DataReset)))
+            let older = BackupRefusal::OlderAndroid { was: "17".into(), now: "16".into() };
+            app.state.backup_job = job(true, Vec::new(), None, Some(BackupEnd::Refused(older)))
         }),
         ("49-advanced-light", Screen::Advanced, false, &|_| {}),
         ("50-files-light", Screen::Files, false, &|app| app.set_files("/".into(), Ok(sample_root()), LISTED)),

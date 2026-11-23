@@ -101,7 +101,9 @@ pub fn infer_partition(file_name: &str, kind: Option<ImageKind>) -> Option<(Stri
             };
             Some((name.into(), true))
         }
-        None => known_raw_stem(stem).map(|(p, s)| (p.into(), s)),
+        Some(ImageKind::Super | ImageKind::Filesystem(_) | ImageKind::Other) | None => {
+            known_raw_stem(stem).map(|(p, s)| (p.into(), s))
+        }
     }
 }
 
@@ -149,7 +151,9 @@ pub fn inspect_file(path: &Path, by_name: &Path, slot: Option<Slot>) -> Result<B
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let kind = image::detect(&mut file, &head).ok().flatten();
+    let kind = image::detect(&mut file, &head)
+        .ok()
+        .filter(|k| !matches!(k, ImageKind::Other | ImageKind::Super | ImageKind::Filesystem(_)));
     let Some((partition, default_slotted)) = infer_partition(&file_name, kind) else {
         return Ok(BatchItem {
             path: path.to_path_buf(),

@@ -2,8 +2,8 @@ use crate::app::{
     Action, BackupAt, BackupEnd, BackupJob, BatchSource, BenchTarget, Check, ClashChoice, Confirm, Damage, Data, Dock, DownloadEnd, EraseStop,
     Field, FileKind, FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, LockSetupStage,
     PayloadState, Pick, Place, PluginEnd, Region, Rows, Screen, ShareRoot, AweyukiCheck, AweyukiEnd, AweyukiJob, AweyukiStage, Slider, Source, State,
-    Switch, SystemsWork, Target, TgField, UsbDrive, UsbLink, VaultTab, Wipe, ADDABLE, BACKUP_PARTS, DATA_PARTITION, DOWNLOADS,
-    FASTBOOT_CHOICES, SCREEN_OFF, TARGETS, TIME_ZONES, USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UTC, WIPES, installs, listed, starting,
+    Switch, SystemsWork, Target, TgField, UsbDrive, UsbLink, VaultTab, Wipe, ADDABLE, BACKUP_PARTS, DATA_PART, DATA_PARTITION, DOWNLOADS,
+    FASTBOOT_CHOICES, MEDIA_PART, SCREEN_OFF, TARGETS, TIME_ZONES, USB_DRIVE_UNREADABLE, USB_DRIVE_WANTED, UTC, WIPES, installs, listed, starting,
 };
 use crate::canvas::Canvas;
 use crate::color::Rgba;
@@ -21,7 +21,7 @@ use crate::icons::{self, Icon};
 use crate::widgets::{self, Caption, Detail, Fact, Outline, Row, Spec, SystemCard, SystemMark, Tone, Trail};
 use aweyuki_info::{DeviceInfo, VERSION};
 use aweyuki_install::aerap::{AerapKind, browser_proto::WIDTH as AERAP_BROWSER_W, browser_proto::HEIGHT as AERAP_BROWSER_H, telegram_proto::TgAuthState};
-use aweyuki_install::{Outcome, Reflash, Refusal, Stage};
+use aweyuki_install::{Outcome, Place as FlashPlace, Reflash, Refusal, Stage};
 use aweyuki_net::download::Progress;
 use aweyuki_net::supplicant::Security;
 use aweyuki_net::wlan::{Bands, Network, Power, Stage as Joining};
@@ -931,7 +931,10 @@ fn update_stage(l: Lang, stage: Option<&Stage>) -> (String, Option<f32>) {
         }
         Some(Stage::Finishing) => (l.pick(texts::installing::UPDATE_FINISHING).into(), None),
         Some(Stage::Reflashing { done, total }) => (l.pick(texts::installing::REFLASHING).into(), Some(*done as f32 / *total as f32)),
-        Some(Stage::Flashing { .. } | Stage::Script { .. } | Stage::Signature { .. } | Stage::Allocating { .. } | Stage::Root { .. } | Stage::Storing) | None => {
+        Some(
+            Stage::Resizing | Stage::Flashing { .. } | Stage::Script { .. } | Stage::Signature { .. } | Stage::Allocating { .. } | Stage::Root { .. } | Stage::Storing,
+        )
+        | None => {
             (l.pick(texts::installing::GETTING_READY).into(), None)
         }
     }
@@ -1090,28 +1093,38 @@ pub fn installing(cx: &Ctx) -> Frame {
         }
         Install::Choosing(choice) => {
             let (name, holds) = fmt::image_kind(l, choice.kind);
-            let detail = texts::installing::size_and_holds(l, fmt::bytes(choice.size), holds);
+            let detail = texts::installing::size_and_holds(l, fmt::bytes(choice.size), &holds);
             let y = widgets::list(&mut c, t, f, top, &[standing(name, GREEN, Icon::Install, &detail)]).bottom;
             let y = widgets::section(&mut c, t, f, y, l.pick(texts::flash::PARTITION));
             let rows: Vec<Row> = choice
                 .partitions
                 .iter()
                 .enumerate()
-                .map(|(k, p)| Row::new(p).subtitle(fmt::partition_role(l, p)).trail(Trail::Check(k == choice.partition)))
+                .map(|(k, p)| Row::new(&p.name).subtitle(fmt::partition_role(l, p)).trail(Trail::Check(k == choice.partition)))
                 .collect();
             let parts = widgets::list(&mut c, t, f, y, &rows);
             let choose: Vec<Action> = (0..choice.partitions.len()).map(Action::FlashPartition).collect();
             out.extend(hits(&parts.rows, &choose));
-            let mut bottom = parts.bottom;
-            if choice.kind.slotted() {
-                let y = widgets::section(&mut c, t, f, bottom, l.pick(texts::slot::TITLE));
-                let titles = Pick::ALL.map(|p| pick_title(l, p, i.slot));
-                let rows: Vec<Row> =
-                    Pick::ALL.iter().zip(&titles).map(|(p, title)| Row::new(title).trail(Trail::Check(*p == choice.pick))).collect();
-                let picks = widgets::list(&mut c, t, f, y, &rows);
-                out.extend(hits(&picks.rows, &Pick::ALL.map(Action::FlashSlots)));
-                bottom = picks.bottom;
-            }
+            // A partition the phone has in each slot goes to the slots
+            // picked, and a logical one to the slot the phone runs from,
+            // which is shown with nothing to pick; super is in no slot.
+            let bottom = match choice.partitions[choice.partition].place {
+                FlashPlace::Slotted => {
+                    let y = widgets::section(&mut c, t, f, parts.bottom, l.pick(texts::slot::TITLE));
+                    let titles = Pick::ALL.map(|p| pick_title(l, p, i.slot));
+                    let rows: Vec<Row> =
+                        Pick::ALL.iter().zip(&titles).map(|(p, title)| Row::new(title).trail(Trail::Check(*p == choice.pick))).collect();
+                    let picks = widgets::list(&mut c, t, f, y, &rows);
+                    out.extend(hits(&picks.rows, &Pick::ALL.map(Action::FlashSlots)));
+                    picks.bottom
+                }
+                FlashPlace::Logical => {
+                    let y = widgets::section(&mut c, t, f, parts.bottom, l.pick(texts::slot::TITLE));
+                    let title = pick_title(l, Pick::Current, i.slot);
+                    widgets::list(&mut c, t, f, y, &[Row::new(&title).trail(Trail::Check(true))]).bottom
+                }
+                FlashPlace::Single => parts.bottom,
+            };
             let (label, danger) = confirm_label(Confirm::Flash, cx.state);
             let track = widgets::confirm(&mut c, t, f, bottom + t.m.dp(28.0), label, danger, s.confirm);
             out.push(Hit { rect: track, action: Action::Confirm(Confirm::Flash) });
@@ -1251,7 +1264,7 @@ pub fn installing(cx: &Ctx) -> Frame {
             }
             widgets::footnote(&mut c, t, f, y, l.pick(texts::installing::MORE_COMMANDS))
         }
-        Install::Finished { outcome, damage } => finished(&mut c, cx, top, outcome, *damage, &mut out, &mut rows),
+        Install::Finished { outcome, damage } => finished(&mut c, cx, top, outcome, damage.as_ref(), &mut out, &mut rows),
     };
     // What the system asked for says why, where it said.
     let bottom = match (s.source, &s.asked.reason) {
@@ -1283,7 +1296,7 @@ fn finished(
     cx: &Ctx,
     top: f32,
     outcome: &Outcome,
-    damage: Option<Damage>,
+    damage: Option<&Damage>,
     out: &mut Vec<Hit>,
     rows: &mut Option<Rows>,
 ) -> f32 {
@@ -1311,6 +1324,7 @@ fn finished(
         }
         Outcome::Flashed { partition, slots } => {
             let detail = match slots.as_slice() {
+                [] => installed::flashed_whole(l, partition),
                 [slot] => installed::flashed_one(l, partition, slot.letter()),
                 [a, b] => installed::flashed_two(l, partition, a.letter(), b.letter()),
                 other => unreachable!("a phone has two slots, and the image went to {other:?}"),
@@ -1545,15 +1559,15 @@ pub fn backup(cx: &Ctx) -> Frame {
     let top = t.m.content_top;
     let y = widgets::section_first(&mut c, t, f, top, l.pick(texts::backup::CONTENTS));
     let system = fmt::snapshot_backup_note(l, &i.snapshot).unwrap_or(l.pick(texts::backup::SYSTEM_HOLDS));
-    let data = l.pick(match s.data == Data::Open {
-        true => texts::backup::DATA_HOLDS,
-        false => texts::backup::DATA_HOLDS_LOCKED,
-    });
+    let (data, media) = match s.data == Data::Open {
+        true => (texts::backup::DATA_HOLDS, texts::backup::MEDIA_HOLDS),
+        false => (texts::backup::DATA_HOLDS_LOCKED, texts::backup::MEDIA_HOLDS_LOCKED),
+    };
     let boot = l.pick(texts::backup::BOOT_HOLDS);
     let modem = l.pick(texts::backup::MODEM_HOLDS);
     let efisp = l.pick(texts::fork::backup::EFISP_HOLDS);
-    let subs = [boot, system, data, modem, efisp];
-    let shown: Vec<usize> = (0..4).chain(s.efisp_partition.then_some(4)).collect();
+    let subs = [boot, system, l.pick(data), l.pick(media), modem, efisp];
+    let shown: Vec<usize> = (0..5).chain(s.efisp_partition.then_some(5)).collect();
     let rows: Vec<Row> = shown
         .iter()
         .map(|&k| Row::new(l.pick(BACKUP_PARTS[k])).subtitle(subs[k]).trail(Trail::Check(s.backup[k])))
@@ -1657,8 +1671,11 @@ pub fn restore_backup(cx: &Ctx) -> Frame {
                 let list = widgets::list(&mut c, t, f, y, &rows);
                 out.extend(list.rows.iter().zip(&kept).map(|(&rect, &k)| Hit { rect, action: Action::RestorePart(k) }));
                 let mut y = widgets::footnote(&mut c, t, f, list.bottom, l.pick(texts::restore::OVERWRITES));
-                if chosen[2] {
+                if chosen[DATA_PART] {
                     y = widgets::footnote(&mut c, t, f, y, l.pick(texts::restore::DATA_NOTE));
+                }
+                if chosen[MEDIA_PART] {
+                    y = widgets::footnote(&mut c, t, f, y, l.pick(texts::restore::MEDIA_NOTE));
                 }
                 // The boot partitions' vbmeta checks the system's: one of
                 // another version without the other may not start.
@@ -3571,7 +3588,7 @@ mod tests {
         r.outcome = Some(BackupEnd::Failed("write /dev/block/by-name/boot_b".into()));
         assert_eq!(states(&r), ["未完成", "未恢复"]);
         r.at = None;
-        r.outcome = Some(BackupEnd::Refused(BackupRefusal::DataReset));
+        r.outcome = Some(BackupEnd::Refused(BackupRefusal::OlderAndroid { was: "17".into(), now: "16".into() }));
         assert_eq!(states(&r), ["未开始", "未开始"]);
     }
 

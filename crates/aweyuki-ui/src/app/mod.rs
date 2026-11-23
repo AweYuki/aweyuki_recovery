@@ -24,7 +24,7 @@ use crate::texts;
 use crate::theme::Theme;
 use crate::widgets::{self, Bar, Bolt, Cap, Layer, WlanMark};
 use aweyuki_info::DeviceInfo;
-use aweyuki_install::{Event, ImageKind, Outcome, Reflash, Refusal, Stage};
+use aweyuki_install::{Event, ImageKind, Outcome, Place as FlashPlace, Reflash, Refusal, Stage, Target as FlashTarget};
 use aweyuki_net::download::{Failure, Progress};
 use aweyuki_net::github::{Build, Newest};
 use aweyuki_net::release::{Release, Unanswered};
@@ -582,9 +582,9 @@ pub enum Effect {
     /// Start installing the file at this full path, opened in the file
     /// manager, telling how it goes as [`Effect::Sideload`] does.
     InstallPath(String),
-    /// Write the image the installer holds to `partition` in the slots
-    /// `pick` means.
-    Flash { partition: &'static str, pick: Pick },
+    /// Write the image the installer holds to `partition`, which lies in
+    /// `place`, in the slots `pick` means there.
+    Flash { partition: String, place: FlashPlace, pick: Pick },
     /// Stop waiting for the computer, for where an image goes, or for an
     /// update to be agreed to.
     Cancel,
@@ -696,10 +696,10 @@ pub enum Effect {
     /// a folder of their own in `place`, telling how it goes with
     /// [`App::backup_started`], [`App::backup_plan`], [`App::backup_at`]
     /// and [`App::backup_ended`].
-    Backup { parts: [bool; 5], place: Place, compress: bool, verify: bool },
+    Backup { parts: [bool; 6], place: Place, compress: bool, verify: bool },
     /// Restore the parts ticked of the backup in the folder `name` of
     /// `place`, telling how it goes as a backup does.
-    Restore { place: Place, name: String, parts: [bool; 5] },
+    Restore { place: Place, name: String, parts: [bool; 6] },
     /// Look for backups in the places that can be read, telling what is
     /// found with [`App::set_backups`].
     FindBackups { storage: bool, usb: bool },

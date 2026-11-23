@@ -3,13 +3,20 @@
 use super::*;
 
 /// What a backup can take, in the order the backup page lists it.
-pub const BACKUP_PARTS: [Text; 5] = [
+pub const BACKUP_PARTS: [Text; 6] = [
     texts::backup::part::BOOT,
     texts::backup::part::SYSTEM,
     texts::backup::part::DATA,
+    texts::backup::part::MEDIA,
     texts::backup::part::MODEM,
     texts::backup::part::EFISP,
 ];
+
+/// Where the data partition's files and the users' own in internal storage
+/// are among [`BACKUP_PARTS`]: both are read and written only with every
+/// user's files open.
+pub const DATA_PART: usize = 2;
+pub const MEDIA_PART: usize = 3;
 
 /// A backup found in a place's Aweyuki/backups folder.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,7 +37,7 @@ pub struct Held {
     /// The bytes its files take.
     pub size: u64,
     /// Which of [`BACKUP_PARTS`] it holds.
-    pub parts: [bool; 5],
+    pub parts: [bool; 6],
     /// The phone it was made on, by its codename, the system it ran, as
     /// its version reads, and the slot it was made from.
     pub device: String,
@@ -98,9 +105,10 @@ pub enum BackupRefusal {
     /// This partition is not the size it was backed up at, as after an
     /// update.
     Resized(String),
-    /// The data partition has been made afresh since the backup, as a
-    /// factory reset makes it: the files backed up would not open in it.
-    DataReset,
+    /// The data partition was backed up on a newer Android than the phone
+    /// runs, which does not read its files: the release the backup was
+    /// made on, and the phone's.
+    OlderAndroid { was: String, now: String },
 }
 
 impl App {
@@ -185,26 +193,30 @@ mod tests {
     fn a_backup_takes_what_is_ticked_to_where_it_is_sent() {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Backup, &f, &i);
-        assert_eq!(app.state.backup, [true, true, false, true, false]);
+        assert_eq!(app.state.backup, [true, true, false, false, true, false]);
         assert!(swipe(&mut app, &f, &i, Confirm::Backup).is_empty(), "internal storage waits for the data partition");
         assert_eq!(app.deadline(0), Some(TOAST_MS), "and says so");
         // The owner's files open first; another user's still wait.
         app.data_waiting(Some((10, Keys::Digits)));
-        let first = Effect::Backup { parts: [true, true, false, true, false], place: Place::Storage, compress: false, verify: true };
+        let first = Effect::Backup { parts: [true, true, false, false, true, false], place: Place::Storage, compress: false, verify: true };
         assert_eq!(swipe(&mut app, &f, &i, Confirm::Backup), vec![first]);
-        tap(&mut app, &f, &i, Action::BackupPart(2));
-        assert!(swipe(&mut app, &f, &i, Confirm::Backup).is_empty(), "the data partition is backed up only with every user's files open");
+        tap(&mut app, &f, &i, Action::BackupPart(MEDIA_PART));
+        assert!(swipe(&mut app, &f, &i, Confirm::Backup).is_empty(), "the users' own files are backed up only with every user's files open");
+        tap(&mut app, &f, &i, Action::BackupPart(MEDIA_PART));
+        tap(&mut app, &f, &i, Action::BackupPart(DATA_PART));
+        assert!(swipe(&mut app, &f, &i, Confirm::Backup).is_empty(), "and so is the data partition");
         app.data_waiting(None);
         tap(&mut app, &f, &i, Action::BackupPart(0));
-        assert_eq!(app.state.backup, [false, true, true, true, false]);
+        assert_eq!(app.state.backup, [false, true, true, false, true, false]);
         tap(&mut app, &f, &i, Action::BackupTo(Place::UsbDrive));
         tap(&mut app, &f, &i, Action::Toggle(Switch::Compress));
         tap(&mut app, &f, &i, Action::Toggle(Switch::Verify));
         assert!(swipe(&mut app, &f, &i, Confirm::Backup).is_empty(), "no drive is plugged in");
         app.set_usb_drive(Some(UsbDrive::Shown));
-        let second = Effect::Backup { parts: [false, true, true, true, false], place: Place::UsbDrive, compress: true, verify: false };
+        tap(&mut app, &f, &i, Action::BackupPart(MEDIA_PART));
+        let second = Effect::Backup { parts: [false, true, true, true, true, false], place: Place::UsbDrive, compress: true, verify: false };
         assert_eq!(swipe(&mut app, &f, &i, Confirm::Backup), vec![second]);
-        for k in 1..4 {
+        for k in 1..5 {
             tap(&mut app, &f, &i, Action::BackupPart(k));
         }
         assert!(swipe(&mut app, &f, &i, Confirm::Backup).is_empty(), "nothing ticked, nothing backed up");
@@ -214,23 +226,23 @@ mod tests {
     fn efisp_backup_is_offered_only_when_present_and_unchecked_by_default() {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Backup, &f, &i);
-        let offered = |app: &mut App| app.frame(&f, &i).hits.iter().any(|h| h.action == Action::BackupPart(4));
+        let offered = |app: &mut App| app.frame(&f, &i).hits.iter().any(|h| h.action == Action::BackupPart(5));
         assert!(!offered(&mut app));
 
         app.state.efisp_partition = true;
         app.refresh();
         assert!(offered(&mut app));
-        assert!(!app.state.backup[4]);
+        assert!(!app.state.backup[5]);
         app.data_waiting(None);
-        tap(&mut app, &f, &i, Action::BackupPart(4));
+        tap(&mut app, &f, &i, Action::BackupPart(5));
         assert_eq!(
             swipe(&mut app, &f, &i, Confirm::Backup),
-            vec![Effect::Backup { parts: [true, true, false, true, true], place: Place::Storage, compress: false, verify: true }]
+            vec![Effect::Backup { parts: [true, true, false, false, true, true], place: Place::Storage, compress: false, verify: true }]
         );
     }
 
     /// A backup found in `place`, made at `made`, holding `parts`.
-    fn found(place: Place, made: i64, parts: [bool; 5]) -> BackupEntry {
+    fn found(place: Place, made: i64, parts: [bool; 6]) -> BackupEntry {
         let held = Held {
             made,
             size: 6_200_000_000,
@@ -248,7 +260,7 @@ mod tests {
         let mut app = App::new(Screen::Home, W, H, PPD);
         assert_eq!(tap(&mut app, &f, &i, Action::Open(Screen::Restore)), vec![Effect::FindBackups { storage: false, usb: false }]);
         let unread = BackupEntry { place: Place::Storage, name: "20261021-150000".into(), held: Err("read backup.toml: not found".into()) };
-        let (old, new) = (found(Place::UsbDrive, 1_792_000_000, [true; 5]), found(Place::Storage, 1_792_348_260, [true; 5]));
+        let (old, new) = (found(Place::UsbDrive, 1_792_000_000, [true; 6]), found(Place::Storage, 1_792_348_260, [true; 6]));
         app.set_backups(vec![unread.clone(), old.clone(), new.clone()]);
         assert_eq!(app.state.backups, [new, old, unread]);
         let opens = app.frame(&f, &i).hits.iter().filter(|h| matches!(h.action, Action::OpenBackup(_))).count();
@@ -260,21 +272,21 @@ mod tests {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Restore, &f, &i);
         assert!(app.frame(&f, &i).hits.is_empty(), "nothing found, nothing to open");
-        app.set_backups(vec![found(Place::Storage, 1_792_348_260, [true, true, false, true, false])]);
+        app.set_backups(vec![found(Place::Storage, 1_792_348_260, [true, true, false, false, true, false])]);
         tap(&mut app, &f, &i, Action::OpenBackup(0));
         assert_eq!(app.screen(), Screen::RestoreBackup);
         let parts: Vec<Action> =
             app.frame(&f, &i).hits.iter().map(|h| h.action).filter(|a| matches!(a, Action::RestorePart(_))).collect();
-        assert_eq!(parts, [Action::RestorePart(0), Action::RestorePart(1), Action::RestorePart(3)], "only what the backup holds");
+        assert_eq!(parts, [Action::RestorePart(0), Action::RestorePart(1), Action::RestorePart(4)], "only what the backup holds");
         tap(&mut app, &f, &i, Action::RestorePart(1));
-        assert_eq!(app.state.restore.as_ref().map(|r| r.1), Some([true, false, false, true, false]));
+        assert_eq!(app.state.restore.as_ref().map(|r| r.1), Some([true, false, false, false, true, false]));
         let name = fmt::stamp(1_792_348_260, State::default().zone());
         assert_eq!(swipe(&mut app, &f, &i, Confirm::Restore), vec![Effect::Restore {
             place: Place::Storage,
             name: name.clone(),
-            parts: [true, false, false, true, false]
+            parts: [true, false, false, false, true, false]
         }]);
-        for k in [0, 3] {
+        for k in [0, 4] {
             tap(&mut app, &f, &i, Action::RestorePart(k));
         }
         assert!(swipe(&mut app, &f, &i, Confirm::Restore).is_empty(), "nothing ticked, nothing restored");
@@ -286,20 +298,20 @@ mod tests {
     fn a_data_backup_is_restored_only_with_every_users_files_open() {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Restore, &f, &i);
-        app.set_backups(vec![found(Place::Storage, 1_792_348_260, [false, false, true, false, false])]);
+        app.set_backups(vec![found(Place::Storage, 1_792_348_260, [false, false, true, false, false, false])]);
         tap(&mut app, &f, &i, Action::OpenBackup(0));
         assert!(swipe(&mut app, &f, &i, Confirm::Restore).is_empty());
         assert_eq!(app.deadline(0), Some(TOAST_MS), "the page says to decrypt first");
         app.data_waiting(None);
         let fx = swipe(&mut app, &f, &i, Confirm::Restore);
-        assert!(matches!(&fx[..], [Effect::Restore { parts: [false, false, true, false, false], .. }]), "{fx:?}");
+        assert!(matches!(&fx[..], [Effect::Restore { parts: [false, false, true, false, false, false], .. }]), "{fx:?}");
     }
 
     #[test]
     fn a_backup_made_on_another_phone_is_not_restored_here() {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Restore, &f, &i);
-        let mut other = found(Place::Storage, 1_792_348_260, [true; 5]);
+        let mut other = found(Place::Storage, 1_792_348_260, [true; 6]);
         other.held.as_mut().unwrap().device = "aurora".into();
         let unread = BackupEntry { place: Place::Storage, name: "20261021-150000".into(), held: Err("read backup.toml: not found".into()) };
         app.set_backups(vec![other, unread]);
