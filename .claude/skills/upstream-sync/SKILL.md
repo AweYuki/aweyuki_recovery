@@ -22,11 +22,10 @@ These are not style choices. Each one has a reason outside the source tree.
 | Thing | Why it stays |
 | --- | --- |
 | `b"SKYWARD AREA\0\0\0\x01"` in `crates/aweyuki-block/src/area.rs` | The magic written at the head of every area. A phone with a second system already installed has areas carrying it; renaming it makes that system's root and boot store unreadable. |
-| `SKYWARD.project`, `SKYWARD.project-inherit`, `SKYWARD.key-root` in `crates/aweyuki-backup/src/archive.rs` | Extended-header names in backup tars. A backup made before the rename must still restore its project quota and fscrypt key roots. |
+| `AWE.project`, `AWE.project-inherit`, `AWE.key-root` in `crates/aweyuki-backup/src/archive.rs` (with `SKYWARD.*` fallback on read) | Extended-header names in backup tars. New backups write `AWE.*`, and `SKYWARD.*` is still accepted on restore so backups made before the rename restore their project quota and fscrypt key roots. |
 | `Skyward test package` in `crates/aweyuki-install/src/signature.rs` | Text inside `crates/aweyuki-install/tests/signature/signed-*.zip`, which was signed upstream. Rewriting the literal makes the signature test fail for a reason that has nothing to do with the test. |
-| `Lang::Vi`, `[Lang; 4]`, `pub fn pick(self, [&str; 3]) -> &'static str` | Vietnamese is looked up by its Chinese and English texts in `lang/vi.rs`, so `pick` returns `&'static str` and cannot be the generic `pick<T>` upstream has. Every `pick` call site here already relies on that. |
+| 15-language `crates/aweyuki-ui/locales/*.toml` + `build.rs` + `texts.rs` | Fork-only UI strings live under `[fork.*]` and `[backup.part] efisp` in all 15 `locales/*.toml` files (`en.toml` is the reference; `vi.toml` carries Vietnamese; others fall back to English for fork-only keys). |
 | `lang: Lang::En` in `crates/aweyuki-ui/src/app/state.rs` and `request.locale.as_deref()` alone in `crates/aweyuki/src/ui.rs` | Recovery defaults to English unless a language was chosen on the Language page, requested via `--locale` in BCB, or spoken last; `ro.product.locale` is ignored because China ROMs pin it to `zh-CN`. |
-| `tr!(l, hans, hant, en, vi)` | The macro takes four texts here, not three. |
 | `AweYuki/aweyuki_recovery` and the `aweyuki-` release prefix in `crates/aweyuki-net/src/github.rs` | That is where this fork's releases are. Upstream's address would offer upstream's images to phones running this build. |
 
 `scripts/check-invariants.sh` tests all of these. Run it before every commit.

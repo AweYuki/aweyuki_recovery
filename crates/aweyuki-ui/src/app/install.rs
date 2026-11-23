@@ -692,7 +692,14 @@ mod tests {
     fn arm64_efi_flashes_non_slotted_efisp_without_slot_picker() {
         let (f, i) = (fonts(), info());
         let mut app = sideloading(&f, &i);
-        app.install(Event::Image { kind: ImageKind::Efisp, size: 128 * 1024, partitions: vec!["efisp"] }, 0);
+        app.install(
+            Event::Image {
+                kind: ImageKind::Efisp,
+                size: 128 * 1024,
+                partitions: vec![aweyuki_install::Target { name: "efisp".into(), place: aweyuki_install::Place::Single }],
+            },
+            0,
+        );
         let track = {
             let hits = &app.frame(&f, &i).hits;
             assert!(hits.iter().all(|h| !matches!(h.action, Action::FlashSlots(_))), "efisp offers no slot picker");
@@ -701,6 +708,9 @@ mod tests {
         let y = track.centre().1 - app.top().1;
         app.touch(Touch::Down(track.x + track.h / 2.0, y), &f, 1000);
         app.touch(Touch::Move(track.x + track.w, y), &f, 1000);
-        assert_eq!(app.touch(Touch::Up, &f, 1000), vec![Effect::Flash { partition: "efisp", pick: Pick::Current }]);
+        assert_eq!(
+            app.touch(Touch::Up, &f, 1000),
+            vec![Effect::Flash { partition: "efisp".into(), place: aweyuki_install::Place::Single, pick: Pick::Current }]
+        );
     }
 }

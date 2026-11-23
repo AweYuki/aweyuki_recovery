@@ -135,6 +135,7 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 | --- | --- | --- |
 | 小米 17 Ultra | `nezha` | OS4.0.4.0.XPACNXM（Android 17） |
 | 小米 13 Ultra | `ishtar` | OS3.0.308.0.WMACNXM（Android 16） |
+| REDMI K60 Pro | `socrates` | OS4.0.0.24.XMKCNXM（Android 17） |
 | 小米 13 Pro | `nuwa` | OS3.0.312.0.WMBCNXM（Android 16） |
 
 ### 🚧 施工中
@@ -178,8 +179,8 @@ GitHub Actions 会自动发现并构建 `devices/*.toml` 中的所有机型配�
 Aweyuki 需要已解锁的 bootloader。从 [Releases](https://github.com/AweYuki/aweyuki_recovery/releases) 下载对应机型的 zip，每个文件都标有机型和代号，例如 Xiaomi 17 Ultra (nezha)。使用 `SHA256SUMS` 核对并解压之后，在手机处于 fastboot 模式的时候，把其中的镜像刷入当前运行槽位的 recovery 分区：
 
 ```sh
-unzip aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.zip
-fastboot flash recovery aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.img
+unzip aweyuki-v0.5.1-nezha-OS4.0.4.0.XPACNXM.zip
+fastboot flash recovery aweyuki-v0.5.1-nezha-OS4.0.4.0.XPACNXM.img
 fastboot reboot recovery
 ```
 

@@ -135,6 +135,7 @@ Run `plugin.toml` shell plugins with live streaming output and cancellation, alo
 | --- | --- | --- |
 | Xiaomi 17 Ultra | `nezha` | OS4.0.4.0.XPACNXM (Android 17) |
 | Xiaomi 13 Ultra | `ishtar` | OS3.0.308.0.WMACNXM (Android 16) |
+| REDMI K60 Pro | `socrates` | OS4.0.0.24.XMKCNXM (Android 17) |
 | Xiaomi 13 Pro | `nuwa` | OS3.0.312.0.WMBCNXM (Android 16) |
 
 ### 🚧 Under construction
@@ -187,8 +188,8 @@ phone's model and codename, such as Xiaomi 17 Ultra (nezha). Check it against
 the slot the phone runs from, with the phone in fastboot mode:
 
 ```sh
-unzip aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.zip
-fastboot flash recovery aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.img
+unzip aweyuki-v0.5.1-nezha-OS4.0.4.0.XPACNXM.zip
+fastboot flash recovery aweyuki-v0.5.1-nezha-OS4.0.4.0.XPACNXM.img
 fastboot reboot recovery
 ```
 

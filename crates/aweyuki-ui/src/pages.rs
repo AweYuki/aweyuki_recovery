@@ -5032,7 +5032,7 @@ mod fork_tests {
         r.outcome = Some(BackupEnd::Failed("write /dev/block/by-name/boot_b".into()));
         assert_eq!(states(&r), ["未完成", "未恢复"]);
         r.at = None;
-        r.outcome = Some(BackupEnd::Refused(BackupRefusal::DataReset));
+        r.outcome = Some(BackupEnd::Refused(BackupRefusal::OtherPhone("aurora".into())));
         assert_eq!(states(&r), ["未开始", "未开始"]);
     }
 

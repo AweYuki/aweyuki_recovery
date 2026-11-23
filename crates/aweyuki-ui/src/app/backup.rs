@@ -328,7 +328,7 @@ mod tests {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Restore, &f, &i);
         app.data_waiting(None);
-        let entry = found(Place::Storage, 1_792_348_260, [true; 5]);
+        let entry = found(Place::Storage, 1_792_348_260, [true; 6]);
         app.set_backups(vec![entry.clone()]);
         tap(&mut app, &f, &i, Action::OpenBackup(0));
         assert!(app.frame(&f, &i).hits.iter().all(|h| h.action != Action::Confirm(Confirm::DeleteBackup)), "asked for first");
@@ -346,7 +346,7 @@ mod tests {
         let mut app = App::new(Screen::Home, W, H, PPD);
         app.set_usb_drive(Some(UsbDrive::Shown));
         assert_eq!(tap(&mut app, &f, &i, Action::Open(Screen::Restore)), vec![Effect::FindBackups { storage: false, usb: true }]);
-        app.set_backups(vec![found(Place::UsbDrive, 1_792_348_260, [true; 5])]);
+        app.set_backups(vec![found(Place::UsbDrive, 1_792_348_260, [true; 6])]);
         tap(&mut app, &f, &i, Action::OpenBackup(0));
         assert_eq!(app.set_usb_drive(None), vec![Effect::FindBackups { storage: false, usb: false }]);
         assert_eq!((app.screen(), app.state.restore.clone()), (Screen::Restore, None));
@@ -376,7 +376,7 @@ mod tests {
     fn a_restore_checks_its_backup_first_and_goes_on_to_its_end_once_writing() {
         let (f, i) = (fonts(), info());
         let mut app = opened(Screen::Restore, &f, &i);
-        app.set_backups(vec![found(Place::Storage, 1_792_348_260, [true; 5])]);
+        app.set_backups(vec![found(Place::Storage, 1_792_348_260, [true; 6])]);
         tap(&mut app, &f, &i, Action::OpenBackup(0));
         app.backup_started(true, Place::Storage, true);
         app.backup_plan(vec![("boot".into(), 200), ("data".into(), 800)]);

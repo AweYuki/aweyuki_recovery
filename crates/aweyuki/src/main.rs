@@ -605,10 +605,11 @@ fn main() -> Result<()> {
         Cmd::Services { config } => {
             let slot = booted_slot()?;
             let props = aweyuki_info::installed_props(slot)?;
-            let services: Vec<Started> = DeviceConfig::load(&config)?.services.into_iter().filter(|s| s.runs_on(&props)).map(Started::from).collect();
+            let cfg = DeviceConfig::load(&config)?;
+            let services: Vec<Started> = cfg.services.iter().filter(|s| s.runs_on(&props)).cloned().map(Started::from).collect();
             let libraries = secure::libraries()?;
             services::start(&services, libraries.as_deref())?;
-            keys::start(&keys::found(slot, libraries.as_deref())?.steps?)?;
+            keys::start(&keys::found(slot, libraries.as_deref())?.steps?, &module_folders(&cfg)?)?;
             loop {
                 std::thread::park();
             }
@@ -822,10 +823,15 @@ fn lp(super_dev: &Path, slot: Option<u32>) -> Result<()> {
     Ok(())
 }
 
+/// The folders of the module sources the configuration lists, in the
+/// order a module is looked for in them.
+fn module_folders(cfg: &DeviceConfig) -> Result<Vec<PathBuf>> {
+    cfg.modules.sources.iter().map(|s| aweyuki_modules::source_dir(s)).collect()
+}
+
 /// Load `names` from the module sources the configuration lists.
 fn load_modules(cfg: &DeviceConfig, names: &[String]) -> Result<Vec<PathBuf>> {
-    let dirs = cfg.modules.sources.iter().map(|s| aweyuki_modules::source_dir(s)).collect::<Result<Vec<_>>>()?;
-    aweyuki_modules::load(&dirs, names)
+    aweyuki_modules::load(&module_folders(cfg)?, names)
 }
 
 /// Start the recovery's own logd where it needs libraries of the installed
@@ -918,7 +924,7 @@ fn bring_up(cfg: &DeviceConfig, slot: aweyuki_vab::Slot, found: Result<keys::Fou
     for line in keys::describe(&steps) {
         aweyuki_sys::kmsg(&format!("for the phone's keys: {}", line.replace("\n  ", ", ")))?;
     }
-    keys::start(&steps)?;
+    keys::start(&steps, &module_folders(cfg)?)?;
     agree_on_the_notes_key(&registering)
 }
 
@@ -971,12 +977,7 @@ const LOGD_READY: std::time::Duration = std::time::Duration::from_secs(5);
 #[cfg(target_os = "android")]
 fn start_logd(logd: &aweyuki_config::Logd) -> Result<()> {
     for library in &logd.libraries {
-        let from = Path::new(library);
-        let to = Path::new(RECOVERY_LIBRARIES).join(from.file_name().expect("the configuration names each library's file"));
-        let mut part = to.clone().into_os_string();
-        part.push(".part");
-        std::fs::copy(from, &part).with_context(|| format!("copy {library} to {}", Path::new(&part).display()))?;
-        std::fs::rename(&part, &to).with_context(|| format!("put {} in place", to.display()))?;
+        services::place(Path::new(library), Path::new(RECOVERY_LIBRARIES))?;
     }
     aweyuki_sys::set_prop("ctl.start", "logd")?;
     aweyuki_sys::wait_prop("logd.ready", "true", LOGD_READY)?;

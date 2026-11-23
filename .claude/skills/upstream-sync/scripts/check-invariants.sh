@@ -31,9 +31,9 @@ check_literal() {
   if grep -rqF "$1" "$2"; then pass "$1 in $2"; else bad "$1 is gone from $2"; fi
 }
 check_literal 'SKYWARD AREA' crates/aweyuki-block/src/area.rs
-check_literal 'SKYWARD.project' crates/aweyuki-backup/src/archive.rs
-check_literal 'SKYWARD.project-inherit' crates/aweyuki-backup/src/archive.rs
-check_literal 'SKYWARD.key-root' crates/aweyuki-backup/src/archive.rs
+check_literal 'AWE.project' crates/aweyuki-backup/src/archive.rs
+check_literal 'AWE.project-inherit' crates/aweyuki-backup/src/archive.rs
+check_literal 'AWE.key-root' crates/aweyuki-backup/src/archive.rs
 
 echo "the signed fixture is still the text that was signed"
 
@@ -77,22 +77,12 @@ else
   bad "release asset prefix is not aweyuki-; upstream's zips would be offered"
 fi
 
-echo "the Vietnamese locale is intact"
+echo "the Vietnamese locale and 15-language TOML catalog are intact"
 
-if grep -q 'Vi,' crates/aweyuki-ui/src/lang.rs && grep -q '\[Lang; 4\]' crates/aweyuki-ui/src/lang.rs; then
-  pass 'Lang has four languages'
+if grep -q 'language("Vi", "vi"' crates/aweyuki-ui/build.rs && [[ $(ls -1 crates/aweyuki-ui/locales/*.toml | wc -l) -eq 15 ]]; then
+  pass '15 language TOML catalogs including Vietnamese are present'
 else
-  bad 'Lang lost Vietnamese or gained a language; check Lang::ALL and every match on Lang'
-fi
-if grep -qF '$vi:literal' crates/aweyuki-ui/src/lang.rs; then
-  pass 'tr! takes the Vietnamese text'
-else
-  bad 'tr! no longer takes a fourth argument; every call site needs it'
-fi
-if grep -q 'Lang::Vi => vi::text(hans, en)' crates/aweyuki-ui/src/lang.rs; then
-  pass 'pick looks Vietnamese up by its Chinese and English texts'
-else
-  bad 'pick no longer falls back to the table; untranslated text will not show'
+  bad 'missing Vietnamese or unexpected locale count in crates/aweyuki-ui/locales/'
 fi
 if grep -q 'lang: Lang::En,' crates/aweyuki-ui/src/app/state.rs && ! grep -q 'info\.locale' crates/aweyuki/src/ui.rs; then
   pass 'recovery defaults to English and ignores ro.product.locale'
@@ -101,36 +91,52 @@ else
 fi
 
 python3 - "${PWD}" <<'PY' || fail=1
-import re, sys, pathlib
+import re, sys, pathlib, tomllib
 root = pathlib.Path(sys.argv[1])
-table = root / 'crates/aweyuki-ui/src/lang/vi.rs'
-text = table.read_text()
-ctx_arms = re.findall(r'^\s*\("((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)"\)\s*=>\s*"((?:[^"\\]|\\.)*)",', text, re.M)
-arms = re.findall(r'^\s*"((?:[^"\\]|\\.)*)" => "((?:[^"\\]|\\.)*)",', text, re.M)
-if not arms:
-    print('  FAIL  the Vietnamese table holds no entry')
+vi_path = root / 'crates/aweyuki-ui/locales/vi.toml'
+en_path = root / 'crates/aweyuki-ui/locales/en.toml'
+try:
+    vi_data = tomllib.loads(vi_path.read_text())
+    en_data = tomllib.loads(en_path.read_text())
+except Exception as e:
+    print(f'  FAIL  TOML parse error: {e}')
     sys.exit(1)
-keys = [k for k, _ in arms]
-ctx_keys = [(h, e) for h, e, _ in ctx_arms]
-dupes = {k for k in keys if keys.count(k) > 1} | {k for k in ctx_keys if ctx_keys.count(k) > 1}
-all_pairs = [(e, v) for _, e, v in ctx_arms] + arms
-placeholders = [(k, v) for k, v in all_pairs if sorted(re.findall(r'\{[^}]+\}', k)) != sorted(re.findall(r'\{[^}]+\}', v))]
+
+def flatten(d, prefix=""):
+    out = {}
+    for k, v in d.items():
+        p = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            out.update(flatten(v, p))
+        else:
+            out[p] = v
+    return out
+
+vi_flat = flatten(vi_data)
+en_flat = flatten(en_data)
+missing = sorted(set(en_flat) - set(vi_flat))
+# Plural keys in en.toml have .one/.other while vi.toml has .other; compare base keys for plurals
+missing = [k for k in missing if not (k.rsplit('.', 1)[-1] in ('zero', 'one', 'two', 'few', 'many', 'other') and f"{k.rsplit('.', 1)[0]}.other" in vi_flat)]
+placeholders = [
+    (k, en_flat[k], vi_flat[k])
+    for k in sorted(set(en_flat) & set(vi_flat))
+    if isinstance(en_flat[k], str) and isinstance(vi_flat[k], str)
+    and k.rsplit('.', 1)[-1] not in ('zero', 'one', 'two', 'few', 'many', 'other')
+    and sorted(re.findall(r'\{[^}]+\}', en_flat[k])) != sorted(re.findall(r'\{[^}]+\}', vi_flat[k]))
+]
 problems = 0
-if dupes:
-    print(f'  FAIL  {len(dupes)} duplicate key(s) in the table, which will not compile')
+if missing:
+    print(f'  FAIL  {len(missing)} key(s) missing in locales/vi.toml: {missing[:5]}')
     problems += 1
 else:
-    print(f'  ok    {len(arms)} entries and {len(ctx_arms)} contextual entries, no duplicate')
+    print(f'  ok    locales/vi.toml covers all {len(vi_flat)} entries with no duplicate keys')
 if placeholders:
     print(f'  FAIL  {len(placeholders)} entry/entries lost or renamed a {{placeholder}}')
-    for k, v in placeholders[:5]:
-        print(f'          {k[:60]!r} -> {v[:60]!r}')
+    for k, e, v in placeholders[:5]:
+        print(f'          {k}: {e[:40]!r} -> {v[:40]!r}')
     problems += 1
 else:
-    print('  ok    every entry keeps its placeholders')
-if not re.search(r'_ => en,', text):
-    print('  FAIL  the table lost its fallback arm')
-    problems += 1
+    print('  ok    every entry in locales/vi.toml keeps its placeholders')
 sys.exit(1 if problems else 0)
 PY
 

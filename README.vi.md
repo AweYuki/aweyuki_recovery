@@ -135,6 +135,7 @@ Chạy các plugin script `plugin.toml` với luồng đầu ra trực tiếp v�
 | --- | --- | --- |
 | Xiaomi 17 Ultra | `nezha` | OS4.0.4.0.XPACNXM (Android 17) |
 | Xiaomi 13 Ultra | `ishtar` | OS3.0.308.0.WMACNXM (Android 16) |
+| REDMI K60 Pro | `socrates` | OS4.0.0.24.XMKCNXM (Android 17) |
 | Xiaomi 13 Pro | `nuwa` | OS3.0.312.0.WMBCNXM (Android 16) |
 
 ### 🚧 Đang hoàn thiện
@@ -186,8 +187,8 @@ nén, rồi flash ảnh bên trong vào phân vùng recovery của khe máy đan
 chế độ fastboot:
 
 ```sh
-unzip aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.zip
-fastboot flash recovery aweyuki-v0.4.0-nezha-OS4.0.4.0.XPACNXM.img
+unzip aweyuki-v0.5.1-nezha-OS4.0.4.0.XPACNXM.zip
+fastboot flash recovery aweyuki-v0.5.1-nezha-OS4.0.4.0.XPACNXM.img
 fastboot reboot recovery
 ```
 

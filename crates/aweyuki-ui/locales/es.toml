@@ -1623,4 +1623,4 @@ m180 = "Restore archive"
 
 [fork.reboot]
 abl_warning_title = "ABL EFISP warning (slot {slot})"
-abl_warning_msg = "This slot\x27s ABL no longer contains the EFISP loader seen at boot. Rebooting may fail: {detail}"
+abl_warning_msg = "This slot's ABL no longer contains the EFISP loader seen at boot. Rebooting may fail: {detail}"
