@@ -7,7 +7,8 @@
 Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 
 <p align="center">
-  <img src="assets/zh-CN/settings-dark.png" width="30%" alt="深色模式下的设置">
+  <img src="assets/screenshots/01-home.png" width="30%" alt="Aweyuki Recovery 主界面">
+  <img src="assets/screenshots/22-settings-dark.png" width="30%" alt="深色模式下的设置">
   <img src="assets/zh-CN/time-zone.png" width="30%" alt="时区">
 </p>
 
@@ -15,74 +16,118 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 
 ### 双系统
 
-![一台手机可以安装两个系统](slides/en/out/01-dual-boot.png)
+<p align="center">
+  <img src="assets/screenshots/02-dual-boot.png" width="32%" alt="双系统切换">
+</p>
 
-![切换系统只改写两个分区](slides/en/out/02-dual-boot-partitions.png)
+可在主系统（HyperOS 或第三方 ROM）旁安装并切换第二系统，切换过程由 `/metadata` 原子记录，仅改写 `boot` 与 `init_boot` 分区。第二系统的安装包格式和启动过程见下文的[双系统的工作方式](#双系统的工作方式)。
 
-第二系统的安装包格式和启动过程见下文的[双系统的工作方式](#双系统的工作方式)。
+### 解密与恢复模式 PIN 锁
 
-### 解密
+<p align="center">
+  <img src="assets/screenshots/03-decrypt.png" width="32%" alt="使用锁屏密码解密 data 分区">
+</p>
 
-![用锁屏图案或密码解密 data 分区](slides/en/out/03-decrypt.png)
+支持使用系统的锁屏图案、PIN 或密码解密 `/data` 分区，并可为 Recovery 本身设置独立的恢复模式 PIN 锁。
 
-### 安装
+### 安装、OTA Payload 检查与批量刷入
 
-![从三个来源安装四种安装包](slides/en/out/04-install.png)
+<p align="center">
+  <img src="assets/screenshots/04-install.png" width="32%" alt="安装界面">
+  <img src="assets/screenshots/15-batch-flash.png" width="32%" alt="批量刷入">
+</p>
 
-刷机包的安装脚本可以使用 `7za` 和 `zstd`，支持刷入 super 镜像使用 zstd 压缩的第三方 ROM；`unzip -p` 边解压边输出镜像。安装脚本还可以使用 `avbctl` 关闭验证启动的校验，使用 `resetprop` 读取和设置属性。
+- **安装来源与工具**：支持从内部存储、USB OTG 或 ADB Sideload 刷入 `.zip`、`.img`、`.efi` 及双系统安装包，支持 zip 签名校验。刷机脚本可使用 `7za`、`zstd`、流式 `unzip -p`、`avbctl` 和 `resetprop`。
+- **OTA Payload 检查与 ARB 检测**：解析 `payload.bin` / OTA `.zip` 清单，执行防回滚（ARB）安全补丁与时间戳校验，并支持提取指定分区（`REPLACE`、`REPLACE_ZSTD`、`ZERO`、`DISCARD`）。
+- **批量刷入与 EFISP**：支持带分区几何预校验的多镜像 `.img`/`.efi` 批量刷入，包括向非 A/B 的 `efisp` 分区直接刷入并校验 ARM64 `.efi` 镜像。
 
-### 在线更新
+### 在线更新与 WLAN
 
-![系统和 Aweyuki 都能在线更新](slides/en/out/05-updates.png)
+<p align="center">
+  <img src="assets/screenshots/05-system-updates.png" width="32%" alt="系统在线更新">
+  <img src="assets/screenshots/21-wifi.png" width="32%" alt="WLAN 设置">
+</p>
 
-### 备份和恢复
+直接在 Recovery 中连接 2.4 GHz / 5 GHz WLAN，在线检查并安装系统更新（支持显示 A/B 合并状态）以及在线自更新 Aweyuki Recovery。
 
-![系统、应用和 IMEI 都可以备份](slides/en/out/06-backup.png)
+### 备份、恢复与应用保险库
 
-### 文件管理
+<p align="center">
+  <img src="assets/screenshots/06-backup.png" width="30%" alt="备份分区">
+  <img src="assets/screenshots/07-restore.png" width="30%" alt="恢复备份">
+  <img src="assets/screenshots/16-app-vault.png" width="30%" alt="应用保险库">
+</p>
 
-![在 Aweyuki 中管理手机里的文件](slides/en/out/07-files.png)
+- **备份与恢复**：可将 `boot`、`system`、`data`、基带与 EFS 以及可选的 `efisp` 备份到内部存储或 USB OTG，支持压缩与校验。
+- **应用保险库（App Vault）**：以 `.tar.lz4` 格式将单个用户应用备份和恢复至 `/sdcard/Aweyuki/app-vault`。
 
-### 终端
+### 文件管理、挂载与终端
 
-![手机上就能运行 root shell](slides/en/out/08-terminal.png)
+<p align="center">
+  <img src="assets/screenshots/11-file-manager.png" width="30%" alt="文件管理">
+  <img src="assets/screenshots/08-mount.png" width="30%" alt="分区挂载">
+  <img src="assets/screenshots/12-terminal.png" width="30%" alt="Root 终端">
+</p>
 
-### 连接电脑
+- **文件管理**：浏览 `/` 目录，显示文件元信息、符号链接目标以及终端快捷入口。
+- **挂载与 USB**：手动挂载/卸载动态分区（`system`、`vendor`、`product`、`odm`、`mi_ext`、`system_ext`、`system_dlkm`），并管理 USB MTP 与 ADB 连接。
+- **终端**：内置 Root Shell，配备屏幕虚拟按键（`Esc`、`Tab`、`Ctrl` 与方向键）。
 
-![用数据线连接电脑，传文件和刷写分区](slides/en/out/09-computer.png)
+### 清除数据、SELinux 与文件系统修复
 
-### 清除数据
+<p align="center">
+  <img src="assets/screenshots/09-wipe.png" width="30%" alt="清除数据">
+  <img src="assets/screenshots/13-selinux.png" width="30%" alt="修复 SELinux 上下文">
+  <img src="assets/screenshots/14-filesystem-repair.png" width="30%" alt="文件系统修复">
+</p>
 
-![每一项都写明会清除哪些内容](slides/en/out/10-wipe.png)
+每一项清除操作均明确列出清除范围。支持修复 `/data` 的 SELinux 上下文、检查并修复 `/data`（`f2fs`）文件系统，以及对 `efisp` 和 `frp` 分区执行逐字节校验的全零擦除。
 
-### 替换原厂 recovery
+### Root 管理
 
-![系统发来的请求，Aweyuki 照常处理](slides/en/out/11-requests.png)
+<p align="center">
+  <img src="assets/screenshots/17-root-manager.png" width="32%" alt="Root 管理">
+</p>
 
-### 搜索
+自动解析内核版本与 KMI（如 `5.15.194` / `android13-5.15`），识别 Magisk、KernelSU 和 APatch 框架，并支持开关或标记卸载 `/data/adb/modules/*` 模块。
 
-![输入拼音首字母，就能找到功能](slides/en/out/12-search.png)
+### 网络文件共享与远程投屏 (`/mirror`)
 
-### 高级
+<p align="center">
+  <img src="assets/screenshots/18-network-file-sharing.png" width="32%" alt="网络文件共享">
+</p>
 
-![系统出了问题，可以先在这里修复](slides/en/out/13-tools.png)
+通过 Wi-Fi 启动 HTTP/1.1 文件共享服务，支持电脑浏览器上传/下载或 `curl -T`，同时提供 `/mirror` 远程实时投屏、触控/按键控制以及一键保存 PNG 截图。
 
-### 关于本机
+### 运行时插件与 AERA `.aerap` 应用
 
-![电池剩余容量和充电循环都能查看](slides/en/out/14-specs.png)
+<p align="center">
+  <img src="assets/screenshots/19-plugins.png" width="32%" alt="插件与 AERA">
+</p>
 
-### 其他功能
+支持运行带实时流式输出与中止功能的 `plugin.toml` 脚本插件，并支持隔离沙箱化的 AERA `.aerap` GUI 运行时插件，包括 **AERA Browser**（WPE WebKit 浏览器）和 **AERA Telegram**（TDLib 客户端）。
 
-- 重启到系统、recovery、fastboot、bootloader 和 EDL，切换启动槽位
-- 浅色和深色模式，简体中文、繁体中文、英文和越南文
-- 支持向非 A/B 的 `efisp` 分区直接刷入并校验 ARM64 `.efi` 镜像，支持 `efisp` 备份恢复、重启前 ABL 加载器回归警告，以及对 `efisp` 和 `frp` 分区进行全零擦除与逐字节校验
-- Root 管理（识别内核 KMI、检测 Magisk/KernelSU/APatch 框架，并开关或标记卸载 `/data/adb/modules/*` 模块）
-- 基于 HTTP/1.1 的网络文件共享（支持浏览器上传/下载与 `/mirror` 远程投屏操控）、支持实时输出与中止的运行时插件（兼容 `.sh` `plugin.toml` 脚本与隔离沙箱化的 AERA `.aerap` GUI 插件如 WPE WebKit 浏览器与 TDLib Telegram），以及日志页中的近期刷写与擦除历史记录
-- OTA `payload.bin` / `.zip` 检查（防回滚 ARB 检测与分区提取）、带几何预校验的多镜像批量刷入、恢复模式 PIN 锁、开发者/内核工具与顺序存储基准测试，以及应用保险库（`/sdcard/Aweyuki/app-vault` 单应用 `.tar.lz4` 备份恢复）
+### 高级工具、开发者选项与无音量键截图
 
-### 没有系统时
+<p align="center">
+  <img src="assets/screenshots/10-advanced.png" width="32%" alt="高级菜单">
+  <img src="assets/screenshots/20-developer-benchmark.png" width="32%" alt="开发者选项与性能测试">
+</p>
 
-![super 中没有系统，也能装回一个系统](slides/en/out/15-no-system.png)
+- **高级工具中心**：集中提供搜索、日志（含近期刷写/擦除历史）、文件管理、终端、SELinux/文件系统修复、Root 管理、网络文件共享、插件和应用保险库。
+- **开发者与存储基准测试**：查看和调整 `printk` 日志级别、SELinux 模式、USB/ADB 状态、CPU 调度器、内核 `cmdline`，并运行 64 MiB 顺序存储读写基准测试。
+- **无音量键截图**：可通过高级菜单中的**延迟 3 秒截图**（截取前自动隐藏提示条）或在 `/mirror` 网页端一键保存 PNG 截图。
+
+### 设置、关于本机与重启
+
+<p align="center">
+  <img src="assets/screenshots/23-about-specs.png" width="32%" alt="关于本机与硬件规格">
+  <img src="assets/screenshots/24-reboot.png" width="32%" alt="重启选项">
+</p>
+
+- **语言与主题**：浅色与深色模式；简体中文、繁体中文、英文与越南文；28 个 IANA 时区（含越南 `Asia/Ho_Chi_Minh` UTC+7）。
+- **关于本机**：查看 Aweyuki 版本、存储空间、处理器、内存、电池健康度与充电循环次数。
+- **重启与槽位切换**：重启至系统、Recovery、Fastboot、Bootloader、EDL 或关机，切换 A/B 启动槽位，并在重启前执行 ABL EFISP 加载器回归检查。
 
 ## 支持的机型
 

@@ -7,8 +7,8 @@
 Aweyuki Recovery là một recovery Android viết lại từ đầu bằng Rust.
 
 <p align="center">
-  <img src="assets/vi/home.png" width="30%" alt="Trang chủ">
-  <img src="assets/vi/settings-dark.png" width="30%" alt="Cài đặt ở chế độ tối">
+  <img src="assets/screenshots/01-home.png" width="30%" alt="Trang chủ Aweyuki Recovery">
+  <img src="assets/screenshots/22-settings-dark.png" width="30%" alt="Cài đặt ở chế độ tối">
   <img src="assets/vi/time-zone.png" width="30%" alt="Múi giờ">
 </p>
 
@@ -16,79 +16,118 @@ Aweyuki Recovery là một recovery Android viết lại từ đầu bằng Rust
 
 ### Khởi động kép
 
-![Một điện thoại chứa hai hệ thống](slides/vi/out/01-dual-boot.png)
+<p align="center">
+  <img src="assets/screenshots/02-dual-boot.png" width="32%" alt="Chọn hệ thống khởi động kép">
+</p>
 
-![Chuyển hệ chỉ ghi hai phân vùng](slides/vi/out/02-dual-boot-partitions.png)
+Cài đặt hệ thống thứ hai song song với ROM hiện tại (HyperOS hoặc ROM tùy biến) với cơ chế chuyển đổi nguyên tử qua `/metadata`, chỉ ghi vào `boot` và `init_boot`. Cách đóng gói và khởi động hệ thống thứ hai có ở [Cách khởi động kép hoạt động](#cách-khởi-động-kép-hoạt-động).
 
-Cách đóng gói và khởi động hệ thống thứ hai có ở
-[Cách khởi động kép hoạt động](#cách-khởi-động-kép-hoạt-động).
+### Giải mã & Khóa PIN Recovery
 
-### Giải mã
+<p align="center">
+  <img src="assets/screenshots/03-decrypt.png" width="32%" alt="Giải mã phân vùng dữ liệu bằng khóa màn hình">
+</p>
 
-![Giải mã phân vùng dữ liệu bằng khóa màn hình](slides/vi/out/03-decrypt.png)
+Giải mã `/data` bằng mã PIN, hình vẽ hoặc mật khẩu khóa màn hình của hệ thống, đồng thời hỗ trợ đặt khóa PIN riêng cho recovery để bảo vệ quyền truy cập.
 
-### Cài đặt
+### Cài đặt, Kiểm tra OTA Payload & Flash hàng loạt
 
-![Bốn loại gói từ ba nơi](slides/vi/out/04-install.png)
+<p align="center">
+  <img src="assets/screenshots/04-install.png" width="32%" alt="Cài đặt gói">
+  <img src="assets/screenshots/15-batch-flash.png" width="32%" alt="Flash hàng loạt">
+</p>
 
-Script cài đặt có `7za` và `zstd` — các ROM có ảnh super nén bằng zstd dùng chúng
-để flash — cùng một `unzip` mà `-p` của nó đọc ảnh thành luồng ngay trong lúc đọc.
-Chúng cũng có `avbctl` và `resetprop` để tắt các kiểm tra của verified boot, và để
-đọc, đặt thuộc tính.
+- **Nguồn cài đặt & công cụ**: Flash tệp `.zip`, `.img`, `.efi` và gói khởi động kép từ Bộ nhớ trong, USB OTG hoặc ADB Sideload kèm tùy chọn kiểm tra chữ ký zip. Script cài đặt có sẵn `7za`, `zstd`, `unzip -p` đọc luồng trực tiếp, `avbctl` và `resetprop`.
+- **Trình kiểm tra OTA Payload & ARB**: Đọc manifest của `payload.bin` / OTA `.zip`, kiểm tra chống hạ cấp (Anti-Rollback / ARB) và trích xuất phân vùng (`REPLACE`, `REPLACE_ZSTD`, `ZERO`, `DISCARD`).
+- **Flash hàng loạt & EFISP**: Chọn và flash nhiều ảnh `.img`/`.efi` cùng lúc có kiểm tra kích thước phân vùng, hỗ trợ flash trực tiếp ảnh ARM64 `.efi` vào phân vùng `efisp` không phân khe.
 
-### Cập nhật trực tuyến
+### Cập nhật trực tuyến & Wi-Fi
 
-![Cập nhật hệ thống và Aweyuki trực tuyến](slides/vi/out/05-updates.png)
+<p align="center">
+  <img src="assets/screenshots/05-system-updates.png" width="32%" alt="Cập nhật hệ thống">
+  <img src="assets/screenshots/21-wifi.png" width="32%" alt="Cài đặt Wi-Fi">
+</p>
 
-### Sao lưu và khôi phục
+Kết nối Wi-Fi 2.4 GHz / 5 GHz ngay trong recovery để kiểm tra, cài đặt cập nhật hệ thống (kèm trạng thái hợp nhất A/B) và tự cập nhật Aweyuki Recovery.
 
-![Sao lưu hệ thống, ứng dụng và IMEI](slides/vi/out/06-backup.png)
+### Sao lưu, Khôi phục & Kho ứng dụng
 
-### Trình quản lý tệp
+<p align="center">
+  <img src="assets/screenshots/06-backup.png" width="30%" alt="Sao lưu phân vùng">
+  <img src="assets/screenshots/07-restore.png" width="30%" alt="Khôi phục bản sao lưu">
+  <img src="assets/screenshots/16-app-vault.png" width="30%" alt="Kho ứng dụng">
+</p>
 
-![Quản lý tệp của điện thoại trong Aweyuki](slides/vi/out/07-files.png)
+- **Sao lưu & Khôi phục**: Sao lưu và khôi phục `boot`, `system`, `data`, Modem & EFS và tùy chọn `efisp` ra Bộ nhớ trong hoặc USB OTG với nén và kiểm tra toàn vẹn.
+- **Kho ứng dụng (App Vault)**: Sao lưu và khôi phục từng ứng dụng người dùng dạng `.tar.lz4` tại `/sdcard/Aweyuki/app-vault`.
 
-### Terminal
+### Trình quản lý tệp, Gắn kết & Terminal
 
-![Chạy shell root ngay trên điện thoại](slides/vi/out/08-terminal.png)
+<p align="center">
+  <img src="assets/screenshots/11-file-manager.png" width="30%" alt="Trình quản lý tệp">
+  <img src="assets/screenshots/08-mount.png" width="30%" alt="Gắn kết phân vùng">
+  <img src="assets/screenshots/12-terminal.png" width="30%" alt="Terminal root">
+</p>
 
-### Kết nối máy tính
+- **Trình quản lý tệp**: Duyệt thư mục `/` với thông tin chi tiết, đích liên kết tượng trưng (symlink) và nút mở nhanh Terminal.
+- **Gắn kết & USB**: Bật/tắt gắn kết phân vùng động (`system`, `vendor`, `product`, `odm`, `mi_ext`, `system_ext`, `system_dlkm`) và quản lý kết nối MTP/ADB qua USB.
+- **Terminal**: Shell root tích hợp sẵn bàn phím trên màn hình (`Esc`, `Tab`, `Ctrl`, các phím mũi tên).
 
-![Chuyển tệp và flash phân vùng qua USB](slides/vi/out/09-computer.png)
+### Xóa dữ liệu, SELinux & Sửa hệ thống tệp
 
-### Xóa dữ liệu
+<p align="center">
+  <img src="assets/screenshots/09-wipe.png" width="30%" alt="Xóa dữ liệu">
+  <img src="assets/screenshots/13-selinux.png" width="30%" alt="Sửa ngữ cảnh SELinux">
+  <img src="assets/screenshots/14-filesystem-repair.png" width="30%" alt="Sửa hệ thống tệp">
+</p>
 
-![Mỗi lựa chọn nói rõ nó xóa gì](slides/vi/out/10-wipe.png)
+Mỗi tùy chọn xóa đều ghi rõ phạm vi tác động. Hỗ trợ sửa ngữ cảnh SELinux cho `/data`, kiểm tra và sửa chữa hệ thống tệp `/data` (`f2fs`), cùng xóa ghi số 0 kiểm tra từng byte cho phân vùng `efisp` và `frp`.
 
-### Thay thế recovery gốc
+### Quản lý Root
 
-![Aweyuki làm đúng điều hệ thống hỏi](slides/vi/out/11-requests.png)
+<p align="center">
+  <img src="assets/screenshots/17-root-manager.png" width="32%" alt="Quản lý Root">
+</p>
 
-### Tìm kiếm
+Tự động nhận diện phiên bản nhân và KMI (ví dụ `5.15.194` / `android13-5.15`), phát hiện Magisk, KernelSU, APatch và cho phép bật, tắt hoặc đánh dấu gỡ mô-đun trong `/data/adb/modules/*`.
 
-![Gõ vài chữ cái để tìm tính năng](slides/vi/out/12-search.png)
+### Chia sẻ tệp qua mạng & Điều khiển từ xa (`/mirror`)
 
-### Nâng cao
+<p align="center">
+  <img src="assets/screenshots/18-network-file-sharing.png" width="32%" alt="Chia sẻ tệp qua mạng">
+</p>
 
-![Khi có sự cố, hãy sửa ở đây trước](slides/vi/out/13-tools.png)
+Bật máy chủ chia sẻ tệp HTTP/1.1 qua Wi-Fi để tải lên/tải xuống trên trình duyệt hoặc qua `curl -T`, kèm trang `/mirror` phản chiếu màn hình trực tiếp, điều khiển cảm ứng/phím bấm và lưu ảnh PNG từ trình duyệt máy tính.
 
-### Về điện thoại
+### Tiện ích mở rộng & Ứng dụng AERA `.aerap`
 
-![Kiểm tra tình trạng pin và số chu kỳ sạc](slides/vi/out/14-specs.png)
+<p align="center">
+  <img src="assets/screenshots/19-plugins.png" width="32%" alt="Plugin và AERA">
+</p>
 
-### Tính năng khác
+Chạy các plugin script `plugin.toml` với luồng đầu ra trực tiếp và khả năng dừng ngang, đồng thời hỗ trợ các gói GUI AERA `.aerap` chạy cách ly như **AERA Browser** (WPE WebKit) và **AERA Telegram** (TDLib).
 
-- Khởi động lại vào hệ thống, recovery, fastboot, bootloader hoặc EDL, và chuyển khe
-- Giao diện sáng và tối; tiếng Trung giản thể, tiếng Trung phồn thể, tiếng Anh và
-  tiếng Việt
-- Flash trực tiếp ảnh ARM64 `.efi` vào phân vùng `efisp` (không phân khe) và xóa kiểm tra từng byte cho phân vùng `efisp` / `frp`, hỗ trợ sao lưu/khôi phục `efisp` và cảnh báo ABL mất bộ nạp EFISP trước khi khởi động lại
-- Trình quản lý Root (nhận diện KMI nhân, phát hiện Magisk/KernelSU/APatch và bật/tắt/gỡ mô-đun trong `/data/adb/modules/*`)
-- Chia sẻ tệp qua mạng HTTP/1.1 hỗ trợ tải lên/tải xuống trên trình duyệt, điều khiển & phản chiếu màn hình từ xa (`/mirror`), tiện ích mở rộng thời gian chạy với luồng đầu ra trực tiếp (hỗ trợ cả script `.sh` `plugin.toml` lẫn gói GUI AERA `.aerap` chạy cách ly như Trình duyệt WPE WebKit và Telegram TDLib), và lịch sử Flash/Xóa trong trang Nhật ký
-- Trình kiểm tra OTA `payload.bin`/`.zip` (kiểm tra chống hạ cấp ARB và trích xuất phân vùng), flash hàng loạt `.img`/`.efi` có kiểm tra dung lượng phân vùng, khóa PIN recovery, công cụ nhà phát triển & đo tốc độ lưu trữ, cùng Kho ứng dụng sao lưu từng app `.tar.lz4` tại `/sdcard/Aweyuki/app-vault`
+### Nâng cao, Công cụ nhà phát triển & Chụp màn hình không cần phím cứng
 
-### Không có hệ thống
+<p align="center">
+  <img src="assets/screenshots/10-advanced.png" width="32%" alt="Menu Nâng cao">
+  <img src="assets/screenshots/20-developer-benchmark.png" width="32%" alt="Nhà phát triển và đo tốc độ">
+</p>
 
-![Aweyuki vẫn chạy khi không có hệ thống](slides/vi/out/15-no-system.png)
+- **Menu Nâng cao**: Truy cập nhanh Tìm kiếm, Nhật ký (gồm lịch sử Flash/Xóa gần đây), Trình quản lý tệp, Terminal, sửa SELinux/hệ thống tệp, Quản lý Root, Chia sẻ tệp qua mạng, Plugin và Kho ứng dụng.
+- **Nhà phát triển & Đo tốc độ**: Xem và chỉnh mức log `printk`, trạng thái SELinux, USB/ADB, bộ điều phối CPU, `cmdline` nhân và chạy bài đo tốc độ đọc/ghi tuần tự 64 MiB.
+- **Chụp màn hình không cần phím âm lượng**: Chụp ảnh PNG qua mục **Chụp màn hình (sau 3 giây)** trong Nâng cao (thông báo tự ẩn trước khi chụp) hoặc chụp trực tiếp từ `/mirror`.
+
+### Thiết lập, Thông tin máy & Khởi động lại
+
+<p align="center">
+  <img src="assets/screenshots/23-about-specs.png" width="32%" alt="Thông tin máy">
+  <img src="assets/screenshots/24-reboot.png" width="32%" alt="Khởi động lại">
+</p>
+
+- **Ngôn ngữ & Giao diện**: Giao diện sáng/tối; hỗ trợ tiếng Việt, tiếng Anh, tiếng Trung giản thể và phồn thể; 28 múi giờ IANA bao gồm Việt Nam (`Asia/Ho_Chi_Minh`, UTC+7).
+- **Thông tin máy**: Xem phiên bản Aweyuki, dung lượng lưu trữ, SoC, RAM, tình trạng pin và số chu kỳ sạc.
+- **Khởi động lại & Chọn khe**: Khởi động lại vào Hệ thống, Recovery, Fastboot, Bootloader, EDL hoặc Tắt nguồn, chuyển khe A/B và cảnh báo ABL mất bộ nạp EFISP trước khi khởi động lại.
 
 ## Thiết bị hỗ trợ
 

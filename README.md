@@ -7,7 +7,8 @@ English | [简体中文](README.zh-CN.md) | [Tiếng Việt](README.vi.md)
 Aweyuki Recovery is an Android recovery written in Rust, from scratch.
 
 <p align="center">
-  <img src="assets/settings-dark.png" width="30%" alt="Settings in dark mode">
+  <img src="assets/screenshots/01-home.png" width="30%" alt="Aweyuki Recovery Home">
+  <img src="assets/screenshots/22-settings-dark.png" width="30%" alt="Settings in dark mode">
   <img src="assets/time-zone.png" width="30%" alt="Time zone">
 </p>
 
@@ -15,78 +16,118 @@ Aweyuki Recovery is an Android recovery written in Rust, from scratch.
 
 ### Dual boot
 
-![One phone holds two systems](slides/en/out/01-dual-boot.png)
+<p align="center">
+  <img src="assets/screenshots/02-dual-boot.png" width="32%" alt="Dual boot selector">
+</p>
 
-![A switch rewrites only two partitions](slides/en/out/02-dual-boot-partitions.png)
+Run a second system alongside the installed ROM (HyperOS or custom ROM) with atomic `/metadata`-backed switching that rewrites only `boot` and `init_boot`. How a second system is packaged and started is in [How dual boot works](#how-dual-boot-works).
 
-How a second system is packaged and started is in
-[How dual boot works](#how-dual-boot-works).
+### Decryption & Recovery PIN Lock
 
-### Decryption
+<p align="center">
+  <img src="assets/screenshots/03-decrypt.png" width="32%" alt="Decrypt data with screen lock">
+</p>
 
-![Decrypt data with the screen lock](slides/en/out/03-decrypt.png)
+Decrypt `/data` using the system's screen-lock PIN, pattern, or password, and optionally protect recovery access itself with a Recovery PIN Lock.
 
-### Installing
+### Installing, OTA Payload Inspector & Batch Flash
 
-![Four kinds of packages from three places](slides/en/out/04-install.png)
+<p align="center">
+  <img src="assets/screenshots/04-install.png" width="32%" alt="Install packages">
+  <img src="assets/screenshots/15-batch-flash.png" width="32%" alt="Batch flash images">
+</p>
 
-Install scripts get `7za` and `zstd`, which ROMs with a super image compressed by
-zstd use to flash it, and an `unzip` whose `-p` streams the image as it reads it.
-They also get `avbctl` and `resetprop`, to turn off verified boot's checks and to
-read and set properties.
+- **Install sources & tools**: Flash zips, `.img`, `.efi`, and dual-boot packages from Internal Storage, USB OTG, or ADB Sideload with optional zip signature verification. Install scripts get `7za`, `zstd`, streaming `unzip -p`, `avbctl`, and `resetprop`.
+- **OTA Payload Inspector & ARB Check**: Inspect `payload.bin` and OTA `.zip` manifests, verify Anti-Rollback (ARB) security patch/timestamp levels, and extract partitions (`REPLACE`, `REPLACE_ZSTD`, `ZERO`, `DISCARD`).
+- **Batch Flash & EFISP**: Queue and flash multiple `.img`/`.efi` files with partition geometry validation, including direct non-slotted ARM64 `.efi` flashing to `efisp`.
 
-### Online updates
+### Online updates & Wi-Fi
 
-![Update the system and Aweyuki online](slides/en/out/05-updates.png)
+<p align="center">
+  <img src="assets/screenshots/05-system-updates.png" width="32%" alt="System updates">
+  <img src="assets/screenshots/21-wifi.png" width="32%" alt="Wi-Fi settings">
+</p>
 
-### Backup and restore
+Connect to 2.4 GHz / 5 GHz Wi-Fi networks directly in recovery to check and install system OTA updates (with A/B merge status) and self-update Aweyuki Recovery.
 
-![Back up the system, apps and IMEI](slides/en/out/06-backup.png)
+### Backup, Restore & App Vault
 
-### File manager
+<p align="center">
+  <img src="assets/screenshots/06-backup.png" width="30%" alt="Backup partitions">
+  <img src="assets/screenshots/07-restore.png" width="30%" alt="Restore backups">
+  <img src="assets/screenshots/16-app-vault.png" width="30%" alt="App Vault">
+</p>
 
-![Manage the phone's files in Aweyuki](slides/en/out/07-files.png)
+- **Backup & Restore**: Back up and restore `boot`, `system`, `data`, Modem & EFS, and optional `efisp` to Internal Storage or USB OTG with compression and verification.
+- **App Vault**: Back up and restore individual user apps as `.tar.lz4` archives in `/sdcard/Aweyuki/app-vault`.
 
-### Terminal
+### File Manager, Mount & Terminal
 
-![Run a root shell right on the phone](slides/en/out/08-terminal.png)
+<p align="center">
+  <img src="assets/screenshots/11-file-manager.png" width="30%" alt="File Manager">
+  <img src="assets/screenshots/08-mount.png" width="30%" alt="Mount partitions">
+  <img src="assets/screenshots/12-terminal.png" width="30%" alt="Root Terminal">
+</p>
 
-### Connecting a computer
+- **File Manager**: Browse `/` with file metadata, symlink targets, and a quick shortcut to the terminal.
+- **Mount & USB**: Toggle dynamic partitions (`system`, `vendor`, `product`, `odm`, `mi_ext`, `system_ext`, `system_dlkm`) and manage MTP/ADB over USB.
+- **Terminal**: Built-in root shell with an on-screen keyboard (`Esc`, `Tab`, `Ctrl`, and arrow keys).
 
-![Move files and flash partitions over USB](slides/en/out/09-computer.png)
+### Wipe Data, SELinux & Filesystem Repair
 
-### Wiping data
+<p align="center">
+  <img src="assets/screenshots/09-wipe.png" width="30%" alt="Wipe Data">
+  <img src="assets/screenshots/13-selinux.png" width="30%" alt="Fix SELinux contexts">
+  <img src="assets/screenshots/14-filesystem-repair.png" width="30%" alt="Filesystem Repair">
+</p>
 
-![Every choice says what it wipes](slides/en/out/10-wipe.png)
+Every wipe option states clearly what it removes. Fix SELinux contexts on `/data`, check and repair `/data` (`f2fs`), and perform byte-by-byte verified zero-fill wiping for `efisp` and `frp` partitions.
 
-### Replacing the stock recovery
+### Root Manager
 
-![Aweyuki does what the system asks](slides/en/out/11-requests.png)
+<p align="center">
+  <img src="assets/screenshots/17-root-manager.png" width="32%" alt="Root Manager">
+</p>
 
-### Search
+Automatically resolves kernel version and KMI (e.g. `5.15.194` / `android13-5.15`), detects Magisk, KernelSU, and APatch, and lets you enable, disable, or mark `/data/adb/modules/*` modules for removal.
 
-![Type a few letters to find a feature](slides/en/out/12-search.png)
+### HTTP File Sharing & Remote Mirror (`/mirror`)
 
-### Advanced
+<p align="center">
+  <img src="assets/screenshots/18-network-file-sharing.png" width="32%" alt="HTTP File Sharing">
+</p>
 
-![When something breaks, fix it here first](slides/en/out/13-tools.png)
+Start an HTTP/1.1 file sharing server over Wi-Fi for browser upload/download or `curl -T`, plus `/mirror` for live remote screen mirroring, touch/key control, and one-click PNG capture from a computer browser.
 
-### About phone
+### Runtime Plugins & AERA `.aerap` Apps
 
-![Check battery health and charge cycles](slides/en/out/14-specs.png)
+<p align="center">
+  <img src="assets/screenshots/19-plugins.png" width="32%" alt="Plugins and AERA">
+</p>
 
-### Other features
+Run `plugin.toml` shell plugins with live streaming output and cancellation, alongside isolated AERA `.aerap` GUI runtimes including **AERA Browser** (WPE WebKit) and **AERA Telegram** (TDLib).
 
-- Reboot to system, recovery, fastboot, bootloader or EDL, and switch slots
-- Light and dark themes; Simplified Chinese, Traditional Chinese, English and Vietnamese
-- Direct non-slotted ARM64 `.efi` flashing to `efisp` and verified zero-fill wiping for `efisp` and `frp` partitions, plus optional EFISP backup/restore and pre-reboot ABL EFISP regression guard
-- Root Manager (kernel KMI resolution, Magisk/KernelSU/APatch framework detection, and `/data/adb/modules/*` enable/disable/remove toggles)
-- Network File Sharing over HTTP/1.1 with browser download/upload, remote screen mirror & touch/key control (`/mirror`), runtime plugins with live streaming output and cancellation (`plugin.toml` scripts plus isolated AERA `.aerap` GUI runtimes for WPE WebKit Browser and TDLib Telegram), and recent Flash/Wipe History on the Logs page
-- OTA `payload.bin` / `.zip` inspector (Anti-Rollback security patch/timestamp check and `REPLACE`/`REPLACE_ZSTD`/`ZERO`/`DISCARD` partition extraction), batch `.img`/`.efi` flash with geometry validation, recovery PIN lock, developer/kernel tools (`printk`, SELinux, ADB, 64 MiB storage benchmark), and per-app `.tar.lz4` backup vault (`/sdcard/Aweyuki/app-vault`)
+### Advanced, Developer Tools & Volume-Key-Free Screenshots
 
-### Without a system
+<p align="center">
+  <img src="assets/screenshots/10-advanced.png" width="32%" alt="Advanced menu">
+  <img src="assets/screenshots/20-developer-benchmark.png" width="32%" alt="Developer and Benchmark">
+</p>
 
-![Aweyuki starts even without a system](slides/en/out/15-no-system.png)
+- **Advanced Hub**: Quick access to Search, Logs (with recent Flash/Wipe history), File Manager, Terminal, SELinux/Filesystem repair, Root Manager, Network File Sharing, Plugins, and App Vault.
+- **Developer & Storage Benchmark**: Inspect and adjust `printk` log levels, SELinux mode, USB/ADB state, CPU governor, kernel `cmdline`, and run a 64 MiB sequential storage benchmark.
+- **Volume-Key-Free Screenshots**: Capture PNG screenshots either via the **3s Delayed Screenshot** action in Advanced (the toast clears automatically before capture) or remotely from `/mirror`.
+
+### Settings, About Phone & Reboot
+
+<p align="center">
+  <img src="assets/screenshots/23-about-specs.png" width="32%" alt="About Phone and Specs">
+  <img src="assets/screenshots/24-reboot.png" width="32%" alt="Reboot options">
+</p>
+
+- **Localization & Themes**: Light and dark themes; Simplified Chinese, Traditional Chinese, English, and Vietnamese; 28 IANA time zones including Vietnam (`Asia/Ho_Chi_Minh`, UTC+7).
+- **About & Diagnostics**: View Aweyuki version, storage, SoC, RAM, battery health, and charge cycles.
+- **Reboot & Slot Control**: Reboot to System, Recovery, Fastboot, Bootloader, EDL, or Power off, switch A/B slots, and rely on the pre-reboot ABL EFISP regression guard.
 
 ## Supported devices
 
