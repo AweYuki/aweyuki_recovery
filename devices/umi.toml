@@ -194,10 +194,11 @@ server = "https://update.miui.com/updates/miotaV3.php"
 #
 # The sum is the SHA-256 of that recovery image, which is the whole
 # partition as the phone and the package hold it.
-[stock]
-version = "OS1.0.5.0.TJBCNXM"
-package = "https://cdnorg.d.miui.com/OS1.0.5.0.TJBCNXM/miui_UMI_OS1.0.5.0.TJBCNXM_d01651ed86_13.0.zip"
-recovery = "de565b9acc26a409d728f06a8b7c38c809173e0e1bd153d3d61683b2baf01ef4"
+# [disabled: legacy non-payload.bin zip; pack locally with --stock <recovery.img>]
+# [stock]
+# version = "OS1.0.5.0.TJBCNXM"
+# package = "https://cdnorg.d.miui.com/OS1.0.5.0.TJBCNXM/miui_UMI_OS1.0.5.0.TJBCNXM_d01651ed86_13.0.zip"
+# recovery = "de565b9acc26a409d728f06a8b7c38c809173e0e1bd153d3d61683b2baf01ef4"
 
 # The kernel the recovery runs, which the stock recovery's own cannot be: the
 # ROM this phone runs is built for a newer Android, and its system and vendor

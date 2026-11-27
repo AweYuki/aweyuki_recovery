@@ -99,6 +99,10 @@ pub struct Stock {
     pub package: String,
     /// The recovery partition's SHA-256, in lowercase hex.
     pub recovery: String,
+    /// The partition in the OTA payload to extract (defaults to
+    /// `device.recovery_partition`, e.g. `recovery`, `vendor_boot`, or `boot`).
+    #[serde(default)]
+    pub partition: Option<String>,
 }
 
 /// What brings the phone's WLAN up inside a recovery, which loads none of
@@ -648,6 +652,9 @@ impl DeviceConfig {
                 "[stock] recovery: {} is not a SHA-256 in lowercase hex",
                 stock.recovery
             );
+            if let Some(partition) = &stock.partition {
+                ensure!(!partition.is_empty() && !partition.contains('/'), "[stock] partition: {partition} is not a partition's name");
+            }
         }
         if let Some(wlan) = &cfg.wlan {
             ensure!(wlan.probe.starts_with("http://"), "[wlan] probe: {} is not a plain HTTP address", wlan.probe);

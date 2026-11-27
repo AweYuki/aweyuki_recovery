@@ -180,7 +180,7 @@ Aggregated from community forks of `kirklin/skyward` (see each device's source r
 | OnePlus Ace 6 | `PLQ110` | Local pack (no `[stock]`) | [liuyimeng1024-ui/skyward-for-oneplusace6](https://github.com/liuyimeng1024-ui/skyward-for-oneplusace6) |
 | realme RMX3551 | `RE5465` | Local pack (no `[stock]`) | [partofpai/skyward-oplus-sm8475](https://github.com/partofpai/skyward-oplus-sm8475) |
 | realme 真我Neo7 | `RMX5060` | Local pack (no `[stock]`) | [aaabbk/Realme_neo7_skyward](https://github.com/aaabbk/Realme_neo7_skyward) |
-| OPPO A57 | `a57` | `lineage-22.1-20260715` | [Max1937/skyward-a57](https://github.com/Max1937/skyward-a57) |
+| OPPO A57 | `a57` | Local pack (no `[stock]`) | [Max1937/skyward-a57](https://github.com/Max1937/skyward-a57) |
 | Redmi K40 | `alioth` | `OS1.0.10.0.TKHCNXM` | [fuxilover/skyward](https://github.com/fuxilover/skyward) |
 | Redmi Note 14 Pro+ 5G | `amethyst` | `OS3.0.306.0.WOPCNXM` | [7-Ice/skyward](https://github.com/7-Ice/skyward) |
 | Redmi K30S Ultra | `apollo` | Local pack (no `[stock]`) | [kafuzhi/skyward](https://github.com/kafuzhi/skyward) |
@@ -191,8 +191,8 @@ Aggregated from community forks of `kirklin/skyward` (see each device's source r
 | motorola ThinkPhone by motorola | `bronco` | Local pack (no `[stock]`) | [iljasrb/skyward](https://github.com/iljasrb/skyward) |
 | Redmi Note 9 5G | `cannon` | Local pack (no `[stock]`) | [limitbeer0/skyward-cannon](https://github.com/limitbeer0/skyward-cannon) |
 | Xiaomi Mi 10 Ultra | `cas` | Local pack (no `[stock]`) | [kafuzhi/skyward](https://github.com/kafuzhi/skyward) |
-| Xiaomi Mi MIX 2 | `chiron` | `V12.0.1.0.PDECNXM` | [6ewjso6-gif/skyward](https://github.com/6ewjso6-gif/skyward) |
-| REDMI Note 10 Pro | `chopin` | `V14.0.8.0.TKPCNXM` | [Hwhmi/skyward](https://github.com/Hwhmi/skyward) |
+| Xiaomi Mi MIX 2 | `chiron` | Local pack (no `[stock]`) | [6ewjso6-gif/skyward](https://github.com/6ewjso6-gif/skyward) |
+| REDMI Note 10 Pro | `chopin` | Local pack (no `[stock]`) | [Hwhmi/skyward](https://github.com/Hwhmi/skyward) |
 | Xiaomi Mi 10 Pro | `cmi` | Local pack (no `[stock]`) | [kafuzhi/skyward](https://github.com/kafuzhi/skyward) |
 | OnePlus Ace 3 Pro | `corvette` | Local pack (no `[stock]`) | [Hotsteel2901/skyward-OPA3P](https://github.com/Hotsteel2901/skyward-OPA3P) |
 | Xiaomi Mi 9 Pro 5G | `crux` | Local pack (no `[stock]`) | [tao88vip/skyward](https://github.com/tao88vip/skyward) |
@@ -256,16 +256,16 @@ Aggregated from community forks of `kirklin/skyward` (see each device's source r
 | Nothing Phone (1) | `spacewar` | Local pack (no `[stock]`) | [BruxinCore/Skyward-spacewar](https://github.com/BruxinCore/Skyward-spacewar) |
 | Xiaomi 11 Ultra | `star` | Local pack (no `[stock]`) | [LiAA-CN/skyward-for-Mi11P-U](https://github.com/LiAA-CN/skyward-for-Mi11P-U) |
 | Redmi Note 12 5G | `sunstone-2` | Local pack (no `[stock]`) | [hss2671/skyward](https://github.com/hss2671/skyward) |
-| Redmi Note 12R Pro | `sunstone` | Local pack (no `[stock]`) | [hss2671/skyward](https://github.com/hss2671/skyward) |
+| Redmi Note 12R Pro | `sunstone` | `OS2.0.6.0.UMQCNXM` | [hss2671/skyward](https://github.com/hss2671/skyward) |
 | Lenovo Xiaoxin Pad Pro GT | `tb710fu` | Local pack (no `[stock]`) | [WASDDestroy/skyward](https://github.com/WASDDestroy/skyward) |
 | Xiaomi Mi 10S | `thyme` | Local pack (no `[stock]`) | [Flicker-Android-Devices/skyward-mikona](https://github.com/Flicker-Android-Devices/skyward-mikona) |
 | REDMI K Pad | `turner` | Local pack (no `[stock]`) | [xiaozhou0307/skyward](https://github.com/xiaozhou0307/skyward) |
-| Xiaomi 10 | `umi` | `OS1.0.5.0.TJBCNXM` | [Alittlejelly/skyward-for-MI10](https://github.com/Alittlejelly/skyward-for-MI10) |
+| Xiaomi 10 | `umi` | Local pack (no `[stock]`) | [Alittlejelly/skyward-for-MI10](https://github.com/Alittlejelly/skyward-for-MI10) |
 | Xiaomi 12S Pro | `unicorn` | `OS3.0.4.0.VLECNXM` | [Kinaxie/skyward](https://github.com/Kinaxie/skyward) |
 | Xiaomi 11 | `venus` | Local pack (no `[stock]`) | [cvbyisme/skyward-venus-archive](https://github.com/cvbyisme/skyward-venus-archive) |
 | Redmi K70 | `vermeer` | `OS3.0.307.0.WNKCNXM` | [luoxunyong/skyward-by-Redmi-K70](https://github.com/luoxunyong/skyward-by-Redmi-K70) |
 | Xiaomi Pad 7S Pro 12.5 | `violin` | `OS4.0.5.0.XOTCNXM` | [shu-chong/skyward-for-violin](https://github.com/shu-chong/skyward-for-violin) |
-| REDMI K90 Ultra | `warsaw-4.0.4.0` | `OS4.0.4.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
+| REDMI K90 Ultra | `warsaw-4.0.4.0` | Local pack (no `[stock]`) | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
 | REDMI K90 Ultra | `warsaw-4.0.8.0.nfchal` | `OS4.0.8.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
 | REDMI K90 Ultra | `warsaw-4.0.8.0` | `OS4.0.8.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
 | Xiaomi MI 6X | `wayne` | Local pack (no `[stock]`) | [East888666/skyward-xiaomi-legacy](https://github.com/East888666/skyward-xiaomi-legacy) |

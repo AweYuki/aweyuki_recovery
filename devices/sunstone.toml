@@ -23,12 +23,11 @@ sources = ["vendor", "vendor_boot"]
 # whose full update package holds the boot image the recovery is built on
 # top of. The phone keeps no recovery partition: its recovery is the
 # boot image's, so the image is built for the boot partition.
-# [disabled: targets partition = "boot" instead of recovery]
-# [stock]
-# version = "OS2.0.6.0.UMQCNXM"
-# package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS2.0.6.0.UMQCNXM/sunstone-ota_full-OS2.0.6.0.UMQCNXM-user-14.0-a871f6a54b.zip"
-# recovery = "a81fbd715c660e7ea57e053eca9f4a284f38c699c8aa718b7b6d5ec7f192496a"
-# partition = "boot"
+[stock]
+version = "OS2.0.6.0.UMQCNXM"
+package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS2.0.6.0.UMQCNXM/sunstone-ota_full-OS2.0.6.0.UMQCNXM-user-14.0-a871f6a54b.zip"
+recovery = "a81fbd715c660e7ea57e053eca9f4a284f38c699c8aa718b7b6d5ec7f192496a"
+partition = "boot"
 
 # The kernel built from the phone's sources (5.4.302), kept in the image
 # instead of the stock one.

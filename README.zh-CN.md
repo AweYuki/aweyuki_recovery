@@ -175,7 +175,7 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 | OnePlus Ace 6 | `PLQ110` | 本地打包（无 `[stock]`） | [liuyimeng1024-ui/skyward-for-oneplusace6](https://github.com/liuyimeng1024-ui/skyward-for-oneplusace6) |
 | realme RMX3551 | `RE5465` | 本地打包（无 `[stock]`） | [partofpai/skyward-oplus-sm8475](https://github.com/partofpai/skyward-oplus-sm8475) |
 | realme 真我Neo7 | `RMX5060` | 本地打包（无 `[stock]`） | [aaabbk/Realme_neo7_skyward](https://github.com/aaabbk/Realme_neo7_skyward) |
-| OPPO A57 | `a57` | `lineage-22.1-20260715` | [Max1937/skyward-a57](https://github.com/Max1937/skyward-a57) |
+| OPPO A57 | `a57` | 本地打包（无 `[stock]`） | [Max1937/skyward-a57](https://github.com/Max1937/skyward-a57) |
 | Redmi K40 | `alioth` | `OS1.0.10.0.TKHCNXM` | [fuxilover/skyward](https://github.com/fuxilover/skyward) |
 | Redmi Note 14 Pro+ 5G | `amethyst` | `OS3.0.306.0.WOPCNXM` | [7-Ice/skyward](https://github.com/7-Ice/skyward) |
 | Redmi K30S Ultra | `apollo` | 本地打包（无 `[stock]`） | [kafuzhi/skyward](https://github.com/kafuzhi/skyward) |
@@ -186,8 +186,8 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 | motorola ThinkPhone by motorola | `bronco` | 本地打包（无 `[stock]`） | [iljasrb/skyward](https://github.com/iljasrb/skyward) |
 | Redmi Note 9 5G | `cannon` | 本地打包（无 `[stock]`） | [limitbeer0/skyward-cannon](https://github.com/limitbeer0/skyward-cannon) |
 | Xiaomi Mi 10 Ultra | `cas` | 本地打包（无 `[stock]`） | [kafuzhi/skyward](https://github.com/kafuzhi/skyward) |
-| Xiaomi Mi MIX 2 | `chiron` | `V12.0.1.0.PDECNXM` | [6ewjso6-gif/skyward](https://github.com/6ewjso6-gif/skyward) |
-| REDMI Note 10 Pro | `chopin` | `V14.0.8.0.TKPCNXM` | [Hwhmi/skyward](https://github.com/Hwhmi/skyward) |
+| Xiaomi Mi MIX 2 | `chiron` | 本地打包（无 `[stock]`） | [6ewjso6-gif/skyward](https://github.com/6ewjso6-gif/skyward) |
+| REDMI Note 10 Pro | `chopin` | 本地打包（无 `[stock]`） | [Hwhmi/skyward](https://github.com/Hwhmi/skyward) |
 | Xiaomi Mi 10 Pro | `cmi` | 本地打包（无 `[stock]`） | [kafuzhi/skyward](https://github.com/kafuzhi/skyward) |
 | OnePlus Ace 3 Pro | `corvette` | 本地打包（无 `[stock]`） | [Hotsteel2901/skyward-OPA3P](https://github.com/Hotsteel2901/skyward-OPA3P) |
 | Xiaomi Mi 9 Pro 5G | `crux` | 本地打包（无 `[stock]`） | [tao88vip/skyward](https://github.com/tao88vip/skyward) |
@@ -251,16 +251,16 @@ Aweyuki Recovery 是使用 Rust 从零编写的 Android recovery。
 | Nothing Phone (1) | `spacewar` | 本地打包（无 `[stock]`） | [BruxinCore/Skyward-spacewar](https://github.com/BruxinCore/Skyward-spacewar) |
 | Xiaomi 11 Ultra | `star` | 本地打包（无 `[stock]`） | [LiAA-CN/skyward-for-Mi11P-U](https://github.com/LiAA-CN/skyward-for-Mi11P-U) |
 | Redmi Note 12 5G | `sunstone-2` | 本地打包（无 `[stock]`） | [hss2671/skyward](https://github.com/hss2671/skyward) |
-| Redmi Note 12R Pro | `sunstone` | 本地打包（无 `[stock]`） | [hss2671/skyward](https://github.com/hss2671/skyward) |
+| Redmi Note 12R Pro | `sunstone` | `OS2.0.6.0.UMQCNXM` | [hss2671/skyward](https://github.com/hss2671/skyward) |
 | Lenovo Xiaoxin Pad Pro GT | `tb710fu` | 本地打包（无 `[stock]`） | [WASDDestroy/skyward](https://github.com/WASDDestroy/skyward) |
 | Xiaomi Mi 10S | `thyme` | 本地打包（无 `[stock]`） | [Flicker-Android-Devices/skyward-mikona](https://github.com/Flicker-Android-Devices/skyward-mikona) |
 | REDMI K Pad | `turner` | 本地打包（无 `[stock]`） | [xiaozhou0307/skyward](https://github.com/xiaozhou0307/skyward) |
-| Xiaomi 10 | `umi` | `OS1.0.5.0.TJBCNXM` | [Alittlejelly/skyward-for-MI10](https://github.com/Alittlejelly/skyward-for-MI10) |
+| Xiaomi 10 | `umi` | 本地打包（无 `[stock]`） | [Alittlejelly/skyward-for-MI10](https://github.com/Alittlejelly/skyward-for-MI10) |
 | Xiaomi 12S Pro | `unicorn` | `OS3.0.4.0.VLECNXM` | [Kinaxie/skyward](https://github.com/Kinaxie/skyward) |
 | Xiaomi 11 | `venus` | 本地打包（无 `[stock]`） | [cvbyisme/skyward-venus-archive](https://github.com/cvbyisme/skyward-venus-archive) |
 | Redmi K70 | `vermeer` | `OS3.0.307.0.WNKCNXM` | [luoxunyong/skyward-by-Redmi-K70](https://github.com/luoxunyong/skyward-by-Redmi-K70) |
 | Xiaomi Pad 7S Pro 12.5 | `violin` | `OS4.0.5.0.XOTCNXM` | [shu-chong/skyward-for-violin](https://github.com/shu-chong/skyward-for-violin) |
-| REDMI K90 Ultra | `warsaw-4.0.4.0` | `OS4.0.4.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
+| REDMI K90 Ultra | `warsaw-4.0.4.0` | 本地打包（无 `[stock]`） | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
 | REDMI K90 Ultra | `warsaw-4.0.8.0.nfchal` | `OS4.0.8.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
 | REDMI K90 Ultra | `warsaw-4.0.8.0` | `OS4.0.8.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
 | Xiaomi MI 6X | `wayne` | 本地打包（无 `[stock]`） | [East888666/skyward-xiaomi-legacy](https://github.com/East888666/skyward-xiaomi-legacy) |

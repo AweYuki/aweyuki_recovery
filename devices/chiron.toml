@@ -32,11 +32,12 @@ mounted = ["system"]
 efs = ["modemst1", "modemst2", "fsg", "fsc", "persist"]
 
 # The MIUI build the recovery is made on, and the package it comes from.
-[stock]
-version = "V12.0.1.0.PDECNXM"
-package = "https://bigota.d.miui.com/V12.0.1.0.PDECNXM/miui_MIMIX2_V12.0.1.0.PDECNXM_ba60e4bd60_9.0.zip"
-recovery = "514efae2d1d1caedf05d2f628aebb57268a89aa630ac4b7e037ee2a94ed7abf2"
-partition_size = 67108864
+# [disabled: legacy non-payload.bin zip; pack locally with --stock <recovery.img>]
+# [stock]
+# version = "V12.0.1.0.PDECNXM"
+# package = "https://bigota.d.miui.com/V12.0.1.0.PDECNXM/miui_MIMIX2_V12.0.1.0.PDECNXM_ba60e4bd60_9.0.zip"
+# recovery = "514efae2d1d1caedf05d2f628aebb57268a89aa630ac4b7e037ee2a94ed7abf2"
+# partition_size = 67108864
 
 [update]
 server = "https://update.miui.com/updates/miotaV3.php"

@@ -65,6 +65,7 @@ server = "https://update.miui.com/updates/miotaV3.php"
 version = "OS1.0.3.0.TKZCNXM"
 package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS1.0.3.0.TKZCNXM/miui_ENUMA_OS1.0.3.0.TKZCNXM_e1128c5324_13.0.zip"
 recovery = "49ca3a92e7222cec45bce2565567ccbb3715cc468158d0a73a4b6d6a1250616e"
+partition = "boot"
 
 # The baseband's settings, with the IMEI, and the sensors' calibration.
 [backup]

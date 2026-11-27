@@ -75,10 +75,11 @@ server = "https://update.miui.com/updates/miotaV3.php"
 # Built on the recovery partition this phone itself holds (OS4.0.4.0.XHPCNXM,
 # slot b, dumped from /dev/block/by-name/recovery_b), so there is no package
 # to take it out of; the sum is that partition's own.
-[stock]
-version = "OS4.0.4.0.XHPCNXM"
-package = "https://example.invalid/OS4.0.4.0.XHPCNXM/warsaw-ota_full-OS4.0.4.0.XHPCNXM-user-17.0-placeholder.zip"
-recovery = "73ced253909898b7600d31424b419edfa74f29c4a91de99028826ae0ee559009"
+# [disabled: placeholder example.invalid stock URL]
+# [stock]
+# version = "OS4.0.4.0.XHPCNXM"
+# package = "https://example.invalid/OS4.0.4.0.XHPCNXM/warsaw-ota_full-OS4.0.4.0.XHPCNXM-user-17.0-placeholder.zip"
+# recovery = "73ced253909898b7600d31424b419edfa74f29c4a91de99028826ae0ee559009"
 
 # qcom-hv-haptics (qcom,hv-haptics in its dtbo), whose driver says the
 # motor's resonant frequency as the 17 Ultra's does; the click is made from

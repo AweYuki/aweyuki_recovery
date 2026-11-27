@@ -92,12 +92,13 @@ mounted = ["persist", "vendor"]
 # The stock build the recovery is made on: the Chinese system's MIUI
 # 14.0.8.0, whose full update package on Xiaomi's own download server
 # holds the recovery partition the recovery is built on top of.
-[stock]
-version = "V14.0.8.0.TKPCNXM"
-package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/V14.0.8.0.TKPCNXM/miui_CHOPIN_V14.0.8.0.TKPCNXM_c0252cdcc5_13.0.zip"
-recovery = "0000000000000000000000000000000000000000000000000000000000000000"
-
-probe = "http://connect.rom.miui.com/generate_204"
+# [disabled: placeholder all-zero recovery SHA-256]
+# [stock]
+# version = "V14.0.8.0.TKPCNXM"
+# package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/V14.0.8.0.TKPCNXM/miui_CHOPIN_V14.0.8.0.TKPCNXM_c0252cdcc5_13.0.zip"
+# recovery = "0000000000000000000000000000000000000000000000000000000000000000"
+#
+# probe = "http://connect.rom.miui.com/generate_204"
 
 # The update server the stock updater of the Chinese system asks.
 [update]
