@@ -1,0 +1,230 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (defaults to v<workspace-version> from Cargo.toml)
+        required: false
+        default: ""
+      prerelease:
+        description: Mark as prerelease
+        type: boolean
+        required: false
+        default: false
+      device:
+        description: Single device codename to build (leave empty for all [stock] devices)
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  meta:
+    name: Resolve release tag
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: resolve
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version v$version"
+              exit 1
+            fi
+            tag="$GITHUB_REF_NAME"
+          elif [ -n "$INPUT_TAG" ]; then
+            tag="$INPUT_TAG"
+          else
+            tag="v$version"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  check:
+    name: Lint, test, and validate configs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate all device TOML configs
+        run: |
+          python3 - <<'PY'
+          import glob, tomllib
+          files = sorted(glob.glob("devices/*.toml"))
+          for f in files:
+              cfg = tomllib.load(open(f, "rb"))
+              assert cfg.get("device", {}).get("codename"), f"missing device.codename in {f}"
+          print(f"Validated {len(files)} device configs")
+          PY
+      - uses: ./.github/actions/setup
+      - name: Lint what runs on the computer
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked --workspace
+      - name: Lint what runs on the phone
+        run: cargo ndk -t arm64-v8a --platform 30 clippy --locked --workspace --all-targets -- -D warnings
+
+  tools:
+    name: Build recovery service, system-init, and packer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Build aweyuki for arm64-v8a
+        run: cargo ndk -t arm64-v8a --platform 30 build --locked --release -p aweyuki
+      - name: Build aweyuki-system-init (static)
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: cargo ndk -t arm64-v8a --platform 30 build --locked --release -p aweyuki-system-init --target-dir target/system-init
+      - name: Build aweyuki-pack
+        run: cargo build --locked --release -p aweyuki-pack
+      - name: Gather tools
+        run: |
+          mkdir tools
+          cp target/aarch64-linux-android/release/aweyuki target/release/aweyuki-pack tools/
+          cp target/system-init/aarch64-linux-android/release/system-init tools/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tools
+          path: tools/
+          if-no-files-found: error
+          retention-days: 1
+
+  devices:
+    name: List release devices
+    runs-on: ubuntu-24.04
+    outputs:
+      devices: ${{ steps.list.outputs.devices }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: list
+        env:
+          DEVICE: ${{ inputs.device }}
+        run: |
+          if [ -n "$DEVICE" ]; then
+            test -f "devices/$DEVICE.toml"
+            echo "devices=$(jq -nc --arg device "$DEVICE" '[$device]')" >> "$GITHUB_OUTPUT"
+          else
+            devices=$(python3 -c 'import glob, json, os, tomllib; print(json.dumps([os.path.basename(p)[:-5] for p in sorted(glob.glob("devices/*.toml")) if "stock" in tomllib.load(open(p, "rb"))]))')
+            echo "devices=$devices" >> "$GITHUB_OUTPUT"
+          fi
+
+  recovery:
+    name: Build ${{ matrix.device }}
+    needs: [meta, tools, devices]
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        device: ${{ fromJSON(needs.devices.outputs.devices) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: tools
+          path: tools
+      - name: Make tools executable
+        run: chmod +x tools/aweyuki tools/aweyuki-pack
+      - name: Read stock metadata
+        id: stock
+        run: tools/aweyuki-pack stock --config "devices/${{ matrix.device }}.toml" >> "$GITHUB_OUTPUT"
+      - name: Restore cached stock recovery
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: stock/recovery.img
+          key: stock-recovery-${{ steps.stock.outputs.recovery }}
+      - name: Extract stock recovery
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: tools/aweyuki-pack stock --config "devices/${{ matrix.device }}.toml" --out stock/recovery.img
+      - name: Verify stock recovery SHA-256
+        env:
+          RECOVERY: ${{ steps.stock.outputs.recovery }}
+        run: echo "$RECOVERY  stock/recovery.img" | sha256sum --check
+      - name: Pack recovery image
+        id: pack
+        env:
+          DEVICE: ${{ matrix.device }}
+          STOCK: ${{ steps.stock.outputs.version }}
+          TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          name="aweyuki-$TAG-$DEVICE-$STOCK"
+          mkdir out
+          tools/aweyuki-pack recovery \
+            --stock stock/recovery.img \
+            --binary tools/aweyuki \
+            --system-init tools/system-init \
+            --config "devices/$DEVICE.toml" \
+            --font resources/fonts/MiSansVF.ttf \
+            --mono resources/fonts/KirkMono-Regular.ttf \
+            --mono-license resources/fonts/KirkMono-OFL.txt \
+            --out "out/$name.img"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Zip image
+        working-directory: out
+        env:
+          NAME: ${{ steps.pack.outputs.name }}
+        run: zip -9 "$NAME.zip" "$NAME.img"
+      - uses: actions/upload-artifact@v7
+        with:
+          path: out/${{ steps.pack.outputs.name }}.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    needs: [meta, check, recovery]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: aweyuki-*
+          path: images
+          merge-multiple: true
+          skip-decompress: true
+      - name: Generate SHA256SUMS and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          shopt -s nullglob
+          built=(images/aweyuki-"$TAG"-*.zip)
+          if [ ${#built[@]} -eq 0 ]; then
+            echo "::error::no recovery zip artifacts were built for $TAG"
+            exit 1
+          fi
+          (cd images && sha256sum -- *.zip > SHA256SUMS)
+          assets=()
+          for zip in "${built[@]}"; do
+            base=$(basename "$zip")
+            device=$(python3 -c 'import os, sys, tomllib; b=sys.argv[1]; tag=sys.argv[2]; rest=b[len("aweyuki-"+tag+"-"):]; cand=[os.path.basename(p)[:-5] for p in __import__("glob").glob("devices/*.toml")]; m=max((c for c in cand if rest.startswith(c+"-")), key=len); print(m)' "$base" "$TAG")
+            model=$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["device"]["model"])' "devices/$device.toml")
+            assets+=("$zip#$model ($device)")
+          done
+          assets+=("images/SHA256SUMS")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" --clobber "${assets[@]}"
+          else
+            flags=(--title "$TAG" --generate-notes)
+            if [ "$PRERELEASE" = "true" ]; then
+              flags+=(--prerelease)
+            fi
+            gh release create "$TAG" "${flags[@]}" "${assets[@]}"
+          fi

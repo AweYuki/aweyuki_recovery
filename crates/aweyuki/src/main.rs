@@ -338,8 +338,12 @@ fn main() -> Result<()> {
         Cmd::Load { config, names } => {
             let cfg = DeviceConfig::load(&config)?;
             let names = if names.is_empty() { cfg.modules.load.clone() } else { names };
-            for path in load_modules(&cfg, &names)? {
+            let loaded = load_modules(&cfg, &names)?;
+            for path in &loaded.taken {
                 println!("{}", path.display());
+            }
+            for (path, why) in &loaded.refused {
+                eprintln!("{} not loaded: {why}", path.display());
             }
             Ok(())
         }
@@ -830,7 +834,7 @@ fn module_folders(cfg: &DeviceConfig) -> Result<Vec<PathBuf>> {
 }
 
 /// Load `names` from the module sources the configuration lists.
-fn load_modules(cfg: &DeviceConfig, names: &[String]) -> Result<Vec<PathBuf>> {
+fn load_modules(cfg: &DeviceConfig, names: &[String]) -> Result<aweyuki_modules::Loaded> {
     aweyuki_modules::load(&module_folders(cfg)?, names)
 }
 
@@ -870,8 +874,12 @@ fn bring_up(cfg: &DeviceConfig, slot: aweyuki_vab::Slot, found: Result<keys::Fou
         let at = aweyuki_block::fstab::mount(name)?;
         aweyuki_sys::kmsg(&format!("{name} is mounted on {}", at.display()))?;
     }
-    for path in load_modules(cfg, &cfg.modules.load)? {
+    let loaded = load_modules(cfg, &cfg.modules.load)?;
+    for path in &loaded.taken {
         aweyuki_sys::kmsg(&format!("loaded {}", path.display()))?;
+    }
+    for (path, why) in &loaded.refused {
+        aweyuki_sys::kmsg(&format!("did not load {}: {why}", path.display()))?;
     }
     if !cfg.owners.is_empty() {
         let handed = hand_over(&cfg.owners)?;

@@ -1,0 +1,47 @@
+# Ported from: https://github.com/hss2671/skyward/tree/main
+[device]
+codename = "sunstone"
+brand = "Redmi"
+model = "Redmi Note 12 5G"
+ab = true
+soc = { hans = "骁龙®4 Gen 1移动平台", hant = "Snapdragon® 4 Gen 1 行動平台", en = "Snapdragon® 4 Gen 1 Mobile Platform" }
+os_version_prop = "ro.mi.os.version.incremental"
+
+[display]
+# The stock MIUI/HyperOS density of the phone's own system, 1080 by 2400.
+width = 1080
+height = 2400
+density = 440
+diagonal = 6.67
+
+[modules]
+sources = ["vendor", "vendor_boot"]
+# The kernel built from the phone's sources has its touchscreen driver
+# (FocalTech FT3519T) and Xiaomi touch layer in, so no module is loaded.
+
+# The stock build the recovery is made on: the Chinese system's OS2.0.6.0,
+# whose full update package holds the boot image the recovery is built on
+# top of. The phone keeps no recovery partition: its recovery is the
+# boot image's, so the image is built for the boot partition.
+# [disabled: incompatible with aweyuki-config stock schema]
+# [stock]
+# version = "OS2.0.6.0.UMQCNXM"
+# package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS2.0.6.0.UMQCNXM/sunstone-ota_full-OS2.0.6.0.UMQCNXM-user-14.0-a871f6a54b.zip"
+# recovery = "a81fbd715c660e7ea57e053eca9f4a284f38c699c8aa718b7b6d5ec7f192496a"
+# partition = "boot"
+
+# # The kernel built from the phone's sources (5.4.302), kept in the image
+# # instead of the stock one.
+# [disabled: incompatible with aweyuki-config kernel schema]
+# [kernel]
+# url = "https://raw.githubusercontent.com/hss2671/skyward/main/kernel/Image"
+# sha256 = "bb50a2032324cc382223ed2bca970ba1659171bb580591d7b8cd3a003b8c25eb"
+
+# # The update server the stock updater of the Chinese system asks.
+[update]
+server = "https://update.miui.com/updates/miotaV3.php"
+
+# The baseband's settings, with the phone's own identity, and the sensors'
+# calibration.
+[backup]
+efs = ["modemst1", "modemst2", "fsg", "fsc", "persist"]

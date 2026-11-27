@@ -207,10 +207,13 @@ trình đó chạy trên những mẫu này thì chưa được kiểm chứng.
 | OnePlus 7 | `guacamoleb` | Tự đóng gói (chưa có `[stock]`) | [imqinyu/skyward_guacamoleb](https://github.com/imqinyu/skyward_guacamoleb) |
 | Redmi K40 Pro | `haydn` | Tự đóng gói (chưa có `[stock]`) | [qaz6750/skyward](https://github.com/qaz6750/skyward) |
 | OnePlus Ace 5 Pro | `hummer` | `v13.1` | [venti1112/skyward-hummer](https://github.com/venti1112/skyward-hummer) |
+| Xiaomi Mi Note 3 | `jason-los23` | Tự đóng gói (chưa có `[stock]`) | [East888666/skyward-xiaomi-legacy](https://github.com/East888666/skyward-xiaomi-legacy) |
+| Xiaomi Mi Note 3 | `jason-miui12` | Tự đóng gói (chưa có `[stock]`) | [East888666/skyward-xiaomi-legacy](https://github.com/East888666/skyward-xiaomi-legacy) |
 | Xiaomi Mi Note 3 | `jason` | Tự đóng gói (chưa có `[stock]`) | [East888666/skyward-xiaomi-legacy](https://github.com/East888666/skyward-xiaomi-legacy) |
 | OnePlus 8T | `kebab` | Tự đóng gói (chưa có `[stock]`) | [toraidl/skyward](https://github.com/toraidl/skyward) |
 | Xiaomi Redmi Note 7 | `lavender` | Tự đóng gói (chưa có `[stock]`) | [aLpHa-Git-69/skyward](https://github.com/aLpHa-Git-69/skyward) |
 | OnePlus 9R | `lemonades` | Tự đóng gói (chưa có `[stock]`) | [lululuhu/skyward](https://github.com/lululuhu/skyward) |
+| Xiaomi Pad 6 Pro | `liuqin-nomounts` | `OS3.0.7.0.VMYCNXM` | [qasg/skyward-Xiaomio-Pad-6-Pro](https://github.com/qasg/skyward-Xiaomio-Pad-6-Pro) |
 | Xiaomi Pad 6 Pro | `liuqin` | `OS3.0.7.0.VMYCNXM` | [qasg/skyward-Xiaomio-Pad-6-Pro](https://github.com/qasg/skyward-Xiaomio-Pad-6-Pro) |
 | Redmi K30 Pro | `lmi` | Tự đóng gói (chưa có `[stock]`) | [kafuzhi/skyward](https://github.com/kafuzhi/skyward) |
 | Xiaomi Civi 5 Pro | `luming` | `OS4.0.2.0.XOICNXM` | [justistab3-bot/skyward](https://github.com/justistab3-bot/skyward) |
@@ -248,8 +251,10 @@ trình đó chạy trên những mẫu này thì chưa được kiểm chứng.
 | Xiaomi MIX Flip | `ruyi` | `OS3.0.305.0.WNIMIXM` | [Kinaxie/skyward](https://github.com/Kinaxie/skyward) |
 | Xiaomi Mi 6 | `sagit` | Tự đóng gói (chưa có `[stock]`) | [KextNor/skyward](https://github.com/KextNor/skyward) |
 | Xiaomi Pad 6S Pro 12.4 | `sheng` | `OS3.0.303.0.WNXCNXM` | [Kinaxie/skyward](https://github.com/Kinaxie/skyward) |
+| Redmi K60 Pro | `socrates-decrypt` | `OS3.0.304.0.WMKCNXM` | [dhhdheh/skyward](https://github.com/dhhdheh/skyward) |
 | Nothing Phone (1) | `spacewar` | Tự đóng gói (chưa có `[stock]`) | [BruxinCore/Skyward-spacewar](https://github.com/BruxinCore/Skyward-spacewar) |
 | Xiaomi 11 Ultra | `star` | Tự đóng gói (chưa có `[stock]`) | [LiAA-CN/skyward-for-Mi11P-U](https://github.com/LiAA-CN/skyward-for-Mi11P-U) |
+| Redmi Note 12 5G | `sunstone-2` | Tự đóng gói (chưa có `[stock]`) | [hss2671/skyward](https://github.com/hss2671/skyward) |
 | Redmi Note 12R Pro | `sunstone` | Tự đóng gói (chưa có `[stock]`) | [hss2671/skyward](https://github.com/hss2671/skyward) |
 | Lenovo Xiaoxin Pad Pro GT | `tb710fu` | Tự đóng gói (chưa có `[stock]`) | [WASDDestroy/skyward](https://github.com/WASDDestroy/skyward) |
 | Xiaomi Mi 10S | `thyme` | Tự đóng gói (chưa có `[stock]`) | [Flicker-Android-Devices/skyward-mikona](https://github.com/Flicker-Android-Devices/skyward-mikona) |
@@ -259,6 +264,9 @@ trình đó chạy trên những mẫu này thì chưa được kiểm chứng.
 | Xiaomi 11 | `venus` | Tự đóng gói (chưa có `[stock]`) | [cvbyisme/skyward-venus-archive](https://github.com/cvbyisme/skyward-venus-archive) |
 | Redmi K70 | `vermeer` | `OS3.0.307.0.WNKCNXM` | [luoxunyong/skyward-by-Redmi-K70](https://github.com/luoxunyong/skyward-by-Redmi-K70) |
 | Xiaomi Pad 7S Pro 12.5 | `violin` | `OS4.0.5.0.XOTCNXM` | [shu-chong/skyward-for-violin](https://github.com/shu-chong/skyward-for-violin) |
+| REDMI K90 Ultra | `warsaw-4.0.4.0` | `OS4.0.4.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
+| REDMI K90 Ultra | `warsaw-4.0.8.0.nfchal` | `OS4.0.8.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
+| REDMI K90 Ultra | `warsaw-4.0.8.0` | `OS4.0.8.0.XHPCNXM` | [wjljh/skyward-for-warsaw](https://github.com/wjljh/skyward-for-warsaw) |
 | Xiaomi MI 6X | `wayne` | Tự đóng gói (chưa có `[stock]`) | [East888666/skyward-xiaomi-legacy](https://github.com/East888666/skyward-xiaomi-legacy) |
 | Redmi Note 11T Pro | `xaga` | `OS1.0.3.0.ULOCNXM` | [BkaNeko/xaga-skyward](https://github.com/BkaNeko/xaga-skyward) |
 | Samsung Galaxy S20+ 5G | `y2q` | Tự đóng gói (chưa có `[stock]`) | [yanzihan/Skyward-Galaxy](https://github.com/yanzihan/Skyward-Galaxy) |

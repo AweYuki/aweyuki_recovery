@@ -1,0 +1,95 @@
+# Ported from: https://github.com/qasg/skyward-Xiaomio-Pad-6-Pro/tree/liuqin-stable
+[device]
+tablet = true
+supports_vibration = false
+codename = "liuqin"
+brand = "Xiaomi"
+model = "Xiaomi Pad 6 Pro"
+ab = true
+soc = { hans = "第一代骁龙®8+移动平台", hant = "Snapdragon® 8+ Gen 1 行動平台", en = "Snapdragon® 8+ Gen 1 Mobile Platform" }
+os_version_prop = "ro.mi.os.version.incremental"
+
+[init]
+properties = { "ro.boot.product.vendor.sku" = "taro" }
+
+[display]
+# wm size of the running 2in1 port: physical 1800x2880 at density 360.
+width = 1800
+height = 2880
+density = 360
+diagonal = 11.0
+corner_radius = 48
+
+[orientation]
+backend = "ssc"
+
+firmware = "slpius.jsn"
+calibration = { partition = "persist", path = "sensors" }
+
+[[service]]
+path = "/vendor/bin/pd-mapper"
+libraries = ["/apex/com.android.runtime/lib64/bionic", "/mnt/system/system/lib64", "/vendor/lib64", "/system/lib64_port", "/system/lib64"]
+user = "system"
+groups = ["system"]
+
+[[service]]
+path = "/vendor/bin/sscrpcd"
+args = ["sensorspd"]
+libraries = ["/apex/com.android.runtime/lib64/bionic", "/mnt/system/system/lib64", "/vendor/lib64", "/system/lib64_port", "/system/lib64"]
+user = "system"
+groups = ["system", "wakelock"]
+capabilities = ["BLOCK_SUSPEND"]
+
+[modules]
+sources = ["vendor_boot", "vendor_dlkm", "vendor"]
+# Novatek NT36532 over SPI (driver NVT-ts bound at spi0.0), plus Xiaomi's
+# own touch layer; both are in the vendor partition's modules folder.
+load = ["xiaomi_touch", "nt36532_touch"]
+
+# The firmware of the WLAN chip is on the modem partition, which the phone
+# mounts at /vendor/firmware_mnt and its own recovery leaves unmounted.
+[firmware]
+partition = "modem"
+
+# The persist partition, which the phone mounts at /mnt/vendor/persist.
+# The secure world keeps its own files there; the WLAN's MAC address too.
+[partitions]
+mounted = ["persist"]
+
+# No [logd]: the recovery's own logd does not come up with the installed
+# system's copies of libsysutils and libcap (logd.ready stays unset and the
+# start waits five seconds for it before going on), and the wait alone costs
+# five seconds of touch before the modules are loaded. What the phone's own
+# programs log goes to the kernel log instead, as the stock recovery's does.
+
+# The stock recovery of this tablet starts no service directory of its own,
+# so the port brings one: a servicemanager built against the libraries of
+# the installed system, which the recovery starts before anything registers
+# with it. It reads the descriptions the recovery writes as it starts.
+# Everything that uses the phone's keys (the service directory, qseecomd,
+# the key service, the credential and boot control services) is read from
+# the installed system's own init scripts and service descriptions.
+
+# WLAN: the WCN6856/QCA6490 behind cnss2, driven by qca_cld3_qca6490.
+
+[wlan]
+modules = ["qca_cld3_qca6490"]
+writes = [{ path = "/sys/kernel/cnss/fs_ready", value = "1" }]
+interface = "wlan0"
+supplicant = "/vendor/bin/hw/wpa_supplicant"
+libraries = ["/apex/com.android.runtime/lib64/bionic", "/mnt/system/system/lib64", "/vendor/lib64", "/system/lib64_port", "/system/lib64"]
+service = "android.hardware.wifi.supplicant.ISupplicant/default"
+probe = "http://connect.rom.miui.com/generate_204"
+[update]
+server = "https://update.miui.com/updates/miotaV3.php"
+
+# The stock build the recovery is made on: the Chinese system's
+# OS3.0.7.0.VMYCNXM (Android 15), whose full update package holds the
+# recovery partition the recovery is built on top of.
+[stock]
+version = "OS3.0.7.0.VMYCNXM"
+package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS3.0.7.0.VMYCNXM/liuqin-ota_full-OS3.0.7.0.VMYCNXM-user-15.0-7f569a5149.zip"
+recovery = "5cf56088d86493aac9ee084b5baa700ae1ed62553763673e0fc4d50a05fd4e24"
+
+# This tablet's motor is not exposed through evdev force-feedback, so no
+# [haptics] section: naming one would make the recovery refuse to start.
