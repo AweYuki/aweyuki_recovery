@@ -25,8 +25,11 @@ import tomllib
 import urllib.request
 
 SKIP_VARIANTS = {
+    "jason-los23.toml",
+    "jason-miui12.toml",
     "liuqin-nomounts.toml",
     "socrates-decrypt.toml",
+    "sunstone-2.toml",
     "warsaw-4.0.4.0.toml",
     "warsaw-4.0.8.0.nfchal.toml",
     "warsaw-4.0.8.0.toml",

@@ -251,6 +251,7 @@ Aggregated from community forks of `kirklin/skyward` (see each device's source r
 | Xiaomi Pad 6S Pro 12.4 | `sheng` | `OS3.0.303.0.WNXCNXM` | [Kinaxie/skyward](https://github.com/Kinaxie/skyward) |
 | Nothing Phone (1) | `spacewar` | Local pack (no `[stock]`) | [BruxinCore/Skyward-spacewar](https://github.com/BruxinCore/Skyward-spacewar) |
 | Xiaomi 11 Ultra | `star` | Local pack (no `[stock]`) | [LiAA-CN/skyward-for-Mi11P-U](https://github.com/LiAA-CN/skyward-for-Mi11P-U) |
+| Redmi Note 12R Pro | `sunstone` | Local pack (no `[stock]`) | [hss2671/skyward](https://github.com/hss2671/skyward) |
 | Lenovo Xiaoxin Pad Pro GT | `tb710fu` | Local pack (no `[stock]`) | [WASDDestroy/skyward](https://github.com/WASDDestroy/skyward) |
 | Xiaomi Mi 10S | `thyme` | Local pack (no `[stock]`) | [Flicker-Android-Devices/skyward-mikona](https://github.com/Flicker-Android-Devices/skyward-mikona) |
 | REDMI K Pad | `turner` | Local pack (no `[stock]`) | [xiaozhou0307/skyward](https://github.com/xiaozhou0307/skyward) |

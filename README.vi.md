@@ -250,6 +250,7 @@ trình đó chạy trên những mẫu này thì chưa được kiểm chứng.
 | Xiaomi Pad 6S Pro 12.4 | `sheng` | `OS3.0.303.0.WNXCNXM` | [Kinaxie/skyward](https://github.com/Kinaxie/skyward) |
 | Nothing Phone (1) | `spacewar` | Tự đóng gói (chưa có `[stock]`) | [BruxinCore/Skyward-spacewar](https://github.com/BruxinCore/Skyward-spacewar) |
 | Xiaomi 11 Ultra | `star` | Tự đóng gói (chưa có `[stock]`) | [LiAA-CN/skyward-for-Mi11P-U](https://github.com/LiAA-CN/skyward-for-Mi11P-U) |
+| Redmi Note 12R Pro | `sunstone` | Tự đóng gói (chưa có `[stock]`) | [hss2671/skyward](https://github.com/hss2671/skyward) |
 | Lenovo Xiaoxin Pad Pro GT | `tb710fu` | Tự đóng gói (chưa có `[stock]`) | [WASDDestroy/skyward](https://github.com/WASDDestroy/skyward) |
 | Xiaomi Mi 10S | `thyme` | Tự đóng gói (chưa có `[stock]`) | [Flicker-Android-Devices/skyward-mikona](https://github.com/Flicker-Android-Devices/skyward-mikona) |
 | REDMI K Pad | `turner` | Tự đóng gói (chưa có `[stock]`) | [xiaozhou0307/skyward](https://github.com/xiaozhou0307/skyward) |
