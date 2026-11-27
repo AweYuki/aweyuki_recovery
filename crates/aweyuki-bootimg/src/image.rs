@@ -6,6 +6,12 @@ use std::path::Path;
 
 const PAGE: usize = 4096;
 const VENDOR_MAGIC: &[u8] = b"VNDRBOOT";
+/// The magic a flattened device tree starts with, big-endian.
+const FDT_MAGIC: [u8; 4] = [0xd0, 0x0d, 0xfe, 0xed];
+
+fn align(at: usize) -> usize {
+    at.div_ceil(PAGE) * PAGE
+}
 
 /// A boot image with header version 3 or 4 (`boot`, `init_boot`, `recovery`)
 /// split into its header, kernel and ramdisk.
@@ -13,6 +19,9 @@ pub struct BootImage {
     pub header: HeaderV3,
     pub kernel: Vec<u8>,
     pub ramdisk: Vec<u8>,
+    /// The device tree blob a version 3 image may carry after its ramdisk;
+    /// empty when there is none.
+    pub dtb: Vec<u8>,
 }
 
 /// A vendor boot image (`vendor_boot`) split into its header, vendor
@@ -52,7 +61,14 @@ impl BootImage {
         };
         let kernel = section(bytes, HeaderV3::kernel_position(), header.kernel_size, "kernel")?;
         let ramdisk = section(bytes, header.ramdisk_position(), header.ramdisk_size, "ramdisk")?;
-        Ok(BootImage { header, kernel, ramdisk })
+        let at = align(header.ramdisk_position() + header.ramdisk_size as usize);
+        let dtb = if bytes.len() >= at + 8 && bytes[at..at + 4] == FDT_MAGIC {
+            let total = u32::from_be_bytes([bytes[at + 4], bytes[at + 5], bytes[at + 6], bytes[at + 7]]);
+            section(bytes, at, total, "device tree").unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        Ok(BootImage { header, kernel, ramdisk, dtb })
     }
 
     /// The image with sizes taken from its parts. A version 4 header keeps its
@@ -70,6 +86,10 @@ impl BootImage {
         pad(&mut out, PAGE);
         out.extend_from_slice(&self.ramdisk);
         pad(&mut out, PAGE);
+        if !self.dtb.is_empty() {
+            out.extend_from_slice(&self.dtb);
+            pad(&mut out, PAGE);
+        }
         Ok(out)
     }
 }

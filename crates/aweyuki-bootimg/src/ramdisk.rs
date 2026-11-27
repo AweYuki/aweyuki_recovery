@@ -49,11 +49,16 @@ pub struct Ramdisk {
 }
 
 impl Ramdisk {
-    /// Unpack an LZ4 (legacy framing) compressed newc archive, as Android
-    /// boot images carry.
+    /// Unpack an LZ4 (legacy framing) or gzip compressed newc archive, as
+    /// Android boot images carry.
     pub fn decode(compressed: &[u8]) -> Result<Self> {
-        let mut cpio = Vec::new();
-        lz4_flex::frame::FrameDecoder::new(compressed).read_to_end(&mut cpio).context("lz4 decode")?;
+        let cpio = if compressed.starts_with(&[0x1f, 0x8b]) {
+            gzip_decode(compressed)?
+        } else {
+            let mut buf = Vec::new();
+            lz4_flex::frame::FrameDecoder::new(compressed).read_to_end(&mut buf).context("lz4 decode")?;
+            buf
+        };
         let mut entries = Vec::new();
         let mut rest = Cursor::new(cpio.as_slice());
         loop {
@@ -320,6 +325,24 @@ fn lz4_tool(input: &[u8]) -> Result<Vec<u8>> {
     writer.join().expect("lz4 writer thread").context("feed lz4")?;
     if !out.status.success() {
         bail!("lz4 exited with {}", out.status);
+    }
+    Ok(out.stdout)
+}
+
+fn gzip_decode(input: &[u8]) -> Result<Vec<u8>> {
+    let mut child = Command::new("gzip")
+        .arg("-dc")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("run gzip -dc")?;
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    let input = input.to_vec();
+    let writer = std::thread::spawn(move || stdin.write_all(&input));
+    let out = child.wait_with_output().context("gzip -dc")?;
+    writer.join().expect("gzip writer thread").context("feed gzip")?;
+    if !out.status.success() {
+        bail!("gzip -dc exited with {}", out.status);
     }
     Ok(out.stdout)
 }
