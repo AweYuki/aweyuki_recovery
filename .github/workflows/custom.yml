@@ -1,0 +1,217 @@
+name: Custom ROM Build
+
+# Build Aweyuki Recovery from any stock A/B full OTA zip URL that carries a
+# `recovery` partition, using metadata extracted directly from the ROM.
+on:
+  workflow_dispatch:
+    inputs:
+      rom_url:
+        description: HTTPS URL of the stock A/B full OTA .zip (with payload.bin & recovery partition)
+        required: true
+        type: string
+      device:
+        description: Device codename (optional; auto-detected from ROM prop.default if empty)
+        required: false
+        default: ""
+      version:
+        description: ROM version override (optional; auto-detected from ROM if empty)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  tools:
+    name: Build recovery service, system-init, and packer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Build aweyuki for arm64-v8a
+        run: cargo ndk -t arm64-v8a --platform 30 build --locked --release -p aweyuki
+      - name: Build aweyuki-system-init (static)
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: cargo ndk -t arm64-v8a --platform 30 build --locked --release -p aweyuki-system-init --target-dir target/system-init
+      - name: Build aweyuki-pack
+        run: cargo build --locked --release -p aweyuki-pack
+      - name: Gather tools
+        run: |
+          mkdir tools
+          cp target/aarch64-linux-android/release/aweyuki target/release/aweyuki-pack tools/
+          cp target/system-init/aarch64-linux-android/release/system-init tools/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tools
+          path: tools/
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Build custom recovery from ROM URL
+    needs: [tools]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: tools
+          path: tools
+      - name: Make tools executable
+        run: chmod +x tools/aweyuki tools/aweyuki-pack
+      - name: Extract stock recovery partition from A/B OTA payload
+        id: stock
+        env:
+          ROM_URL: ${{ inputs.rom_url }}
+        run: |
+          mkdir -p stock
+          tools/aweyuki-pack stock --url "$ROM_URL" --partition recovery --out stock/recovery.img | tee stock/extract.log
+          sha=$(grep '^recovery=' stock/extract.log | tail -n1 | cut -d= -f2)
+          echo "recovery_sha256=$sha" >> "$GITHUB_OUTPUT"
+      - name: Inspect ROM metadata and prepare device config
+        id: meta
+        env:
+          INPUT_DEVICE: ${{ inputs.device }}
+          INPUT_VERSION: ${{ inputs.version }}
+          ROM_URL: ${{ inputs.rom_url }}
+        run: |
+          tools/aweyuki-pack cat --image stock/recovery.img --path prop.default > stock/prop.default
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, pathlib, re, tomllib
+
+          props = {}
+          for line in pathlib.Path("stock/prop.default").read_text(errors="replace").splitlines():
+              line = line.strip()
+              if not line or line.startswith("#") or "=" not in line:
+                  continue
+              k, v = line.split("=", 1)
+              props[k.strip()] = v.strip()
+
+          codename = (
+              os.environ.get("INPUT_DEVICE", "").strip()
+              or props.get("ro.product.device")
+              or props.get("ro.product.vendor.device")
+              or props.get("ro.product.odm.device")
+              or props.get("ro.product.system.device")
+              or props.get("ro.build.product")
+              or ""
+          )
+          assert codename, "Could not determine device codename from prop.default; please provide the 'device' input."
+
+          brand = (
+              props.get("ro.product.brand")
+              or props.get("ro.product.vendor.brand")
+              or props.get("ro.product.odm.brand")
+              or "Xiaomi"
+          )
+          model = (
+              props.get("ro.product.marketname")
+              or props.get("ro.product.model")
+              or props.get("ro.product.vendor.model")
+              or codename
+          )
+          version = os.environ.get("INPUT_VERSION", "").strip()
+          if not version:
+              version = (
+                  props.get("ro.mi.os.version.incremental")
+                  or props.get("ro.build.version.incremental")
+                  or ""
+              )
+          if not version:
+              m = re.search(r"([A-Z]{2}\d+(?:\.\d+){2,3}\.[A-Z0-9]+|V\d+(?:\.\d+){2,3}\.[A-Z0-9]+)", os.environ["ROM_URL"])
+              version = m.group(1) if m else "custom"
+
+          os_ver_prop = "ro.mi.os.version.incremental" if "ro.mi.os.version.incremental" in props else "ro.build.version.incremental"
+          cfg_path = pathlib.Path(f"devices/{codename}.toml")
+          if cfg_path.is_file():
+              cfg = tomllib.loads(cfg_path.read_text())
+              dev = cfg.get("device", {})
+              if dev.get("ab") is False:
+                  raise SystemExit(f"Device '{codename}' is non-A/B (ab = false); custom.yml only supports A/B devices with a recovery partition.")
+              rp = dev.get("recovery_partition", "recovery")
+              if rp != "recovery":
+                  raise SystemExit(f"Device '{codename}' uses recovery_partition = '{rp}'; custom.yml only supports devices with a 'recovery' partition.")
+              used_config = str(cfg_path)
+          else:
+              pathlib.Path("stock/device.toml").write_text(
+                  f'[device]\n'
+                  f'codename = "{codename}"\n'
+                  f'brand = "{brand}"\n'
+                  f'model = "{model}"\n'
+                  f'ab = true\n'
+                  f'os_version_prop = "{os_ver_prop}"\n',
+                  encoding="utf-8",
+              )
+              used_config = "stock/device.toml"
+
+          print(f"codename={codename}")
+          print(f"brand={brand}")
+          print(f"model={model}")
+          print(f"version={version}")
+          print(f"config={used_config}")
+          PY
+      - name: Pack recovery image
+        id: pack
+        env:
+          DEVICE: ${{ steps.meta.outputs.codename }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          CONFIG: ${{ steps.meta.outputs.config }}
+        run: |
+          tag="${GITHUB_SHA::7}"
+          name="aweyuki-$tag-$DEVICE-$VERSION"
+          mkdir -p out
+          tools/aweyuki-pack recovery \
+            --stock stock/recovery.img \
+            --binary tools/aweyuki \
+            --system-init tools/system-init \
+            --config "$CONFIG" \
+            --font resources/fonts/MiSansVF.ttf \
+            --mono resources/fonts/KirkMono-Regular.ttf \
+            --mono-license resources/fonts/KirkMono-OFL.txt \
+            --out "out/$name.img"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Zip image and write SHA256SUMS
+        working-directory: out
+        env:
+          NAME: ${{ steps.pack.outputs.name }}
+        run: |
+          zip -9 "$NAME.zip" "$NAME.img"
+          sha256sum "$NAME.zip" > SHA256SUMS
+      - name: Write build summary
+        env:
+          CODENAME: ${{ steps.meta.outputs.codename }}
+          MODEL: ${{ steps.meta.outputs.model }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          CONFIG: ${{ steps.meta.outputs.config }}
+          RECOVERY_SHA: ${{ steps.stock.outputs.recovery_sha256 }}
+          ROM_URL: ${{ inputs.rom_url }}
+          ZIP_NAME: ${{ steps.pack.outputs.name }}.zip
+        run: |
+          {
+            echo "### Custom Aweyuki Recovery Build"
+            echo ""
+            echo "- **Device**: $MODEL (\`$CODENAME\`)"
+            echo "- **Config**: \`$CONFIG\`"
+            echo "- **Version**: \`$VERSION\`"
+            echo "- **Artifact**: \`$ZIP_NAME\`"
+            echo "- **Stock recovery SHA-256**: \`$RECOVERY_SHA\`"
+            echo ""
+            echo '```toml'
+            echo "[stock]"
+            echo "version = \"$VERSION\""
+            echo "package = \"$ROM_URL\""
+            echo "recovery = \"$RECOVERY_SHA\""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.pack.outputs.name }}
+          path: |
+            out/${{ steps.pack.outputs.name }}.zip
+            out/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14

@@ -85,8 +85,14 @@ enum Cmd {
     /// once its SHA-256 is that one.
     Stock {
         /// The device configuration, devices/<codename>.toml.
-        #[arg(long)]
-        config: PathBuf,
+        #[arg(long, required_unless_present = "url")]
+        config: Option<PathBuf>,
+        /// Direct HTTPS URL of a stock A/B full OTA zip containing payload.bin.
+        #[arg(long, conflicts_with = "config")]
+        url: Option<String>,
+        /// Partition name in payload.bin to extract (with --url).
+        #[arg(long, default_value = "recovery")]
+        partition: String,
         /// Where to write the stock recovery image.
         #[arg(long)]
         out: Option<PathBuf>,
@@ -199,16 +205,29 @@ fn main() -> Result<()> {
             let bytes = img.to_bytes()?;
             write(&out, &img, &avb::footed(&bytes, img.partition_name(), size, &Sha256::digest(&bytes))?)
         }
-        Cmd::Stock { config, out } => {
-            let cfg = aweyuki_config::DeviceConfig::load(&config)?;
-            let stock = cfg.stock.with_context(|| format!("{} names no stock build", config.display()))?;
-            let partition = stock.partition.as_deref().unwrap_or_else(|| cfg.device.recovery_partition.partition());
-            println!("version={}\npackage={}\nrecovery={}", stock.version, stock.package, stock.recovery);
-            match out {
-                Some(out) => take_stock_recovery(&stock, partition, &out),
-                None => Ok(()),
+        Cmd::Stock { config, url, partition, out } => match (config, url) {
+            (Some(config), None) => {
+                let cfg = aweyuki_config::DeviceConfig::load(&config)?;
+                let stock = cfg.stock.with_context(|| format!("{} names no stock build", config.display()))?;
+                let part = stock.partition.as_deref().unwrap_or_else(|| cfg.device.recovery_partition.partition());
+                println!("version={}\npackage={}\nrecovery={}", stock.version, stock.package, stock.recovery);
+                match out {
+                    Some(out) => {
+                        take_stock_recovery(&stock.package, part, Some(&stock.recovery), &out)?;
+                        Ok(())
+                    }
+                    None => Ok(()),
+                }
             }
-        }
+            (None, Some(url)) => {
+                ensure!(url.starts_with("https://"), "--url must be an HTTPS address");
+                let out = out.context("--out is required with --url")?;
+                let sum = take_stock_recovery(&url, &partition, None, &out)?;
+                println!("package={url}\npartition={partition}\nrecovery={sum}");
+                Ok(())
+            }
+            _ => unreachable!("clap enforces exactly one of --config or --url"),
+        },
         Cmd::Described { config, partitions, out } => {
             let stock = aweyuki_config::DeviceConfig::load(&config)?.stock.with_context(|| format!("{} names no stock build", config.display()))?;
             let partitions = if partitions.is_empty() { aweyuki_programs::phone::PARTITIONS.map(str::to_string).to_vec() } else { partitions };
@@ -217,15 +236,15 @@ fn main() -> Result<()> {
     }
 }
 
-/// Take the recovery partition out of the stock build's full update package
-/// on its server, reading only what that partition takes of it, and write it
-/// to `out` once its SHA-256 is the one the configuration names.
-fn take_stock_recovery(stock: &aweyuki_config::Stock, partition: &str, out: &Path) -> Result<()> {
+/// Take `partition` out of the stock full update package on its server,
+/// reading only what that partition takes of it, verify its SHA-256 when
+/// `expected_sha256` is given, and write it to `out`, returning its hex SHA-256.
+fn take_stock_recovery(package_url: &str, partition: &str, expected_sha256: Option<&str>, out: &Path) -> Result<String> {
     let parent = out.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     std::fs::create_dir_all(parent).with_context(|| format!("make {}", parent.display()))?;
     // Taken out beside where it goes, so it is moved there whole.
     let work = tempfile::Builder::new().prefix(".stock").tempdir_in(parent).with_context(|| format!("make a folder in {}", parent.display()))?;
-    let payload = unpayload::Payload::open_url(&stock.package).with_context(|| format!("open {}", stock.package))?;
+    let payload = unpayload::Payload::open_url(package_url).with_context(|| format!("open {package_url}"))?;
     let options = unpayload::ExtractOptions { output_dir: work.path().to_path_buf(), partitions: vec![partition.into()], ..Default::default() };
     let report = |event: unpayload::Event<'_>| match event {
         unpayload::Event::Started { partitions } => {
@@ -236,13 +255,15 @@ fn take_stock_recovery(stock: &aweyuki_config::Stock, partition: &str, out: &Pat
         unpayload::Event::Extracted(image) => println!("took {} out: {} bytes", image.partition, image.size),
         unpayload::Event::Progress { .. } => {}
     };
-    let taken = payload.extract(&options, &report).with_context(|| format!("take {partition} out of {}", stock.package))?;
-    let image = taken.iter().find(|i| i.partition == partition).with_context(|| format!("{} holds no {partition} partition", stock.package))?;
+    let taken = payload.extract(&options, &report).with_context(|| format!("take {partition} out of {package_url}"))?;
+    let image = taken.iter().find(|i| i.partition == partition).with_context(|| format!("{package_url} holds no {partition} partition"))?;
     let sum = hex::encode(image.sha256.as_deref().context("the package's own sum of the image was not checked")?);
-    ensure!(sum == stock.recovery, "the {partition} partition in {} has the SHA-256 {sum}, where the configuration names {}", stock.package, stock.recovery);
+    if let Some(expected) = expected_sha256 {
+        ensure!(sum == expected, "the {partition} partition in {package_url} has the SHA-256 {sum}, where the configuration names {expected}");
+    }
     std::fs::rename(&image.path, out).with_context(|| format!("move {} to {}", image.path.display(), out.display()))?;
-    println!("wrote {} ({} bytes), its SHA-256 the one the configuration names", out.display(), image.size);
-    Ok(())
+    println!("wrote {} ({} bytes), sha256={sum}", out.display(), image.size);
+    Ok(sum)
 }
 
 /// Add every file under `dir` to the ramdisk, at the path the file's name
