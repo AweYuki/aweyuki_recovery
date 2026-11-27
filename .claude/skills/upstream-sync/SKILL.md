@@ -68,7 +68,33 @@ python3 .claude/skills/upstream-sync/scripts/scan-forks.py --apply --update-read
 
 Every ported `devices/*.toml` keeps a `# Ported from: https://github.com/<owner>/<repo>/tree/<branch>`
 attribution comment at the top of the file; `check-invariants.sh` explicitly
-allows `# Source:` and `# Ported from:` comments in `devices/*.toml`.
+allows `# ... https://...` comments in `devices/*.toml`.
+
+### Device variants & `[stock]` rules for CI (`build.yml` & `release.yml`)
+
+- **Keep device variants** (e.g. `liuqin-nomounts`, `socrates-decrypt`,
+  `warsaw-4.0.8.0*`, `jason-los23`, `jason-miui12`, `sunstone-2`): some phones
+  and ROMs are sensitive to recovery/ramdisk layout. Only skip files that are
+  not valid `DeviceConfig` files (e.g. missing `[device].codename`).
+- **CI matrix**: `.github/workflows/build.yml` and `.github/workflows/release.yml`
+  validate **all** `devices/*.toml` files and build images for every device that
+  defines `[stock]`.
+- **`[stock].partition` & `device.recovery_partition`**: `aweyuki-pack stock`
+  extracts `stock.partition` when specified (e.g. `boot`, `vendor_boot`),
+  falling back to `device.recovery_partition` (default `recovery`).
+- **When to comment out `[stock]`**: comment out `[stock]` on configs with
+  placeholder URLs (`example.invalid`), all-zero SHA-256 (`0000...`), or
+  legacy non-`payload.bin` A-only zips so CI stays green while local packing
+  with `aweyuki-pack recovery --stock <img_path>` still works.
+- **Porting Rust commits from community forks**: check whether the commit
+  modifies `Cargo.toml` or `Cargo.lock` before porting, because CI builds with
+  `--locked`. Do not duplicate features Aweyuki already ships (AERA `.aerap`
+  Browser WebKit & Telegram TDLib, Root Manager, HTTP File Sharing).
+- **Host/Termux notes**: on Android shared storage, pass
+  `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'`
+  to git commands; `rewrite-patch.sh` automatically falls back to `python3`
+  when `perl` is unavailable; when `cargo` is not installed locally, verify
+  compilation and matrix builds via GitHub Actions after pushing.
 
 ## Procedure
 

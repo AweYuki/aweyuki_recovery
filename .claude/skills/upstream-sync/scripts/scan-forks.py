@@ -100,10 +100,15 @@ def validate_device_toml(text: str) -> tuple[dict | None, list[str]]:
     if "stock" in cfg:
         st = cfg["stock"]
         ver, pkg, rec = st.get("version", ""), st.get("package", ""), st.get("recovery", "")
+        part = st.get("partition")
         name = pkg.rsplit("/", 1)[-1] if isinstance(pkg, str) else ""
-        if not (isinstance(pkg, str) and pkg.startswith("https://") and name.endswith(".zip") and ver and ver in name):
+        is_placeholder_url = any(x in str(pkg) for x in ("example.invalid", "example.com", "placeholder"))
+        is_zero_hash = isinstance(rec, str) and len(rec) == 64 and set(rec) == {"0"}
+        if not (isinstance(pkg, str) and pkg.startswith("https://") and name.endswith(".zip") and ver and ver in name) or is_placeholder_url:
             errs.append("stock")
-        elif not (isinstance(rec, str) and len(rec) == 64 and all(c in "0123456789abcdef" for c in rec)):
+        elif not (isinstance(rec, str) and len(rec) == 64 and all(c in "0123456789abcdef" for c in rec)) or is_zero_hash:
+            errs.append("stock")
+        elif part is not None and (not isinstance(part, str) or not part or "/" in part):
             errs.append("stock")
     if "wlan" in cfg:
         w = cfg["wlan"]
@@ -285,6 +290,8 @@ def scan_forks(root: pathlib.Path, apply: bool = False) -> None:
             for sec in ("haptics", "stock", "wlan"):
                 if sec in errs:
                     text = comment_section(text, sec)
+            if cfg and "kernel" in cfg:
+                text = comment_section(text, "kernel")
             text = rewrite_non_urls(text)
             header = f"# Ported from: https://github.com/{top['fork']['full_name']}/tree/{top['branch']}\n"
             if not text.endswith("\n"):
