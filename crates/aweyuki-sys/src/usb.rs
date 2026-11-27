@@ -44,6 +44,12 @@ pub fn set(config: &str, timeout: Duration) -> Result<()> {
 /// serving it and takes every function off; init then sets the port up
 /// once the programs behind the new configuration are ready.
 pub fn switch(config: &str, timeout: Duration) -> Result<()> {
+    // File transfer comes and goes beside adb, and adbd need not be stopped
+    // for it: a port that already runs adb takes the second function on as
+    // it is, and gives it up the same way.
+    if matches!((prop("sys.usb.state").as_deref(), config), (Some("adb"), "mtp,adb" | "sideload") | (Some("mtp,adb" | "sideload"), "adb")) {
+        return set(config, timeout);
+    }
     set("none", timeout)?;
     set(config, timeout)
 }

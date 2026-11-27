@@ -1137,6 +1137,12 @@ fn recovery() -> Result<()> {
             Ok(done) => aweyuki_sys::kmsg(&format!("the CPUs run as the system runs them: {}", done.join(", ")))?,
             Err(e) => aweyuki_sys::kmsg(&format!("the CPUs run as the kernel started them: {e:#}"))?,
         }
+        // Until internal storage shows at /sdcard, what a computer pushes
+        // there is turned down rather than held in the phone's memory.
+        #[cfg(target_os = "android")]
+        if let Err(e) = aweyuki_crypto::data::guard_storage() {
+            aweyuki_sys::kmsg(&format!("/sdcard takes files into memory until internal storage shows: {e:#}"))?;
+        }
         #[cfg(target_os = "android")]
         {
             use aweyuki_ui::app::Screen;

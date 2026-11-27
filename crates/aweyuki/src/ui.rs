@@ -2425,6 +2425,10 @@ impl Pages<'_> {
                     }
                     self.closed = opening.closed;
                     show_closed(&mut self.app, &self.closed)?;
+                    if opening.fresh {
+                        aweyuki_sys::kmsg("the data partition holds no internal storage until the system first starts from it")?;
+                        self.app.data_made_afresh();
+                    }
                     follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info)?;
                 }
                 wipe::Event::Ended(outcome) => {
@@ -3159,6 +3163,10 @@ impl Pages<'_> {
                 }
                 self.closed = opening.closed;
                 show_closed(&mut self.app, &self.closed)?;
+                if opening.fresh {
+                    aweyuki_sys::kmsg("the data partition holds no internal storage until the system first starts from it")?;
+                    self.app.data_made_afresh();
+                }
                 follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info)?;
             }
             decrypt::Ended::Opened(Err(why)) => {
