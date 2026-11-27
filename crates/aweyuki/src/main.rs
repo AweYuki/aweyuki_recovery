@@ -664,8 +664,8 @@ fn main() -> Result<()> {
         }
         #[cfg(target_os = "android")]
         Cmd::Keymint { key, alias } => {
-            let binder = aweyuki_binder::driver::Binder::open()?;
-            let service = aweyuki_crypto::keymint::KeyMint::open(&binder)?;
+            let (binder, hardware) = (aweyuki_binder::driver::Binder::open()?, aweyuki_binder::driver::Binder::hardware()?);
+            let service = aweyuki_crypto::keymint::KeyMint::open(&binder, &hardware)?;
             let hw = service.hardware()?;
             println!("keymint {} version {} at security level {} by {}", hw.name, hw.version, hw.security_level, hw.author);
             if let Some(alias) = alias {
@@ -724,11 +724,11 @@ fn main() -> Result<()> {
         #[cfg(target_os = "android")]
         Cmd::Data { credential, close: false } => {
             use aweyuki_crypto::data;
-            let binder = aweyuki_binder::driver::Binder::open()?;
+            let (binder, hardware) = (aweyuki_binder::driver::Binder::open()?, aweyuki_binder::driver::Binder::hardware()?);
             // A partition the phone's table has encrypted in no way opens
             // with no key service.
             let service = match data::keyed()? {
-                true => Some(aweyuki_crypto::keymint::KeyMint::open(&binder)?),
+                true => Some(aweyuki_crypto::keymint::KeyMint::open(&binder, &hardware)?),
                 false => None,
             };
             let opening = data::open_without_credential(service.as_ref())?;
@@ -1139,8 +1139,15 @@ fn recovery() -> Result<()> {
             // erasing them, which may take super with them, and undoing
             // shared blocks, which writes to the slot's own.
             let mut programs = cfg.services.clone();
+            // An A-only phone has no slots and no super: there is nothing to
+            // map or mount, and the recovery runs from what the stock
+            // ramdisk carries.
             if !matches!(request.work, bcb::Work::Fastboot | bcb::Work::WipeAb { .. } | bcb::Work::UnshareBlocks) {
-                programs.extend(prepare(&cfg, booted_slot()?)?);
+                if let Some(slot) = aweyuki_vab::current_slot()? {
+                    programs.extend(prepare(&cfg, slot)?);
+                } else {
+                    aweyuki_sys::kmsg("A-only phone: no super to map, running from the stock ramdisk")?;
+                }
             }
             let root = Path::new("/");
             ui::run(&cfg, &programs, &root.join(ramdisk::FONT), &root.join(ramdisk::MONO), request, Screen::Home, None)

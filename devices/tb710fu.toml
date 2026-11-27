@@ -1,0 +1,73 @@
+# Ported from: https://github.com/WASDDestroy/skyward/tree/tb710fu
+[device]
+codename = "TB710FU"
+brand = "Lenovo"
+model = "Lenovo Xiaoxin Pad Pro GT"
+ab = true
+soc = { hans = "第三代骁龙®8移动平台", hant = "Snapdragon® 8 Gen 3 行動平台", en = "Snapdragon® 8 Gen 3 Mobile Platform" }
+os_version_prop = "ro.config.lgsi.fp.incremental"
+
+[display]
+# Novatek NT36532 dual-DSI video-mode DSC panel (1600x2000 per link,
+# 3200x2000 landscape total) on an 11.1-inch screen.
+width = 3200
+height = 2000
+density = 400
+diagonal = 11.1
+
+[modules]
+sources = ["vendor_boot", "vendor_dlkm", "vendor", "system_dlkm"]
+# nt36532_ts.ko is already in vendor_boot's modules.load.recovery and loaded
+# by first-stage init.
+load = []
+
+[touch]
+# nt36532_ts.ko rotates the landscape 3200x2000 touch IC coordinates
+# 90 deg CW into portrait (ABS_MT_POSITION_X = 20000 - y, Y = x);
+# invert raw X and swap X/Y to recover landscape screen coordinates.
+swap_xy = true
+invert_x = true
+# nt36532_ts.ko loads novatek_ts_fw.bin via early-boot firmware fallback;
+# aweyuki-pack bundles novatek_ts_fw.bin into /etc/firmware in the recovery
+# ramdisk so it succeeds before /vendor is mounted, avoiding any panel reset.
+
+# The firmware of the WLAN chip and secure world apps lives on modem, which
+# the stock init.recovery.qcom.rc mounts at /vendor/firmware_mnt; [firmware]
+# also exposes it at /firmware for the recovery's ueventd fallback loader.
+[firmware]
+partition = "modem"
+
+# Persist holds secure-world rollback/RPMB listener files and the WLAN MAC
+# address referenced by vendor's symlink at /vendor/firmware/wlan/qca_cld/kiwi_v2/wlan_mac.bin.
+[partitions]
+mounted = ["persist"]
+
+# Run Qualcomm's kernel-post-boot script once to switch CPU clusters off the
+# boot performance governor onto WALT/schedutil and enable idle power collapse.
+[[service]]
+path = "/vendor/bin/sh"
+args = ["/vendor/bin/init.kernel.post_boot.sh"]
+libraries = ["/system/lib64", "/vendor/lib64"]
+oneshot = true
+user = "root"
+groups = ["root", "system", "wakelock", "graphics"]
+
+# WLAN: cnss-kiwi platform driver with qca_cld3_kiwi_v2 over cfg80211 and
+# rfkill from system_dlkm. Vendor's firmware dir already symlinks WCNSS_qcom_cfg.ini
+# and persist's wlan_mac.bin. wpa_supplicant runs with recovery's libraries
+# before vendor's so it binds to the recovery's servicemanager.
+[wlan]
+modules = ["rfkill", "qca_cld3_kiwi_v2"]
+writes = [{ path = "/sys/kernel/cnss/fs_ready", value = "1" }]
+interface = "wlan0"
+supplicant = "/vendor/bin/hw/wpa_supplicant"
+libraries = ["/system/lib64", "/vendor/lib64"]
+service = "android.hardware.wifi.supplicant.ISupplicant/default"
+probe = "http://one.lenovo.com/generate_204"
+
+# Omitted:
+# - [haptics]: /sys/class/qcom-haptics/lra_frequency_hz and lra_impedance
+#   return EINVAL on TB710FU.
+# - [logd]: stock recovery ramdisk carries no /system/bin/logd.
+# - [update]: Lenovo's OTA update server protocol is not implemented.
+# - [stock]: built from a local stock ROM package rather than a public HTTPS URL.

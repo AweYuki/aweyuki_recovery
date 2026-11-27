@@ -1,0 +1,116 @@
+# Ported from: https://github.com/imqinyu/skyward_guacamoleb/tree/main
+[device]
+codename = "guacamoleb"
+brand = "OnePlus"
+model = "OnePlus 7"
+ab = true
+soc = { hans = "骁龙®855 移动平台", hant = "驍龍®855 行動平台", en = "Snapdragon® 855 Mobile Platform" }
+
+[display]
+width = 1080
+height = 2340
+density = 420
+diagonal = 6.41
+# Keep the old panel/touch controller out of their broken suspend path.
+keep_display_active = true
+
+# The stock recovery's init.rc starts OPPO's phoenix_recovery as a critical
+# service; its program is on the system partition the phone shipped, which a
+# recovery built on this system's does not have. A critical service that
+# cannot start makes init restart the phone a few seconds into every boot,
+# before it can start the recovery.
+[scripts]
+dropped_services = ["phoenix_recovery"]
+
+[modules]
+# The phone keeps its kernel modules on the vendor partition. The
+# touchscreen's driver is built into the kernel, and its input device is the
+# one the phone's own touch layer makes ("touchpanel"), so nothing has to be
+# loaded for it; the WLAN driver is the one a recovery loads itself.
+sources = ["vendor"]
+
+# The firmware of the WLAN chip and of the modem, and the apps the secure
+# world loads, are on the modem partition, which the phone mounts at
+# /vendor/firmware_mnt and its own recovery leaves unmounted.
+[firmware]
+partition = "modem"
+
+# The persist partition, which the phone mounts at /mnt/vendor/persist and
+# its own recovery leaves unmounted. The secure world keeps its own files
+# there, through a listener qseecomd registers: among them what the key
+# service needs. The WLAN's MAC address is there as well.
+[partitions]
+mounted = ["persist"]
+
+# WLAN: integrated WCN399x through ICNSS; its WLAN firmware runs in the
+# modem's wlan_pd and requires Qualcomm's QMI and peripheral services.
+# wpa_supplicant runs on the recovery's own libraries before the vendor
+# partition's.
+[wlan]
+modules = ["qca_cld3_wlan"]
+interface = "wlan0"
+writes = [{ path = "/dev/wlan", value = "ON\n" }]
+supplicant = "/vendor/bin/hw/wpa_supplicant"
+libraries = ["/system/lib64", "/vendor/lib64"]
+service = "android.hardware.wifi.supplicant.ISupplicant/default"
+probe = "http://connectivitycheck.gstatic.com/generate_204"
+
+# The partitions a backup of the baseband and EFS takes: the baseband's
+# settings, with the IMEI, the sensors' calibration and the fingerprint
+# calibration data.
+[backup]
+efs = ["modemst1", "modemst2", "fsg", "fsc", "persist"]
+
+# Where the phone's own programs keep logs in the data partition.
+[wipe]
+logs = [
+    "/data/vendor/diag",
+    "/data/vendor/log",
+    "/data/vendor/ramdump",
+    "/data/vendor/ssrdump",
+    "/data/vendor/tombstones",
+    "/data/vendor/wlan_logs",
+]
+
+# Configfs selection must precede fs, and the stock rc never names the UDC.
+[usb]
+controller = "a600000.dwc3"
+
+# This device provides Keymaster 4.0, which Android wraps as KeyMint.
+[[service]]
+name = "aweyuki-keymint-compat"
+path = "/aweyuki/keymint-compat"
+libraries = ["/system/lib64", "/apex/com.android.runtime/lib64/bionic", "/mnt/system/system/lib64", "/system_ext/lib64", "/vendor/lib64"]
+ready_service = "android.security.compat"
+
+[[service]]
+name = "aweyuki-qrtr"
+path = "/vendor/bin/qrtr-ns"
+args = ["-f"]
+libraries = ["/system/lib64", "/vendor/lib64", "/mnt/system/system/lib64"]
+
+[[service]]
+name = "aweyuki-rmt-storage"
+path = "/vendor/bin/rmt_storage"
+libraries = ["/system/lib64", "/vendor/lib64", "/mnt/system/system/lib64"]
+
+[[service]]
+name = "aweyuki-pd-mapper"
+path = "/vendor/bin/pd-mapper"
+libraries = ["/system/lib64", "/vendor/lib64", "/mnt/system/system/lib64"]
+
+[[service]]
+name = "aweyuki-peripheral-manager"
+path = "/vendor/bin/pm-service"
+libraries = ["/system/lib64", "/vendor/lib64", "/mnt/system/system/lib64"]
+
+[[service]]
+name = "aweyuki-peripheral-proxy"
+path = "/vendor/bin/pm-proxy"
+libraries = ["/system/lib64", "/vendor/lib64", "/mnt/system/system/lib64"]
+
+[[service]]
+name = "aweyuki-cnss"
+path = "/vendor/bin/cnss-daemon"
+args = ["-n", "-l"]
+libraries = ["/system/lib64", "/vendor/lib64", "/mnt/system/system/lib64"]

@@ -1,0 +1,290 @@
+# Ported from: https://github.com/liuyimeng1024-ui/skyward-for-oneplusace6/tree/main
+[device]
+# The phone's model number, which is what OnePlus prints on the box and what
+# the settings app calls it; its build answers to ossi in ro.product.device
+# and the community's trees call it ktm. The number is the name used here
+# because it is the one the phone's owner knows it by.
+#
+# What is written here goes into what the recovery keeps: a backup's manifest
+# records it, and a restore refuses one made for another phone, so a build
+# that named itself differently from the last would not take its own backups
+# back. Nothing matches it against the phone's own properties — a package's
+# pre-device is checked against ro.product.device — so any name works as long
+# as it stays the same from one build to the next.
+codename = "PLQ110"
+brand = "OnePlus"
+model = "OnePlus Ace 6"
+ab = true
+# File transfer over the port, and adb, one at a time. The stock recovery's
+# USB setup carries adb and fastboot only, and offering MTP beside them resets
+# the port on this phone: the computer sees the device leave and come back,
+# adb drops with it, and no command outlives a second. The OnePlus 13 port,
+# which is the same platform, says the same.
+#
+# So the switch in the settings page picks one, and the port carries that one:
+# on, file transfer alone; off, adb alone. It starts off, so that a computer
+# has adb as soon as the recovery is up; turning file transfer on gives the
+# storage and takes adb away, and turning it off gives adb back. Files still
+# move over adb, with `adb push` and `adb pull`, which is what a recovery is
+# driven with.
+mtp = false
+# qseecomd runs in the tee domain on OPLUS, and this recovery's own policy
+# keeps the recovery domain from the tee and dma-heap nodes it opens; the
+# port's own recoveries run permissive.
+selinux_permissive = true
+soc = { hans = "骁龙®8至尊版移动平台", hant = "驍龍®8至尊版行動平台", en = "Snapdragon® 8 Elite Mobile Platform" }
+# What the About page calls the version is read from the installed system's
+# own build.prop, not from the recovery's property file: the recovery's file
+# carries the AOSP build id (AP3A.240617.008 dev-keys) and none of the OPLUS
+# version properties, while the system's build.prop carries
+# ro.build.version.oplusrom = V17.0.0 for this phone. The Android version is
+# shown beside it from ro.build.version.release, so this one is ColorOS's.
+os_version_prop = "ro.build.version.oplusrom"
+
+[display]
+# The mode the panel reports to DRM on this phone is 1272x2800 at 165 Hz, as
+# the display driver names it: 1272x2800x165cmd, crtc 210. The frame is drawn
+# at the mode's own size, so nothing is left over at the edges.
+width = 1272
+height = 2800
+density = 480
+diagonal = 6.83
+# The stock system rounds the panel's corners to this, as its display
+# service reports them.
+corner_radius = 134
+
+[modules]
+sources = ["vendor_boot", "vendor_dlkm", "vendor", "system_dlkm"]
+# The touchscreen: Synaptics S3910 over SPI, driven by OPLUS's TouchComm
+# driver, whose input device carries positions itself. The vibration motor:
+# qcom-hv-haptics, which makes the force-feedback device the click is played
+# through. The NFC chip: NXP's NCI driver makes /dev/nq-nci, which the
+# secure element's service opens to power the eSE on before it talks to its
+# app in the secure world; OPLUS's layer and the ST54's GPIO node are there
+# for the chip's own way in, which this phone's service does not take.
+load = [
+    "oplus_bsp_synaptics_tcm2",
+    "qcom-hv-haptics",
+    "nxp-nci",
+]
+
+# The USB port's own modules are left to the phone, as the OnePlus 13 port —
+# the same platform — leaves them. The codec that holds the port's Type-C
+# switch, the redriver and the repeater in front of it were loaded here
+# before, and the codec's driver is what holds wcd_usbss_i2c open: with a
+# cable in that driver runs a surge check on the port every fifteen seconds
+# ("wcd_usbss_is_in_reset_state: cable_status = 1", then its strings say
+# "payload@@usbss surge occurs", "Surge check #1 failed"), and it drives the
+# codec's switch over I2C to do it. That is what the phone went down in
+# before: the kernel stopped answering, dmesg included. Left to the phone,
+# adb still comes up — the gadget and the port's role are the stock init's
+# work, not these modules'.
+
+# wcd_usbss_i2c and fsa4480-i2c are left out on purpose, though the USB data
+# path wants them. With a cable in, wcd_usbss_i2c runs a surge check on the
+# port every fifteen seconds — its own log says so:
+#
+#   wcd_usbss_is_in_reset_state: Exit ret = 0, cable_status = 1
+#
+# at 91.8 s, 107.2 s, 122.3 s, 137.4 s, 152.5 s, 167.6 s, and its strings
+# name what it does there: "payload@@usbss surge occurs", "Surge check #1
+# failed", "Surge check #2 failed". The phone went down at forty-eight
+# seconds into a recovery more than once, always with a cable in, and the
+# last line before the kernel stopped answering was this one. The check
+# drives the codec's switch over I2C, and the codec's driver is one of the
+# four that hold this one open, so a check that does not come back takes the
+# kernel with it.
+#
+# adb is what has to keep working, so this is tested by leaving the two out
+# and seeing whether the port still comes up. If it does not, they go back and
+# the cable is kept out while the recovery is used.
+
+# No [[owners]] at all. The one the Ace 5 configuration carried waited for
+# /dev/nq-nci, which this phone's kernel never makes: its NFC chip is driven
+# by TMS, and the node it makes is /dev/tms_nfc. An entry whose file never
+# appears stops the whole bring-up after five seconds, and everything after
+# it, the phone's key programs included, is never started. That is what the
+# kernel log showed on this phone:
+#
+#   aweyuki: devices not brought up: wait for a file the modules just loaded
+#   make: /dev/nq-nci is not there after 5000 ms
+#
+# Nothing here needs one: this phone has no weaver, so the keys are opened
+# through the TEE alone and no secure element node is handed to an account.
+
+# The firmware of the WLAN chip, and the apps the secure world loads, are on
+# the modem partition, which the phone mounts at /vendor/firmware_mnt and its
+# own recovery leaves unmounted.
+[firmware]
+partition = "modem"
+
+# The persist partition, which the phone mounts at /mnt/vendor/persist and
+# its own recovery leaves unmounted. The WLAN's MAC address would be there,
+# though this phone's vendor image links to a file its own persist does not
+# hold, so the chip falls back to its own. The secure world keeps its files
+# there as well.
+[partitions]
+mounted = ["persist"]
+
+# What the phone's own init runs once the system has finished starting, as
+# kernel-post-boot in /vendor/etc/init/hw/init.qti.kernel.rc: user root, in
+# the groups that line names. The kernel starts the CPU clusters on the
+# performance governor and keeps idle CPUs from powering down until the
+# script hands them to WALT and sets how the memory bus scales.
+[[service]]
+path = "/vendor/bin/sh"
+args = ["/vendor/bin/init.kernel.post_boot.sh"]
+libraries = ["/system/lib64", "/vendor/lib64"]
+oneshot = true
+user = "root"
+groups = ["root", "system", "wakelock", "graphics"]
+
+# No key programs of its own here, and no NFC or secure element services, and
+# no [[owners]] for their nodes.
+#
+# The recovery reads the phone's own init scripts out of its partitions and
+# starts what they name for the keys, in the order and with the accounts they
+# give: qseecomd, ssgtzd, hlosminkdaemon, the key service, the credential
+# service and the boot service. Listing the same programs here starts each of
+# them twice, and two key services and two credential services on one phone
+# take the secure world's answers away from each other: the decrypt page then
+# waits for an answer that never comes and the phone hangs.
+#
+# This phone has no weaver: its keystore guards what a screen lock opens
+# through the TEE alone. That is where it parts from the OnePlus 13 port,
+# whose weaver sits behind the embedded secure element and so needs the NFC
+# stack powered on first. The phone's own kernel makes /dev/tms_nfc rather
+# than the /dev/nq-nci the shared vendor rules name, and no /dev/tms_ese
+# exists at all: an owner entry for a node nothing makes stops the service
+# dead after five seconds of waiting, and the recovery would restart into the
+# same wait.
+
+# WLAN: Qualcomm's Kiwi on PCIe, driven by qca_cld3_kiwi_v2 over the cnss2
+# platform driver. rfkill is not built into this kernel but is one of its own
+# modules, in system_dlkm, and the vendor's modules.dep does not name it
+# though cfg80211 needs its symbols: cfg80211 is refused with unknown rfkill
+# symbols unless it is loaded first, so it is asked for beside the driver,
+# and modules.dep brings cfg80211 and cnss2 with the driver. Once
+# fs_ready is written, cnss2 powers the chip up and loads its firmware from
+# the modem partition, and wlan0 appears. That handshake takes about twenty
+# seconds here, and cnss2 may disconnect and connect again within it, so the
+# wait for the interface is long enough to sit through both. The driver asks
+# the firmware loader for its settings, which the vendor partition keeps in
+# /vendor/etc/wifi/kiwi_v2; its MAC file link points at a file persist does
+# not hold, which the driver takes as no address of its own and replaces
+# with a random one. wpa_supplicant runs on the recovery's own libraries
+# before the vendor partition's, as on the Xiaomi phones: the vendor
+# partition carries its own copies of the lowest of them, and a program
+# loading those would not be understood by the recovery's service directory.
+
+# The modem, which the WLAN's driver needs, is not started here for now.
+#
+# cnss2 asks the modem's QMI services for the chip's firmware and
+# calibration, and without them it retries "cnss: DMS QMI connection not
+# established" and never makes wlan0 — so the WLAN wants the modem up. But
+# with it started, this phone went down twice at forty-eight seconds into the
+# recovery, both times without a touch: the kernel stopped answering, dmesg
+# included, which is a hang and not the UI. The WLAN's own modules and the
+# screen are up by then, so what is left is the modem's firmware load on top
+# of everything else the recovery is bringing up in its first minute.
+#
+# Until that is understood, the phone is left without the modem and so
+# without the WLAN, and the rest of the recovery works. What starts it, when
+# it is wanted again, is the processor by its name and not its number — the
+# numbers this phone gives its remoteprocs are not the same from one boot to
+# the next, and starting "remoteproc1" started the audio DSP on one boot,
+# which does not come up in a recovery and leaves the kernel saying
+# "gpr_send_pkt: q6 state is down" every fifty milliseconds:
+#
+#   for r in /sys/class/remoteproc/remoteproc*; do
+#       case $(cat $r/name) in *remoteproc-mss) echo start > $r/state;; esac
+#   done
+
+# WLAN: Qualcomm's Kiwi on PCIe, driven by qca_cld3_kiwi_v2 over the cnss2
+# platform driver. Three modules, in this order:
+#
+#   rfkill    one of the kernel's own modules, which lives on system_dlkm and
+#             not on vendor: cfg80211 is refused with unknown rfkill symbols
+#             without it, and it is not in the vendor's modules.dep either.
+#   cfg80211  which kiwi_v2 depends on; left out, the driver is refused with
+#             unknown cfg80211 symbols.
+#   qca_cld3_kiwi_v2
+#
+# Once fs_ready is written, cnss2 powers the chip up and loads its firmware
+# from the modem partition, and wlan0 appears. The handshake takes a few
+# seconds and cnss2 may disconnect and connect again within it. The driver
+# asks the firmware loader for its settings, which the vendor partition keeps
+# in /vendor/etc/wifi/kiwi_v2; its MAC file link points at a file persist
+# does not hold, which the driver takes as no address of its own. The
+# interface comes up unblocked: rfkill reads soft 0, state 1.
+[wlan]
+modules = ["rfkill", "cfg80211", "qca_cld3_kiwi_v2"]
+writes = [{ path = "/sys/kernel/cnss/fs_ready", value = "1" }]
+firmware = [
+    { name = "wlan/qca_cld/kiwi_v2/WCNSS_qcom_cfg.ini", path = "/vendor/etc/wifi/kiwi_v2/WCNSS_qcom_cfg.ini" },
+    { name = "wlan/WCNSS_qcom_cfg.ini", path = "/vendor/etc/wifi/kiwi_v2/WCNSS_qcom_cfg.ini" },
+]
+interface = "wlan0"
+supplicant = "/vendor/bin/hw/wpa_supplicant"
+libraries = ["/system/lib64", "/vendor/lib64"]
+service = "android.hardware.wifi.supplicant.ISupplicant/default"
+probe = "http://connect.rom.miui.com/generate_204"
+
+# qcom-hv-haptics. Its lra_frequency_hz reads 0 until the stock haptic HAL
+# calibrates the motor, which a recovery never runs; the driver's t_lra_us
+# is the period it does keep, 5882 µs on this phone, so the motor swings at
+# 170.0 Hz. The click is made from samples at that frequency, and the
+# strengths are the ones the Xiaomi phones play at three quarters and a
+# quarter, which the same driver gives.
+# [disabled: incompatible with aweyuki-config haptics schema]
+# [haptics]
+# period_us = "/sys/class/qcom-haptics/t_lra_us"
+# strength = { lightest = 0.25, strongest = 0.75 }
+
+# # The partitions a backup of the baseband and EFS takes: the baseband's
+# # settings, with the IMEI, the modem's own backups, and the phone's static
+# # and dynamic NV backups. oplusstanvbk is kept per slot and is left out,
+# # since a restore puts a part back under the name it was taken from.
+[backup]
+efs = ["modemst1", "modemst2", "fsg", "fsc", "persist", "oplusdycnvbk"]
+data_skipped = [
+    "vendor/tzstorage",
+    "vendor/qtee",
+    "vendor/fingerprint",
+    "vendor/fingerprint_ori",
+    "vendor/secure_element",
+    "vendor/tui",
+]
+
+# Where the phone's own programs keep logs in the data partition: the
+# system's, the minidumps, what OPLUS's log service keeps, the modem's and
+# the WLAN's crash records, and the logs of the Xiaomi system this phone
+# runs.
+[wipe]
+logs = [
+    "/data/vendor/oplus/log",
+    "/data/vendor/olog",
+    "/data/vendor/diag",
+    "/data/vendor/bsplog",
+    "/data/vendor/log",
+    "/data/vendor/imslogs",
+    "/data/vendor/qms_logs",
+    "/data/vendor/tz_log",
+    "/data/vendor/ramdump",
+    "/data/vendor/ramdump_ssr",
+    "/data/vendor/ssrdump",
+    "/data/vendor/tombstones",
+    "/data/vendor/camera/coredump",
+    "/data/vendor/camera_remote_dump",
+    "/data/tombstones",
+    "/data/ramdump",
+    "/data/miuilog",
+]
+
+# The stock build the recovery is made on is ColorOS 16.1, whose factory
+# package names itself PKG110_11.F.53_2530_202606082356. Its
+# images/recovery.img, 100 MiB and SHA-256
+# 6e2c934c1b3cf3dda29d9fa3b41ca1c343d1fbb0d7e5c06c44a143bde465144c, is
+# given to `aweyuki-pack recovery` as --stock. No [stock] table names a
+# package: this one is not served at a URL that carries its version.
+

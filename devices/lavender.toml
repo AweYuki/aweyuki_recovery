@@ -1,0 +1,56 @@
+# Ported from: https://github.com/aLpHa-Git-69/skyward/tree/main
+# Redmi Note 7, using the official OrangeFox R12.0 kernel_419 recovery base.
+# Sources and build provenance are recorded in devices/lavender/base.json.
+[device]
+codename = "lavender"
+brand = "Xiaomi"
+model = "Redmi Note 7"
+ab = false
+fastbootd = true
+soc = { hans = "骁龙® 660", hant = "Snapdragon® 660", en = "Snapdragon® 660" }
+
+[display]
+framebuffer = "/dev/graphics/fb0"
+width = 1080
+height = 2340
+density = 440
+diagonal = 6.3
+
+[touch]
+# TW_INPUT_BLACKLIST in the official lavender BoardConfig.mk.
+blacklist = ["hbtp_vm"]
+
+[modules]
+# OrangeFox's lavender kernel contains the panel and touch drivers.
+sources = []
+load = []
+
+[backup]
+efs = ["modemst1", "modemst2", "fsg", "fsc", "persist"]
+# Logical partitions are withheld until single-slot restore maps them instead
+# of writing their retrofit-super backing devices.
+partitions = ["boot", "recovery", "dtbo", "vbmeta", "data", "modemst1", "modemst2", "fsg", "fsc", "persist"]
+data_skipped = ["vendor/tzstorage", "vendor/qtee", "vendor/fingerprint", "vendor/fpc", "vendor/goodix"]
+
+[wipe]
+# Logical system/vendor filesystems must never be made on their physical
+# retrofit-super backing devices.
+formats = ["data", "cache", "metadata"]
+logs = ["/data/miuilog", "/data/vendor/diag", "/data/vendor/log", "/data/vendor/ramdump", "/data/vendor/tombstones"]
+
+# Keep OrangeFox's FBE-v2/inlinecrypt userdata and logdump-as-metadata
+# entries. Its logical system/vendor entries resolve over the retrofit
+# system and vendor backing devices through androidboot.super_partition.
+[[fstab]]
+device = "/dev/block/bootdevice/by-name/persist"
+mount_point = "/persist"
+filesystem = "ext4"
+options = "ro,nosuid,nodev,noatime"
+extras = "wait"
+
+[[fstab]]
+device = "/dev/block/bootdevice/by-name/modem"
+mount_point = "/firmware"
+filesystem = "vfat"
+options = "ro,shortname=lower,uid=1000,gid=1000,dmask=0227,fmask=0337"
+extras = "wait"

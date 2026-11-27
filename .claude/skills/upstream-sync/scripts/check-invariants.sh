@@ -56,7 +56,8 @@ leftovers=$(git grep -In -i 'skyward' -- 'crates' '*.toml' 'Cargo.lock' '*.yml' 
   grep -vF 'SKYWARD.project-inherit' |
   grep -vF 'SKYWARD.key-root' |
   grep -vF 'Skyward test package' |
-  grep -vF 'Kept from Skyward' || true)
+  grep -vF 'Kept from Skyward' |
+  grep -vE '^devices/[^:]+:[0-9]+:#.*(Source|Ported from):' || true)
 if [[ -z "$leftovers" ]]; then
   pass 'crates and manifests name only Aweyuki'
 else

@@ -1,0 +1,109 @@
+# Ported from: https://github.com/Hwhmi/skyward/tree/main
+[device]
+codename = "chopin"
+brand = "Redmi"
+model = "REDMI Note 10 Pro"
+ab = true
+soc = { hans = "天玑®1100 Pro", hant = "天璣®1100 Pro", en = "Dimensity® 1100 Pro" }
+os_version_prop = "ro.mi.os.version.incremental"
+rec_os_prop = "Kirk Lin"
+romer_os = "CoolApk Hua"
+
+[display]
+width = 1080
+height = 2400
+density = 440
+diagonal = 6.67
+
+# Kernel modules live on vendor (mali_kbase.ko and friends). The stock
+# boot ramdisk already loads what the recovery needs, so nothing to load.
+[modules]
+sources = ["vendor"]
+load = []
+
+# The touchscreen is Novatek's NVT-ts, built into the kernel; the stock
+# recovery's own touch works with no writes to the driver.
+[touch]
+
+# WLAN:
+[wlan]
+modules = ["conninfra", "connfem", "wmt_chrdev_wifi", "wlan_drv_gen4m"]
+interface = "wlan0"
+supplicant = "/vendor/bin/hw/wpa_supplicant"
+libraries = ["/system/lib64", "/vendor/lib64"]
+service = "android.hardware.wifi.supplicant@1.4/default"
+probe = "http://connect.rom.miui.com/generate_204"
+
+# The phone's secure world, read from /vendor/etc/init: tee-supplicant
+# (tee-supplicant.rc), the key service over the TEE (keymaster 4.0, mitee
+# build), the directory the phone's hardware services register with, and
+# the credential service. The directory comes first, as nothing can
+# register before it runs. The stock recovery starts none of them.
+[[service]]
+path = "/vendor/bin/tee-supplicant"
+libraries = ["/system/lib64", "/vendor/lib64"]
+
+[[service]]
+path = "/system/bin/hwservicemanager"
+libraries = ["/system/lib64", "/vendor/lib64"]
+user = "system"
+groups = ["system", "readproc"]
+ready_property = "hwservicemanager.ready"
+
+[[service]]
+path = "/vendor/bin/hw/android.hardware.boot@1.2-service"
+libraries = ["/system/lib64", "/vendor/lib64"]
+user = "system"
+groups = ["system"]
+ready_hardware_service = "android.hardware.boot@1.2::IBootControl/default"
+
+[[service]]
+path = "/vendor/bin/hw/android.hardware.keymaster@4.0-service.mitee"
+libraries = ["/system/lib64", "/vendor/lib64"]
+user = "system"
+groups = ["system", "drmrpc"]
+ready_hardware_service = "android.hardware.keymaster@4.0::IKeymasterDevice/default"
+
+[[service]]
+path = "/vendor/bin/hw/android.hardware.gatekeeper@1.0-service"
+libraries = ["/system/lib64", "/vendor/lib64"]
+user = "system"
+groups = ["system"]
+ready_hardware_service = "android.hardware.gatekeeper@1.0::IGatekeeper/default"
+
+# What tee-supplicant.rc hands over as the phone boots: the TEE's own
+# devices go to the system, and the key service runs as that.
+[[owners]]
+user = "system"
+group = "keystore"
+mode = 0o660
+paths = ["/dev/tee0", "/dev/teepriv0"]
+
+[[owners]]
+user = "system"
+group = "system"
+mode = 0o660
+paths = ["/dev/rpmb0"]
+
+# The persist partition, which the phone mounts at /mnt/vendor/persist.
+[partitions]
+mounted = ["persist", "vendor"]
+
+# The stock build the recovery is made on: the Chinese system's MIUI
+# 14.0.8.0, whose full update package on Xiaomi's own download server
+# holds the recovery partition the recovery is built on top of.
+[stock]
+version = "V14.0.8.0.TKPCNXM"
+package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/V14.0.8.0.TKPCNXM/miui_CHOPIN_V14.0.8.0.TKPCNXM_c0252cdcc5_13.0.zip"
+recovery = "0000000000000000000000000000000000000000000000000000000000000000"
+
+probe = "http://connect.rom.miui.com/generate_204"
+
+# The update server the stock updater of the Chinese system asks.
+[update]
+server = "https://update.miui.com/updates/miotaV3.php"
+
+#haptics
+[haptics]
+resonance = "/sys/devices/platform/11cb1000.i2c9/i2c-9/9-005a/f0_value"
+strength = { lightest = 0.5, strongest = 1.0 }

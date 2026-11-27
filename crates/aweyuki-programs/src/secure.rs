@@ -13,6 +13,7 @@ use std::path::Path;
 /// The key service, and the packages whose services it serves besides: it
 /// is one program behind them all.
 const KEYS: &str = "android.hardware.security.keymint.IKeyMintDevice/default";
+const KEYS_HIDL: (&str, &str) = ("android.hardware.keymaster", "IKeymasterDevice");
 const KEY_PACKAGES: [&str; 3] = ["android.hardware.security.keymint", "android.hardware.security.secureclock", "android.hardware.security.sharedsecret"];
 
 /// The credential service and the boot control, each by its package and
@@ -94,7 +95,16 @@ const HARDWARE_DIRECTORY_READY: &str = "hwservicemanager.ready";
 /// program and runs on its libraries alone.
 const VENDOR_LIBRARIES: [&str; 3] = ["/system/lib64", "/vendor/lib64", "/vendor/lib64/hw"];
 const ODM_LIBRARIES: [&str; 4] = ["/system/lib64", "/vendor/lib64", "/vendor/lib64/hw", "/odm/lib64"];
-const SYSTEM_LIBRARIES: [&str; 3] = ["/mnt/system/system/lib64/bootstrap", "/mnt/system/system/lib64", "/mnt/system_ext/lib64"];
+const SYSTEM_LIBRARIES: [&str; 3] = [
+    "/mnt/system/system/lib64/bootstrap",
+    "/mnt/system/system/lib64",
+    "/mnt/system_ext/lib64",
+];
+const SYSTEM_EXT_LIBRARIES: [&str; 3] = [
+    "/mnt/system/system/lib64/bootstrap",
+    "/mnt/system/system/lib64",
+    "/system_ext/lib64",
+];
 
 /// The installed system's folders, where a program on the vendor or the
 /// odm partition finds the few libraries it asks for that none of its own
@@ -113,6 +123,7 @@ pub(crate) fn libraries_of(path: &str, bundle: Option<&Path>) -> Vec<String> {
     let (own, shared): (&[&str], &[&str]) = match path.split('/').nth(1) {
         Some("vendor") => (&VENDOR_LIBRARIES, &SHARED_LIBRARIES),
         Some("odm") => (&ODM_LIBRARIES, &SHARED_LIBRARIES),
+        Some("system_ext") => (&SYSTEM_EXT_LIBRARIES, &[]),
         _ => (&SYSTEM_LIBRARIES, &[]),
     };
     let bundle = bundle.map(|dir| dir.to_string_lossy().into_owned());
@@ -179,25 +190,44 @@ pub fn steps(phone: &Phone) -> Result<Vec<Step>> {
         }
     }
 
-    ensure!(described(phone, Kind::Aidl, KEYS).is_some(), "the phone describes no {KEYS}");
-    let keys = behind(phone, "the key service", KEYS, |file| file.contains("keymint") && !file.contains("strongbox"))?;
-    let with_keys = |d: &Described| d.instance == INSTANCE && KEY_PACKAGES.contains(&d.package.as_str());
-    start(&mut out, started(phone, keys, Ready::Service(KEYS.into()), besides(phone, keys, KEYS, with_keys)));
-
+    let (keys_name, keys_kind) = match described(phone, Kind::Aidl, KEYS) {
+        Some(_) => (KEYS.to_string(), Kind::Aidl),
+        None => offered(phone, KEYS_HIDL).with_context(|| format!("the phone describes neither {KEYS} nor {}", KEYS_HIDL.0))?,
+    };
     let (credentials, credentials_kind) = offered(phone, CREDENTIALS).context("the phone describes no credential service")?;
     let (boot, boot_kind) = offered(phone, BOOT).context("the phone describes no boot control")?;
-    if credentials_kind == Kind::Hidl || boot_kind == Kind::Hidl {
+    let ready = |name: String, kind: Kind| match kind {
+        Kind::Aidl => Ready::Service(name),
+        Kind::Hidl => Ready::HardwareService(name),
+    };
+    let push_hwservicemanager = |out: &mut Vec<Step>| -> Result<()> {
         let directory = phone
             .programs
             .iter()
             .find(|p| p.name == HARDWARE_DIRECTORY && phone.carries(p))
             .context("the phone has hardware services of the older kind, and no directory for them among the programs its scripts name")?;
-        start(&mut out, started(phone, directory, Ready::Property(HARDWARE_DIRECTORY_READY), Vec::new()));
-    }
-    let ready = |name: String, kind: Kind| match kind {
-        Kind::Aidl => Ready::Service(name),
-        Kind::Hidl => Ready::HardwareService(name),
+        start(out, started(phone, directory, Ready::Property(HARDWARE_DIRECTORY_READY), Vec::new()));
+        Ok(())
     };
+    if keys_kind == Kind::Hidl {
+        push_hwservicemanager(&mut out)?;
+    }
+
+    let keys = behind(phone, "the key service", &keys_name, |file| {
+        (file.contains("keymint") || file.contains("keymaster")) && !file.contains("strongbox")
+    })?;
+    let keys_registers = match keys_kind {
+        Kind::Aidl => {
+            let with_keys = |d: &Described| d.instance == INSTANCE && KEY_PACKAGES.contains(&d.package.as_str());
+            besides(phone, keys, &keys_name, with_keys)
+        }
+        Kind::Hidl => besides(phone, keys, &keys_name, |_| false),
+    };
+    start(&mut out, started(phone, keys, ready(keys_name, keys_kind), keys_registers));
+
+    if keys_kind != Kind::Hidl && (credentials_kind == Kind::Hidl || boot_kind == Kind::Hidl) {
+        push_hwservicemanager(&mut out)?;
+    }
     let alone = |_: &Described| false;
     let program = behind(phone, "the credential service", &credentials, |file| file.contains("gatekeeper"))?;
     let registers = besides(phone, program, &credentials, alone);

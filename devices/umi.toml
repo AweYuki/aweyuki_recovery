@@ -1,0 +1,246 @@
+# Ported from: https://github.com/Alittlejelly/skyward-for-MI10/tree/main
+[device]
+codename = "umi"
+brand = "Xiaomi"
+model = "Xiaomi 10"
+# The Mi 10 has one set of partitions rather than two, and a recovery
+# partition of its own: its bootloader starts it without a slot, and no
+# slot suffix follows any partition's name. Everything the pages do with a
+# slot — switching one, installing beside the installed system, reading
+# what libsnapshot keeps — has nothing to work on here.
+ab = false
+soc = { hans = "骁龙865 5G 移动平台", hant = "驍龍865 5G 行動平台", en = "Snapdragon 865 5G Mobile Platform" }
+os_version_prop = "ro.mi.os.version.incremental"
+
+[display]
+width = 1080
+height = 2340
+density = 440
+diagonal = 6.67
+# rounded_corner_radius in the system's DevicesAndroidOverlay, as the
+# window manager reports it.
+corner_radius = 110
+# The punch-hole camera in the top left takes this much of the screen, in dp;
+# the status bar's clock starts past it, as the stock system's does.
+cutout = 30
+
+[modules]
+# The phone keeps its modules in the vendor partition: it has no vendor_boot
+# and no vendor_dlkm of its own. /aweyuki/modules is looked at first, for any
+# module the recovery ships patched for the kernel it runs.
+sources = ["aweyuki", "vendor"]
+
+# The firmware of the WLAN chip, and the apps the secure world loads for the
+# secure element's service, are on the modem partition, which the phone
+# mounts at /vendor/firmware_mnt and its own recovery leaves unmounted.
+[firmware]
+partition = "modem"
+
+# The persist partition, which the phone mounts at /mnt/vendor/persist and
+# its own recovery leaves unmounted. The secure world keeps its own files
+# there, through a listener qseecomd registers: among them what the key
+# service needs to use a key that cannot be rolled back, such as the one
+# guarding each user's secret. The WLAN's MAC address is there as well.
+[partitions]
+mounted = ["persist"]
+
+# Each of the phone's own programs below runs as the user, in the groups
+# and with the capabilities its init script on the phone gives it, so that
+# what it makes in the data partition is whose it is when the phone runs
+# it, and the phone's own copy of it can still read and remove it.
+
+# What the phone's own init runs once the system has finished starting.
+# The kernel starts both CPU clusters on the performance governor, which
+# holds them at their highest clock, and Qualcomm's idle driver keeps idle
+# CPUs from powering down until it is told otherwise; the script hands the
+# clusters to WALT, lets idle CPUs power down and sets how the memory bus
+# scales. Without it the CPUs stay at their highest clock and voltage even
+# while idle, and the phone slowly heats up.
+[[service]]
+path = "/vendor/bin/sh"
+args = ["/vendor/bin/init.qcom.post_boot.sh"]
+own_libraries = true
+libraries = ["/vendor/lib64", "/system/lib64"]
+oneshot = true
+user = "root"
+groups = ["root", "system", "wakelock", "graphics"]
+
+# The secure world reaches back into Android through the listeners this
+# daemon registers; without them the key service cannot use any key.
+[[service]]
+path = "/vendor/bin/qseecomd"
+own_libraries = true
+libraries = ["/apex/com.android.vndk.v30/lib64", "/apex/com.android.i18n/lib64", "/aweyuki/libs", "/system/lib64", "/vendor/lib64"]
+user = "root"
+groups = ["root", "drmrpc"]
+
+# The directory the phone's hardware services of the older kind register
+# with. A recovery carries none of it, so it is the installed system's own
+# program, run inside that system's own tree: it is built against that
+# system's libraries and its linker's namespaces, and the addresses the
+# directory hands out are the ones those programs live at.
+#
+# Its own libraries are the two the build it comes from was made to read, and
+# not the vendor interface's: it is a program of the installed system, five
+# Android versions newer than the vendor interface this phone carries.
+[[service]]
+path = "/system/bin/hwservicemanager"
+root = "/aweyuki/root"
+own_libraries = true
+libraries = ["/system_ext/lib64", "/system/lib64"]
+user = "system"
+groups = ["system", "readproc"]
+
+# The key service is already started by the recovery's own init from the
+# vendor service description. This build carries and runs the 4.0 service;
+# starting the 4.1 binary again only has it abort and makes every service
+# after it wait the full readiness timeout before it may start.
+# The credential service: it is what the secure world has check a screen
+# lock, and the only thing that can hand out the note the key service wants
+# before it will use a key a screen lock guards.
+[[service]]
+path = "/vendor/bin/hw/android.hardware.gatekeeper@1.0-service-qti"
+own_libraries = true
+libraries = ["/apex/com.android.vndk.v30/lib64", "/apex/com.android.i18n/lib64", "/aweyuki/libs", "/system/lib64", "/vendor/lib64"]
+ready_hardware_service = "android.hardware.gatekeeper@1.0::IGatekeeper/default"
+user = "system"
+groups = ["system"]
+
+# The router of the QMI messages the chip's firmware and the services
+# around it speak: without it nobody finds the WLFW service the firmware
+# offers, and the chip's power-up ends waiting for a word that never comes.
+[[service]]
+path = "/vendor/bin/qrtr-ns"
+args = ["-f"]
+
+# The chip's own housekeeping: it takes the firmware's WLFW service over
+# QMI, answers the memory the firmware asks for, and tells the cnss2
+# driver the word the power-up ends on. It speaks over the netlink socket
+# the cnss2 driver gives and the QMI router above, and needs the one
+# capability the network work asks for. The libraries of the VNDK come
+# before the device's own, whose linker carries a library of the VNDK this
+# build of Android dropped; the recovery ships the pair in its place.
+[[service]]
+path = "/vendor/bin/cnss-daemon"
+args = ["-n", "-l"]
+libraries = ["/aweyuki/wlibs", "/apex/com.android.vndk.v30/lib64", "/vendor/lib64", "/system/lib64"]
+capabilities = ["NET_ADMIN"]
+
+# WLAN: the QCA6390 on PCIe, driven by qca_cld3_qca6390 over the cnss2
+# platform driver. Once fs_ready is written, cnss2 powers the chip up and
+# loads its firmware from the modem partition, and wlan0 appears. The driver
+# reads its settings and the MAC address through the firmware loader: the
+# settings from the vendor partition, the address from the top of persist,
+# where the phone keeps it beside the folders of its own parts.
+[wlan]
+# The kernel carries the whole driver built in, and it is what this recovery
+# runs, but a built-in driver does not load itself for anyone. Its char device
+# sits waiting for the word the installed system's framework writes when the
+# user turns the WLAN on; only then does the driver register with cnss2, take
+# the chip through a power-up and make wlan0. Both words are written below, in
+# this order — the file system's readiness first, so cnss2 starts the cold
+# boot calibration, and the driver's own word second, which waits for that
+# calibration before it brings the chip up. Nothing is loaded as a module for
+# this phone: the vendor partition carries the same driver as a module, built
+# against the phone maker's build of the same kernel source, and this kernel
+# (a different build of it) refuses that module outright — its CRC table is
+# out of date, its vermagic names another release, its debugfs symbols are
+# gone, and a module called "wlan" collides with the built-in driver's own
+# sysfs kobject.
+modules = []
+# What tells the chip it may start: its bus driver holds the power-up until
+# this file is written, which the installed system's own init does while it
+# mounts its partitions. The second write is the framework's own word to the
+# driver's char device (`wlan_hdd_state_ctrl_param_write`, three bytes, "ON"
+# and a newline): it blocks for as long as the framework would wait, and the
+# interface is there when it returns.
+writes = [
+    { path = "/sys/kernel/cnss/fs_ready", value = "1" },
+    { path = "/dev/wlan", value = "ON\n" },
+]
+interface = "wlan0"
+supplicant = "/vendor/bin/hw/wpa_supplicant"
+libraries = ["/apex/com.android.vndk.v30/lib64", "/vendor/lib64", "/system/lib64"]
+service = "android.hardware.wifi.supplicant.ISupplicant/default"
+probe = "http://connect.rom.miui.com/generate_204"
+firmware = [
+    # The driver asks for these two names first, and only then for the ones
+    # under the chip's own directory. The installed system answers the first
+    # pair from a symbolic link that is dead on this build, so only the second
+    # pair ever reaches it; here both are placed, and the first pair is what
+    # the driver actually reads. Without the address file it gives the
+    # interface a random one on every boot.
+    { name = "wlan/qca_cld/qca6390/WCNSS_qcom_cfg.ini", path = "/vendor/etc/wifi/qca6390/WCNSS_qcom_cfg.ini" },
+    { name = "wlan/qca_cld/qca6390/wlan_mac.bin", partition = "persist", path = "wlan_mac.bin" },
+    # The chip's own firmware and its board data, which cnss reads with
+    # request_firmware once the file system is ready. The phone's own init
+    # answers these from the modem partition mounted at /firmware; here
+    # they are placed by hand, where the kernel's firmware loader looks.
+    { name = "qca6390/amss20.bin", partition = "modem", path = "image/qca6390/amss20.bin" },
+    { name = "qca6390/m3.bin", partition = "modem", path = "image/qca6390/m3.bin" },
+    { name = "qca6390/regdb.bin", partition = "modem", path = "image/qca6390/regdb.bin" },
+]
+
+# The update server the stock updater of the Chinese system asks.
+[update]
+server = "https://update.miui.com/updates/miotaV3.php"
+
+# The stock build the recovery is made on: the Chinese system's
+# OS1.0.5.0.TJBCNXM, the last build of it the phone maker gave a fastboot
+# package of. The recovery partition is taken out of that package's
+# `images/recovery.img`: the recovery package of the same build names no
+# recovery image at all, since the phone maker's own recovery never rewrites
+# that partition, and the build after it names no fastboot package.
+#
+# The sum is the SHA-256 of that recovery image, which is the whole
+# partition as the phone and the package hold it.
+[stock]
+version = "OS1.0.5.0.TJBCNXM"
+package = "https://cdnorg.d.miui.com/OS1.0.5.0.TJBCNXM/miui_UMI_OS1.0.5.0.TJBCNXM_d01651ed86_13.0.zip"
+recovery = "de565b9acc26a409d728f06a8b7c38c809173e0e1bd153d3d61683b2baf01ef4"
+
+# The kernel the recovery runs, which the stock recovery's own cannot be: the
+# ROM this phone runs is built for a newer Android, and its system and vendor
+# partitions are erofs, which the stock recovery kernel does not read. The
+# ROM's own boot image and the overlay its dtbo partition holds are what it
+# starts with:
+#
+#   --kernel <ROM>/boot.img --dtbo <ROM>/firmware-update/dtbo.img
+#
+# where the dtbo is cut to the size its header gives it (14,055,186 bytes):
+# the partition the package ships is padded to 32 MiB. Both come from
+# NikoHyper_UMI_OS4.0.29.0.XEOCNXM; the kernel's device tree and overlay are
+# written after its ramdisk, so the packer needs no `--header`.
+
+# The partitions a backup of the baseband and EFS takes: the baseband's
+# settings, with the IMEI, and the sensors' calibration. And what of the
+# data partition a backup leaves out because the secure world keeps it in
+# step with itself: its own storage, its apps' data, that of Xiaomi's own
+# trusted environment, and the fingerprint templates.
+[backup]
+efs = ["modemst1", "modemst2", "fsg", "fsc", "persist"]
+data_skipped = [
+    "vendor/tzstorage",
+    "vendor/qtee",
+    "vendor/mitee",
+    "vendor/goodix",
+    "vendor/fingerprint",
+    "vendor/fpdata",
+    "vendor/misc/mi_fp",
+]
+
+# Where the phone's own programs keep logs in the data partition: the
+# system's, the minidumps, what Xiaomi's log manager keeps of each part of
+# the phone, and what the modem, Wi-Fi and Bluetooth leave when they crash.
+[wipe]
+logs = [
+    "/data/miuilog",
+    "/data/vendor/diag",
+    "/data/vendor/bsplog",
+    "/data/vendor/log",
+    "/data/vendor/ramdump",
+    "/data/vendor/ramdump_ssr",
+    "/data/vendor/ssrdump",
+    "/data/vendor/tombstones",
+    "/data/vendor/wlan_logs",
+]

@@ -101,7 +101,8 @@ jobs:
             test -f "devices/$DEVICE.toml"
             echo "devices=$(jq -nc --arg device "$DEVICE" '[$device]')" >> "$GITHUB_OUTPUT"
           else
-            echo "devices=$(basename -s .toml devices/*.toml | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+            devices=$(python3 -c 'import glob, json, os, tomllib; print(json.dumps([os.path.basename(p)[:-5] for p in sorted(glob.glob("devices/*.toml")) if "stock" in tomllib.load(open(p, "rb"))]))')
+            echo "devices=$devices" >> "$GITHUB_OUTPUT"
           fi
 
   recovery:
@@ -197,6 +198,8 @@ jobs:
         run: |
           zips=()
           for config in devices/*.toml; do
+            has_stock=$(python3 -c 'import sys, tomllib; print("1" if "stock" in tomllib.load(open(sys.argv[1], "rb")) else "0")' "$config")
+            [ "$has_stock" = "1" ] || continue
             device=$(basename "$config" .toml)
             model=$(python3 -c 'import sys, tomllib; print(tomllib.load(open(sys.argv[1], "rb"))["device"]["model"])' "$config")
             zip=$(ls images/aweyuki-"$GITHUB_REF_NAME"-"$device"-*.zip)

@@ -51,7 +51,7 @@ use aweyuki_ui::app::{
 use aweyuki_ui::fmt::TimeZone;
 use aweyuki_ui::settings::Keeper;
 use aweyuki_ui::surface::kms::KmsSurface;
-use aweyuki_ui::{Canvas, Fonts, Lang, Surface};
+use aweyuki_ui::{Canvas, Fonts, Lang, StatusBarPadding, Surface};
 use aweyuki_vab::{Merge, Standing};
 use std::collections::{BTreeSet, VecDeque};
 use std::fs;
@@ -173,16 +173,21 @@ fn normal_max(max: u32) -> Result<u32> {
         .into_iter()
         .find(|p| p.is_dir())
         .ok_or_else(|| anyhow!("panel {name} is not in the device tree"))?;
+    panel_normal_max(&node, name, max)
+}
+
+/// Read the panel's normal maximum from device tree properties under `node`,
+/// falling back to `max` when the panel defines none of `NORMAL_MAX`.
+fn panel_normal_max(node: &Path, name: &str, max: u32) -> Result<u32> {
     let cell = |prop: &str| -> Result<u32> {
         let path = node.join(prop);
         let bytes = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
         let cell: [u8; 4] = bytes.as_slice().try_into().map_err(|_| anyhow!("{} is not one cell", path.display()))?;
         Ok(u32::from_be_bytes(cell))
     };
-    let (normal, full) = NORMAL_MAX
-        .iter()
-        .find(|(normal, _)| node.join(normal).exists())
-        .with_context(|| format!("panel {name} gives its normal maximum as none of {NORMAL_MAX:?}"))?;
+    let Some((normal, full)) = NORMAL_MAX.iter().find(|(normal, _)| node.join(normal).exists()) else {
+        return Ok(max);
+    };
     let (normal, full) = (cell(normal)?, cell(full)?);
     ensure!(normal > 0 && normal <= full, "panel {name}: normal maximum {normal} out of {full}");
     Ok((f64::from(max) * f64::from(normal) / f64::from(full)).round() as u32)
@@ -987,7 +992,7 @@ struct Pending {
 }
 
 /// Start installing the package the system asked for.
-fn install_asked(programs: &[Service], app: &App, pending: Pending) -> Result<Installer> {
+fn install_asked(programs: &[Service], app: &App, pending: Pending, recovery_partition: aweyuki_config::RecoveryPartition) -> Result<Installer> {
     if pending.needs == Needs::Cache {
         let cache = wipe::cache()?.context("the phone has no cache partition")?;
         let at = Path::new(&cache.mount_point);
@@ -996,7 +1001,7 @@ fn install_asked(programs: &[Service], app: &App, pending: Pending) -> Result<In
             mount::mount_ro(Path::new(&fstab::device(&cache)?), at)?;
         }
     }
-    Installer::asked(pending.package, pending.retry, detach(programs.to_vec()), install_options(app))
+    Installer::asked(pending.package, pending.retry, detach(programs.to_vec()), install_options(app, recovery_partition))
 }
 
 /// Where a reboot rescue asked for goes: the target, and whether it is
@@ -1303,8 +1308,8 @@ fn detach(services: Vec<Service>) -> Detach {
 /// are set: puts Aweyuki back into the recovery partitions it writes over,
 /// on a phone that has them, and checks a zip's signature before its
 /// install script runs.
-fn install_options(app: &App) -> Options {
-    Options { keep: app.state.keep_recovery && app.state.recovery_partitions, signed: app.state.check_signature }
+fn install_options(app: &App, recovery_partition: aweyuki_config::RecoveryPartition) -> Options {
+    Options { keep: app.state.keep_recovery && app.state.recovery_partitions, recovery_partition, signed: app.state.check_signature }
 }
 
 /// How often the WLAN page scans while it shows.
@@ -1606,6 +1611,11 @@ impl<'a> Pages<'a> {
         };
         let mut app = App::new(first, w, h, cfg.display.density as f32 / 160.0);
         app.set_screen_corners(cfg.display.corner_radius as f32);
+        app.set_status_bar_padding(StatusBarPadding {
+            start: cfg.display.status_bar.start,
+            top: cfg.display.status_bar.top,
+            end: cfg.display.status_bar.end,
+        });
         // The settings kept from the starts before are back before the first
         // frame, and before file transfer starts with its switch and the time
         // zone. The pages speak the language chosen then, or else the one the
@@ -1693,8 +1703,8 @@ impl<'a> Pages<'a> {
         // partitions in both slots, which a switch writes.
         let by_name = Path::new(aweyuki_block::BY_NAME);
         let both = |base: &str| -> Result<bool> { Ok(by_name.join(format!("{base}_a")).try_exists()? && by_name.join(format!("{base}_b")).try_exists()?) };
-        app.state.recovery_partitions = both("recovery")?;
-        app.state.dual_boot = app.state.recovery_partitions && both("boot")? && both("init_boot")?;
+        app.state.recovery_partitions = both(cfg.device.recovery_partition.partition())?;
+        app.state.dual_boot = app.state.recovery_partitions && both("boot")?;
         // The second system's work; the systems are read at once, for the home
         // page to name the one that starts, once a switch cut off before is
         // finished.
@@ -1813,12 +1823,12 @@ impl<'a> Pages<'a> {
             }
             Work::Sideload { .. } => {
                 self.app.start_sideload();
-                self.installer = Some(Installer::start(detach(self.programs.to_vec()), install_options(&self.app))?);
+                self.installer = Some(Installer::start(detach(self.programs.to_vec()), install_options(&self.app, cfg.device.recovery_partition))?);
                 self.sideloading = true;
             }
             Work::Rescue => {
                 self.app.start_rescue();
-                self.installer = Some(Installer::rescue(detach(self.programs.to_vec()), install_options(&self.app))?);
+                self.installer = Some(Installer::rescue(detach(self.programs.to_vec()), install_options(&self.app, cfg.device.recovery_partition))?);
                 self.sideloading = true;
             }
             Work::Update(update) => {
@@ -1839,7 +1849,9 @@ impl<'a> Pages<'a> {
                             self.decryptor = Some(Decryptor::start(decrypt::Job::Open)?);
                             self.pending = Some(wanted);
                         }
-                        Needs::Nothing | Needs::Cache => self.installer = Some(install_asked(self.programs, &self.app, wanted)?),
+                        Needs::Nothing | Needs::Cache => {
+                            self.installer = Some(install_asked(self.programs, &self.app, wanted, cfg.device.recovery_partition)?)
+                        }
                     }
                 }
             }
@@ -3176,7 +3188,7 @@ impl Pages<'_> {
                     self.app.asked_locked(user, now);
                     self.pending = Some(wanted);
                 }
-                _ => self.installer = Some(install_asked(self.programs, &self.app, wanted)?),
+                _ => self.installer = Some(install_asked(self.programs, &self.app, wanted, self.cfg.device.recovery_partition)?),
             }
         }
         Ok(())
@@ -3345,18 +3357,26 @@ impl Pages<'_> {
             }
             Effect::Sideload => {
                 if self.may_install(now)? {
-                    self.installer = Some(Installer::start(detach(self.programs.to_vec()), install_options(&self.app))?);
+                    self.installer = Some(Installer::start(detach(self.programs.to_vec()), install_options(&self.app, cfg.device.recovery_partition))?);
                     self.sideloading = true;
                 }
             }
             Effect::InstallFile(place, path) => {
                 if self.may_install(now)? {
-                    self.installer = Some(Installer::open(in_place(place, &path), detach(self.programs.to_vec()), install_options(&self.app))?);
+                    self.installer = Some(Installer::open(
+                        in_place(place, &path),
+                        detach(self.programs.to_vec()),
+                        install_options(&self.app, cfg.device.recovery_partition),
+                    )?);
                 }
             }
             Effect::InstallPath(path) => {
                 if self.may_install(now)? {
-                    self.installer = Some(Installer::open(PathBuf::from(path), detach(self.programs.to_vec()), install_options(&self.app))?);
+                    self.installer = Some(Installer::open(
+                        PathBuf::from(path),
+                        detach(self.programs.to_vec()),
+                        install_options(&self.app, cfg.device.recovery_partition),
+                    )?);
                 }
             }
             Effect::Flash { partition, place, pick } => {
@@ -3467,7 +3487,12 @@ impl Pages<'_> {
                 ensure!(self.installer.is_none(), "an installer is running already");
                 aweyuki_sys::kmsg(&format!("updating Aweyuki to {}", build.name))?;
                 let path = Path::new(aweyuki_sys::RUN).join(&build.name);
-                let task = updates::Task::UpdateAweyuki { build, codename: cfg.device.codename.clone(), path };
+                let task = updates::Task::UpdateAweyuki {
+                    build,
+                    codename: cfg.device.codename.clone(),
+                    partition: cfg.device.recovery_partition,
+                    path,
+                };
                 self.aweyuki_updater = Some(updates::Worker::start(task, self.servers.clone())?);
             }
             Effect::StopAweyukiUpdate => self.aweyuki_updater.as_ref().context("Aweyuki is not being updated")?.stop(),
@@ -4398,5 +4423,24 @@ impl Pages<'_> {
             (on, t) => unreachable!("the switch turned file transfer {on} while it was {}", t.is_some()),
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_normal_max_falls_back_to_max_and_scales_when_present() {
+        let dir = std::env::temp_dir().join(format!("aweyuki-panel-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        assert_eq!(panel_normal_max(&dir, "test", 2047).unwrap(), 2047);
+
+        fs::write(dir.join("mi,max-brightness-normal"), 1024u32.to_be_bytes()).unwrap();
+        fs::write(dir.join("qcom,mdss-dsi-bl-max-level"), 2048u32.to_be_bytes()).unwrap();
+        assert_eq!(panel_normal_max(&dir, "test", 4095).unwrap(), 2048);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

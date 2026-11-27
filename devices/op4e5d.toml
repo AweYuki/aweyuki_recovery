@@ -1,0 +1,207 @@
+# Ported from: https://github.com/toraidl/skyward/tree/main
+[device]
+codename = "OP4E5D"
+brand = "OPPO"
+model = "OPPO Find X3"
+# The Find X3 lays its partitions out once: its update packages are block
+# packages with one super partition, and neither the bootloader nor super
+# has a second layout to start from. The recovery names the partitions as
+# they are, without a slot.
+ab = false
+soc = { hans = "骁龙®870 移动平台", hant = "驍龍®870 行動平台", en = "Snapdragon® 870 Mobile Platform" }
+
+# Debug recovery: keep TCP ADB reachable after Wi-Fi comes up even when
+# the USB port is unavailable. Does not change Android's adb.
+[adb]
+tcp_port = 5555
+
+[display]
+# The panel as the phone reports it in its default FHD+ mode: 1080 by 2412
+# at 480 dpi, the 6.7-inch AMOLED of the PEDM00.
+width = 1080
+height = 2412
+density = 480
+diagonal = 6.7
+corner_radius = 100
+# Android reports the top-left cutout's bounds as x=0..165, y=0..103.
+# Leave another 24 physical pixels between that region and the clock.
+status_bar_left_inset = 189
+# OPPO's own recovery starts this panel at 1000 of 4095, which is dim.
+# Start where the panel is comfortable and let the user move the slider.
+brightness = 0.35
+
+# OPPO's touch layer also exposes a virtual device, hbtp_vm, which carries
+# the panel's name but no touches of its own. Leave it out so the panel
+# itself is the one read.
+[touch]
+skip = ["hbtp_vm"]
+
+# /metadata keeps the key the data partition opens with. /mnt/vendor/persist
+# keeps the secure world's own files, the WLAN's calibration and the network
+# the WLAN page joins. The stock recovery leaves both unmounted.
+[partitions]
+mounted = ["metadata", "persist"]
+# ColorOS's script OTA removes and recreates qti_dynamic_partitions. A
+# mounted system partition keeps its device-mapper node busy and makes
+# update_dynamic_partitions abort before it can do that, so never map it.
+# WLAN and the hardware services live on vendor, which stays mounted.
+skip_mount = ["system"]
+
+# The system partition is not mounted, so its build facts are supplied
+# here. These match the installed ColorOS 17 build and the key blob's
+# vendor patch level; they keep Keymaster at the level its key was made for.
+[properties]
+"ro.build.version.release" = "17"
+"ro.build.version.security_patch" = "2026-11-01"
+"ro.vendor.build.security_patch" = "2026-11-01"
+"ro.build.version.ota" = "PEDM00_17.0.1.201(CN01)"
+
+# The phone's hardware services, started in the order they depend on one
+# another: the directory the older kind registers with, the secure world's
+# listener daemon, the key and credential services, then the WLAN daemons.
+#
+# The programs are the installed system's own, and their libraries are
+# looked for in its partitions first: the recovery ramdisk carries an older
+# copy of QTI's keymaster, and a key the installed system made has to be
+# read by the same build that wrote it.
+[[service]]
+path = "/system/bin/hwservicemanager"
+libraries = ["/system/lib64"]
+ready_property = "hwservicemanager.ready"
+user = "root"
+groups = ["root"]
+
+# The installed persist partition is mounted at /persist, the folder the
+# phone's own build calls /mnt/vendor/persist: the WLAN's MAC address and
+# the network the WLAN page joins are kept there. Point the name the phone
+# uses at it, as its own first-stage init does.
+[[service]]
+path = "/system/bin/sh"
+args = ["-c", "mkdir -p /mnt/vendor && ln -sfn /persist /mnt/vendor/persist"]
+oneshot = true
+user = "root"
+groups = ["root"]
+
+# The daemon the secure world reaches back into Android through. Until its
+# listeners are registered, the secure world's apps, the key service among
+# them, cannot run.
+[[service]]
+path = "/vendor/bin/qseecomd"
+libraries = ["/vendor/lib64", "/system/lib64"]
+ready_property = "vendor.sys.listeners.registered"
+user = "root"
+groups = ["root"]
+
+# The key service, the only thing that can use the keys the phone wrapped
+# in hardware.
+[[service]]
+path = "/vendor/bin/hw/android.hardware.keymaster@4.1-service-qti"
+libraries = ["/vendor/lib64", "/system/lib64"]
+ready_hardware_service = "android.hardware.keymaster@4.1::IKeymasterDevice/default"
+user = "system"
+groups = ["system", "drmrpc"]
+
+# The credential service, which is what the secure world has check the
+# secret behind a screen lock.
+[[service]]
+path = "/vendor/bin/hw/android.hardware.gatekeeper@1.0-service-qti"
+libraries = ["/vendor/lib64", "/system/lib64"]
+ready_hardware_service = "android.hardware.gatekeeper@1.0::IGatekeeper/default"
+user = "system"
+groups = ["system"]
+
+# The name service the WLAN's firmware finds its QMI server through. MHI
+# reaches mission mode without it, but firmware-ready then times out.
+[[service]]
+path = "/vendor/bin/qrtr-ns"
+args = ["-f"]
+libraries = ["/vendor/lib64", "/system/lib64"]
+user = "vendor_qrtr"
+groups = ["vendor_qrtr"]
+capabilities = ["NET_BIND_SERVICE"]
+
+# cnss-daemon binds its socket before it registers with WLFW. Before
+# /data is decrypted those directories live only in the ramdisk; create
+# them without changing an existing directory or calibration file.
+[[service]]
+path = "/system/bin/sh"
+args = ["-c", '''
+set -eu
+if [ ! -d /data/vendor ]; then
+    /system/bin/toybox mkdir -p /data/vendor
+    /system/bin/toybox chmod 0755 /data/vendor
+fi
+for directory in /data/vendor/wifi /data/vendor/wifi/sockets; do
+    if [ ! -d "$directory" ]; then
+        /system/bin/toybox mkdir "$directory"
+        /system/bin/toybox chown 1010:1010 "$directory"
+        /system/bin/toybox chmod 0770 "$directory"
+    fi
+done
+''']
+oneshot = true
+user = "root"
+groups = ["root"]
+
+# The daemon that answers the WLAN firmware's QMI requests: without it the
+# chip loads its firmware and then waits, and the interface is never made.
+[[service]]
+path = "/vendor/bin/cnss-daemon"
+args = ["-n", "-l"]
+libraries = ["/vendor/lib64", "/system/lib64"]
+user = "system"
+groups = ["system", "inet", "net_admin", "wifi"]
+capabilities = ["NET_ADMIN"]
+
+# The WLAN is QCA6390 on the kona platform, the chip the recovery kernel
+# carries: the same one the OnePlus 8T has. Its firmware is in the modem
+# partition's image/qca6390 and its board data in persist; cnss-daemon
+# answers the firmware's QMI requests and the phone's own supplicant scans
+# and joins networks. The image carries the supplicant's HIDL interfaces and
+# a libssl to match its libcrypto, without which neither starts.
+# [disabled: incompatible with aweyuki-config wlan schema]
+# [wlan]
+# modules = []
+# # fs_ready starts CNSS calibration. The built-in HDD driver itself loads
+# # only when /dev/wlan receives ON; its handler copies three bytes.
+# writes = [
+#     { path = "/sys/kernel/cnss/fs_ready", value = "1" },
+#     { path = "/dev/wlan", value = "ON\n" },
+# ]
+# firmware = [
+#     # The stock recovery DT does not enable qcom,converged-dt, so CNSS
+#     # requests flat names even though the modem stores them below
+#     # image/qca6390.
+#     { name = "amss20.bin", partition = "modem", filesystem = "vfat", path = "image/qca6390/amss20.bin" },
+#     { name = "m3.bin", partition = "modem", filesystem = "vfat", path = "image/qca6390/m3.bin" },
+#     # The board data the phone calibrated for itself. The modem carries a
+#     # factory copy; this one is the phone's own.
+#     { name = "bdwlan.elf", path = "/persist/bdwlan.elf" },
+#     # The driver's own configuration, in the installed vendor partition.
+#     # The MAC address file the vendor names is a symlink into a persist
+#     # folder this phone does not have, as it is on the running system too:
+#     # the driver falls back to the address in its own storage.
+#     { name = "wlan/WCNSS_qcom_cfg.ini", path = "/vendor/etc/wifi/qca6390/WCNSS_qcom_cfg.ini" },
+# ]
+# interface = "wlan0"
+# supplicant = "/vendor/bin/hw/wpa_supplicant"
+# libraries = ["/vendor/lib64", "/system/lib64"]
+# hardware_services = [
+#     "android.hardware.wifi.supplicant@1.0::ISupplicant/default",
+#     "android.hardware.wifi.supplicant@1.1::ISupplicant/default",
+#     "android.hardware.wifi.supplicant@1.2::ISupplicant/default",
+#     "android.hardware.wifi.supplicant@1.3::ISupplicant/default",
+#     "vendor.qti.hardware.wifi.supplicant@2.0::ISupplicantVendor/default",
+#     "vendor.qti.hardware.wifi.supplicant@2.1::ISupplicantVendor/default",
+#     "vendor.qti.hardware.wifi.supplicant@2.2::ISupplicantVendor/default",
+#     "vendor.oplus.hardware.wifi.supplicant@2.0::IOplusSupplicant/default",
+# ]
+# probe = "http://connectivitycheck.gstatic.com/generate_204"
+
+# # The linear motor is an AW8697 behind /sys/class/leds/vibrator, as on the
+# # OnePlus 8T: a length in duration and activate 1 buzz it, and gain sets
+# # how hard. The panel's own touch driver reports the same way.
+# # [disabled: incompatible with aweyuki-config haptics schema]
+# # [haptics]
+# # led = "/sys/class/leds/vibrator"
+# # strength = { lightest = 0.25, strongest = 0.75 }

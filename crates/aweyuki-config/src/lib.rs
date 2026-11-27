@@ -34,6 +34,8 @@ pub mod ramdisk {
     pub const TASK_PROFILES: &str = "system/etc/task_profiles.json";
     /// The init rules that set up file transfer's USB function.
     pub const MTP_RC: &str = "system/etc/init/aweyuki-mtp.rc";
+    /// The binary SELinux policy loaded in recovery mode.
+    pub const SEPOLICY: &str = "sepolicy";
 
     /// Whether the running root is Aweyuki's recovery ramdisk.
     pub fn in_recovery() -> bool {
@@ -218,8 +220,14 @@ pub struct Haptics {
     /// driver plays the waveforms it keeps.
     #[serde(default)]
     pub click: Option<i16>,
+    /// The driver's number for the screen-off ticks waveform it keeps, on
+    /// phones whose driver does not accept custom sample buffers.
+    #[serde(default)]
+    pub ticks: Option<i16>,
     /// The file the driver says the motor's resonant frequency in, in
-    /// tenths of a hertz whatever its label.
+    /// tenths of a hertz whatever its label. Required unless both `click`
+    /// and `ticks` are kept by the driver.
+    #[serde(default)]
     pub resonance: String,
     pub strength: Strength,
     /// Whether the strength goes into the samples made, each made that
@@ -269,6 +277,25 @@ pub struct Names {
     pub en: String,
 }
 
+/// Which partition holds the recovery image: a dedicated `recovery` partition,
+/// or `vendor_boot` on phones whose bootloader boots recovery from it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecoveryPartition {
+    #[default]
+    Recovery,
+    VendorBoot,
+}
+
+impl RecoveryPartition {
+    pub fn partition(self) -> &'static str {
+        match self {
+            RecoveryPartition::Recovery => "recovery",
+            RecoveryPartition::VendorBoot => "vendor_boot",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Device {
     pub codename: String,
@@ -278,6 +305,9 @@ pub struct Device {
     pub model: String,
     #[serde(default = "default_true")]
     pub ab: bool,
+    /// Which partition holds the recovery image (`recovery` or `vendor_boot`).
+    #[serde(default)]
+    pub recovery_partition: RecoveryPartition,
     /// SoC marketing name shown on the About page.
     #[serde(default)]
     pub soc: Option<Names>,
@@ -301,6 +331,22 @@ pub struct Display {
     /// sliding over another rounds its leading corners to it.
     #[serde(default)]
     pub corner_radius: u32,
+    /// Extra status bar insets in dp beyond the default layout, e.g. to
+    /// clear a corner camera cutout or tighter rounded corners.
+    #[serde(default)]
+    pub status_bar: StatusBarPadding,
+}
+
+/// Extra padding applied to the status bar relative to the default layout,
+/// in dp.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
+pub struct StatusBarPadding {
+    #[serde(default)]
+    pub start: f32,
+    #[serde(default)]
+    pub top: f32,
+    #[serde(default)]
+    pub end: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -511,6 +557,11 @@ impl DeviceConfig {
 
     pub fn parse(text: &str) -> Result<Self> {
         let cfg: DeviceConfig = toml::from_str(text).context("parse device config")?;
+        let sb = cfg.display.status_bar;
+        ensure!(
+            sb.start.is_finite() && sb.top.is_finite() && sb.end.is_finite(),
+            "[display] status_bar: padding values must be finite numbers"
+        );
         for log in &cfg.wipe.logs {
             let path = Path::new(log);
             let plain = path.components().all(|c| matches!(c, std::path::Component::RootDir | std::path::Component::Normal(_)));
@@ -553,7 +604,12 @@ impl DeviceConfig {
         }
         if let Some(haptics) = &cfg.haptics {
             let file = &haptics.resonance;
-            ensure!(Path::new(file).is_absolute(), "[haptics] resonance: {file} is not an absolute path");
+            if haptics.click.is_none() || haptics.ticks.is_none() {
+                ensure!(!file.is_empty(), "[haptics] needs resonance unless both click and ticks name driver waveforms");
+            }
+            if !file.is_empty() {
+                ensure!(Path::new(file).is_absolute(), "[haptics] resonance: {file} is not an absolute path");
+            }
             let Strength { lightest, strongest } = haptics.strength;
             ensure!(
                 0.0 < lightest && lightest < strongest && strongest <= 1.0,
@@ -674,6 +730,7 @@ mod tests {
         let (strength, resonance) = ("strength = { lightest = 0.25, strongest = 1.0 }", "resonance = \"/sys/class/qcom-haptics/lra_frequency_hz\"");
         assert!(with(&format!("{resonance}\n{strength}")).is_ok(), "a click made");
         assert!(with(&format!("click = 0\n{resonance}\n{strength}")).is_ok(), "a click kept");
+        assert!(with(&format!("click = 0\nticks = 1\n{strength}")).is_ok(), "both click and ticks kept");
         assert!(with(&format!("click = 0\n{strength}")).is_err(), "no motor's resonance to make the ticks at");
         assert!(with(&format!("resonance = \"sys/f\"\n{strength}")).is_err(), "a file named from nowhere");
         assert!(with(resonance).is_err(), "a click without its strengths");
@@ -987,5 +1044,16 @@ mod tests {
         assert!(!report.uses(Path::new("/vendor")));
         let nezha = DeviceConfig::parse(include_str!("../../../devices/nezha.toml")).unwrap();
         assert!(nezha.services[0].uses(Path::new("/vendor")), "its shell and its libraries are the vendor partition's");
+    }
+
+    #[test]
+    fn status_bar_padding_defaults_and_rejects_non_finite_values() {
+        let base = "[device]\ncodename = \"x\"\n";
+        assert_eq!(DeviceConfig::parse(base).unwrap().display.status_bar, StatusBarPadding::default());
+        let partial = DeviceConfig::parse(&format!("{base}[display]\nstatus_bar = {{ start = 25.0, end = 9.0 }}\n")).unwrap();
+        assert_eq!(partial.display.status_bar, StatusBarPadding { start: 25.0, top: 0.0, end: 9.0 });
+        let table = DeviceConfig::parse(&format!("{base}[display.status_bar]\ntop = 2.0\n")).unwrap();
+        assert_eq!(table.display.status_bar, StatusBarPadding { start: 0.0, top: 2.0, end: 0.0 });
+        assert!(DeviceConfig::parse(&format!("{base}[display]\nstatus_bar = {{ start = nan }}\n")).is_err());
     }
 }

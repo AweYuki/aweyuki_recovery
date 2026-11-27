@@ -3,12 +3,15 @@ name: upstream-sync
 description: Take a feature or fix from the upstream Skyward repository into this Aweyuki Recovery fork without breaking the rename, the Vietnamese locale, or the on-disk formats phones and backups already use. Use when asked to pull, merge, cherry-pick, backport or port an upstream commit or PR, to check what upstream has that this fork lacks, or when a merge from upstream leaves conflicts.
 ---
 
-# Taking work from upstream
+# Taking work from upstream and community forks
 
-This repository is a fork of `github.com/kirklin/skyward`. The remote
-`upstream` points there; `origin` points at `github.com/AweYuki/aweyuki_recovery`.
-Upstream calls everything "skyward". This fork renamed it to "aweyuki",
-added a Vietnamese locale, and regenerated the documentation images.
+This repository is a fork of `github.com/kirklin/skyward`, and also aggregates
+device configurations and compatibility fixes from community forks under
+`github.com/kirklin/skyward/forks`. The remote `upstream` points to
+`kirklin/skyward`; `origin` points at `github.com/AweYuki/aweyuki_recovery`.
+Upstream and community forks call everything "skyward". This fork renamed it to
+"aweyuki", added a Vietnamese locale, AERA `.aerap` plugins, and regenerated the
+documentation images.
 
 Almost every file differs from upstream — mostly by the rename. That makes a
 plain `git merge upstream/main` unworkable: expect thousands of conflicts for
@@ -42,6 +45,30 @@ These are not style choices. Each one has a reason outside the source tree.
    accept a merge.
 3. `git fetch upstream --tags` before looking at anything, so you are not
    reasoning about a stale `upstream/main`.
+4. To take commits from a **community fork** (such as `Flicker-Android-Devices/skyward-mikona`
+   or any fork under `github.com/kirklin/skyward/forks`), add it as a temporary
+   remote (`git remote add fork-<name> <url> && git fetch fork-<name>`) or fetch
+   into a bare scratch repository, then run `rewrite-patch.sh <sha> --apply`
+   against those commits in topological order.
+
+## Automated fork scanning for new devices
+
+To discover new `devices/*.toml` files across all forks of `kirklin/skyward`,
+normalize any incompatible sections against `aweyuki-config`, and update the
+community device tables in all three READMEs (`README.md`, `README.vi.md`,
+`README.zh-CN.md`):
+
+```sh
+# Report newly discovered devices across all forks
+python3 .claude/skills/upstream-sync/scripts/scan-forks.py --report
+
+# Fetch, normalize, and write new devices/*.toml files, then update README tables
+python3 .claude/skills/upstream-sync/scripts/scan-forks.py --apply --update-readme
+```
+
+Every ported `devices/*.toml` keeps a `# Ported from: https://github.com/<owner>/<repo>/tree/<branch>`
+attribution comment at the top of the file; `check-invariants.sh` explicitly
+allows `# Source:` and `# Ported from:` comments in `devices/*.toml`.
 
 ## Procedure
 

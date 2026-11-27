@@ -1,0 +1,116 @@
+# Ported from: https://github.com/partofpai/skyward-oplus-sm8475/tree/main
+[device]
+codename = "RE5465"
+brand = "realme"
+model = "realme RMX3551"
+ab = true
+soc = { hans = "第一代骁龙®8移动平台", hant = "Snapdragon® 8 Gen 1 行動平台", en = "Snapdragon® 8 Gen 1 Mobile Platform" }
+# realme UI / ColorOS 的 OS 版本字段（fuxi 用的是 ro.mi.os.version.incremental）
+os_version_prop = "ro.build.version.oplusrom"
+
+# Installed libbinder_ndk uses Android 17's service-manager protocol.
+# Keep its directory and libraries together; recovery itself stays SDK 32.
+[service_manager]
+path = "/mnt/system/system/bin/servicemanager"
+libraries = [
+    "/mnt/system/system/lib64",
+    "/mnt/system_ext/lib64",
+    "/apex/com.android.vndk.v32/lib64",
+    "/vendor/lib64",
+    "/system/lib64",
+]
+
+[display]
+# wm size: 1080x2412，wm density: 480（非标准 2412，按实测值）
+width = 1080
+height = 2412
+density = 480
+
+[modules]
+# 实测：/vendor/lib/modules 与 /vendor_dlkm/lib/modules 各有一份完整 modules.dep，
+# system_dlkm 没有 modules.load，vendor_boot 里也没放模块。
+sources = ["vendor_dlkm", "vendor"]
+# 触摸 IC 为 Synaptics S3910（BOE 屏，见 dmesg "synaptics-s3910 spi0.0"）。
+# 依赖链由 modules.dep 自动补齐：oplus_bsp_tp_syna_comnon / oplus_bsp_tp_comon /
+# oplus_bsp_tp_custom / oplus_bsp_tp_notify / oplus_bsp_fw_update /
+# panel_event_notifier / olc / gh_mem_notifier / gh_irq_lend。
+load = ["oplus_bsp_tp_tcm_S3910"]
+
+[partitions]
+# persist 在真机上挂在 /mnt/vendor/persist，安全世界在那里放自己的文件
+mounted = ["persist"]
+
+# 高通的固件分区：/vendor/firmware_mnt 由 modem 分区（vfat）挂出来，
+# WLAN 固件（qca6490/）与 TEE 应用都在这上面
+[firmware]
+partition = "modem"
+
+# 启动后由 init 跑的性能脚本（corresponding to fuxi 的 init.kernel.post_boot.sh）
+[[service]]
+path = "/vendor/bin/sh"
+args = ["/vendor/bin/init.qcom.post_boot.sh"]
+libraries = ["/system/lib64", "/vendor/lib64"]
+oneshot = true
+user = "root"
+groups = ["root", "system", "wakelock", "graphics"]
+
+# 安全世界（TEE）与用户态之间的桥；没有它 keymint 用不了任何密钥。
+# 这台的 qseecomd 是 vendor 区的 Android 12 程序，用 VNDK 32 的库启动。
+[[service]]
+path = "/vendor/bin/qseecomd"
+libraries = ["/apex/com.android.vndk.v32/lib64", "/vendor/lib64", "/system/lib64"]
+user = "root"
+groups = ["root", "drmrpc"]
+
+# 密钥服务：解密 data 分区靠它。这台的 vendor 二进制链接的是安装系统（Android 17）
+# 的 libbinder_ndk，而它用到的新符号只在安装系统的 libbinder/libc++ 里，
+# 所以安装系统的 lib64 必须排在 VNDK 前面。
+[[service]]
+path = "/vendor/bin/hw/android.hardware.security.keymint-service-qti"
+libraries = [
+    "/vendor/lib64",
+    "/mnt/system/system/lib64",
+    "/apex/com.android.vndk.v32/lib64",
+    "/system/lib64",
+]
+user = "system"
+groups = ["system", "drmrpc"]
+ready_service = "android.hardware.security.keymint.IKeyMintDevice/default"
+registers = [
+    "android.hardware.security.secureclock.ISecureClock/default",
+    "android.hardware.security.sharedsecret.ISharedSecret/default",
+]
+
+# 凭据服务：校验锁屏密码派生的 secret，keymint 才肯用受它保护的密钥。
+# 它是 HIDL 服务，注册在 hwservicemanager，所以名字写成接口和实例。
+[[service]]
+path = "/vendor/bin/hw/android.hardware.gatekeeper@1.0-service-qti"
+libraries = ["/apex/com.android.vndk.v32/lib64", "/vendor/lib64", "/system/lib64"]
+user = "system"
+groups = ["system"]
+ready_hardware_service = "android.hardware.gatekeeper@1.0::IGatekeeper/default"
+
+# 槽位切换（A/B）
+[[service]]
+path = "/vendor/bin/hw/android.hardware.boot@1.2-service"
+libraries = ["/apex/com.android.vndk.v32/lib64", "/vendor/lib64", "/system/lib64"]
+user = "root"
+groups = ["root"]
+ready_hardware_service = "android.hardware.boot@1.2::IBootControl/default"
+
+[wlan]
+# 实测 lsmod：cnss2 的持有者是 qca6490，对应文件 qca_cld3_qca6490.ko
+modules = ["qca_cld3_qca6490"]
+writes = [{ path = "/sys/kernel/cnss/fs_ready", value = "1" }]
+firmware = [
+    { name = "wlan/qca_cld/qca6490/WCNSS_qcom_cfg.ini", path = "/vendor/etc/wifi/qca6490/WCNSS_qcom_cfg.ini" },
+]
+interface = "wlan0"
+supplicant = "/vendor/bin/hw/wpa_supplicant"
+libraries = ["/vendor/lib64", "/system/lib64"]
+service = "android.hardware.wifi.supplicant.ISupplicant/default"
+# 真机上 captive_portal 未设置，先用 gstatic 的探测页（只影响"是否通外网"的显示）
+probe = "http://connectivitycheck.gstatic.com/generate_204"
+
+[backup]
+efs = ["modemst1", "modemst2", "fsg", "fsc", "persist"]
